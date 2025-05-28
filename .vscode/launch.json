@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    /* ---------- MAIN -------------------------------------------------- */
+    {
+      "name": "Main (Node)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "outFiles": ["${workspaceFolder}/.vite/build/**/*.js"],
+      "sourceMaps": true
+    },
+
+   /* ---------- PRELOAD ----------------------------------------------- */
+    {
+      "name": "Preload (Node)",
+      "type": "node",
+      "request": "attach",
+      "timeout": 9000, // Esempio: attendi fino a 30 secondi
+      "port": 9223, // <--- Prova con questa porta, altrimenti modifica
+      "outFiles": ["${workspaceFolder}/.vite/build/**/*.js"], // <--- Assicurati che il percorso sia corretto per l'output del tuo preload script
+      "sourceMaps": true
+    },
+        /* ---------- RENDERER ---------------------------------------------- */
+    {
+      "name": "Renderer (Chrome)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+
+      /* la finestra che vedi su /json  */
+      "urlFilter": "http://localhost:5173/*",
+
+      /* 1️⃣ regola universale: tutto ciò che parte con /    */
+      "pathMapping": { "/": "${workspaceFolder}" },
+
+      /* 2️⃣ per i prefissi Vite più comuni                  */
+      "sourceMapPathOverrides": {
+        "vite:///*":        "${workspaceFolder}/*",
+        "/@fs/*":           "/*",
+        "/src/*":           "${workspaceFolder}/src/*"
+      },
+
+            /* Aggiungi un timeout per attendere il processo renderer */
+      "timeout": 10000, // Esempio: attendi fino a 30 secondi
+
+      /* log esteso: appare nel pannello “Debug Console”     */
+      "trace": true
+    }
+    ],
+
+  "compounds": [
+    {
+      "name": "Main + Renderer + Preload",
+      "configurations": ["Main (Node)", "Renderer (Chrome)", "Preload (Node)"],
+    }
+  ]
+}

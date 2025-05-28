@@ -1,0 +1,121 @@
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family:Verdana, Arial, Helvetica, sans-serif;
+}
+
+.login-container {
+  /* Centra orizzontalmente */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  /* Aggiungi un po' di spazio verticale
+     per non far "attaccare" troppo in alto o in basso */
+  margin: 40px auto;
+  
+  /* Impedisce che l'immagine e il form si allarghino troppo */
+  max-width: 900px;
+  width: 100%;
+}
+
+/* Contenitore di sinistra con l'immagine */
+.login-image {
+  /* se vuoi che l'immagine stia a fianco del form,
+     puoi aggiungere un "flex-basis" */
+  flex: 0 0 auto;
+}
+
+/* Riduci l’immagine */
+.login-image img {
+  max-width: 250px;  /* dimensione massima orizzontale */
+  height: auto;
+  display: block;    /* rimuove spazi bianchi indesiderati */
+}
+
+/* Contenitore di destra con il form */
+.login-form-container {
+  margin-left: 30px; /* lascia spazio rispetto all'immagine */
+  max-width: 400px;  /* limita la larghezza del form */
+  width: 100%;
+}
+
+.login-form {
+  /* Esempio, se vuoi il form più piccolo */
+  /* width: 300px;  lo puoi fare inline in style se preferisci */
+}
+
+/* Esempio, per i testi del login */
+.login-form h2 {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.password-field {
+  position: relative;
+}
+
+.toggle-password-icon {
+  position: absolute;
+  top: 70%;
+  right: 10px;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.login-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.login-options a {
+  font-size: 0.9em;
+  color: #007bff;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+@media (min-width: 768px) {
+  .login-container {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .login-image {
+    display: block;
+  }
+
+  .login-form-container {
+    flex: 1;
+    max-width: 500px;
+    max-width: 55%;
+  }
+
+  .login-form {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .login-container {
+    flex-direction: column;
+  }
+
+  .login-image {
+    display: none;
+  }
+
+  .login-form-container {
+    width: 100%;
+  }
+
+  .login-form {
+    width: 100%;
+  }
+}

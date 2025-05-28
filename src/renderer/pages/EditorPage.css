@@ -1,0 +1,201 @@
+/* EditorPage.css */
+
+/* Rimosso .nuova-pagina poiché il Splitter gestisce il layout */
+
+/* Aggiornamento della classe .left-pane */
+.left-pane {
+  /* occupa tutto lo spazio definito dal splitter */
+  flex: 1 1 auto;      /* permette la crescita e lo shrink all’interno dello splitter */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;       /* essenziale per far funzionare i figli flex con overflow */}
+
+/* Aggiornamento della classe .right-pane */
+.right-pane {
+  height: 98%;
+  overflow-y: auto;
+  padding-left: 20px;
+}
+
+/* Manteniamo le altre classi */
+.patient-info {
+  display: flex;
+  gap: 20px;
+  text-align: center;
+  align-items: center;
+}
+
+.info-pat {
+  margin-top: 0.5rem;
+}
+
+.upper-section {
+  margin-bottom: 0.2rem;
+  overflow-y: auto;
+}
+
+.lower-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 300px;
+  margin-bottom: 20px;
+}
+
+.scrollable-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.bordered-div {
+  border: 1px solid #ccc;
+  padding: 10px;
+}
+
+hr {
+  margin: 10px 0;
+}
+
+h3 {
+  margin-bottom: 10px;
+  color: #005f73;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+ul li {
+  margin-bottom: 10px;
+}
+
+ul li button {
+  width: 100%;
+  text-align: left;
+}
+
+.list-view-item {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.list-view-item:hover {
+  background-color: #f0f0f0;
+}
+
+.margin-buttons-scar {
+  margin-right: 0.5rem;
+}
+
+/* Stile per gli elementi della ListView dei referti precedenti*/
+.listview-item-previous {
+  padding: 10px;
+  text-align: left; /* Allinea il contenuto a sinistra */
+  display: flex;
+  align-items: left;
+  cursor: pointer;
+}
+
+/* Colore alternato */
+.listview-item-previous:nth-child(even) {
+  background-color: #f9f9f9; /* Colore per gli elementi pari */
+}
+
+.listview-item-previous:nth-child(odd) {
+  background-color: #e0e0e0; /* Colore per gli elementi dispari */
+}
+
+.listview-wrapper {
+  margin-top: 10px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  background-color: #fafafa;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;                /* fa crescere il wrapper fino allo spazio disponibile */
+  min-height: 0;          /* permette ai figli flex di scrollare correttamente */
+}
+
+.listview-title {
+  margin: 0 0 10px 0;
+  font-size: 1.1rem;
+  color: #005f73;
+}
+
+.listview-loading {
+  font-style: italic;
+  color: #005f73;
+  margin-bottom: 8px;
+}
+
+.listview-container {
+  border: 1px solid #ddd;
+  background-color: #fff;
+  border-radius: 4px;
+  padding: 8px;
+  flex: 1;                /* occupa tutto lo spazio rimasto dentro il parent flex */
+  min-height: 0;          /* necessario perché il browser rispetti flex e overflow */
+  overflow-y: auto;       /* permette lo scroll verticale */
+  overflow-x: auto;    /* permette lo scroll orizzontale */}
+
+.listview-item-previous-item {
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+  transition: background-color 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.listview-item-previous-item:hover {
+  background-color: #f8f8f8;
+}
+
+.k-editor {
+	height: 82% !important;
+}
+
+.k-editor span {
+    font-family: Times New Roman !important;
+	font-size: 12pt !important;
+}
+.k-editor p {
+    font-family: Times New Roman !important;
+	font-size: 12pt !important;
+}
+or-content {
+	height: 100% !important;
+}
+
+.k-editor .k-editor-content span {
+    font-family: Times New Roman !important;
+	font-size: 12pt !important;
+}
+.k-editor .k-editor-content p {
+    font-family: Times New Roman !important;
+	font-size: 12pt !important;
+}
+
+.editor-green-button {
+  background-color: #99ff99 !important; /* verde chiaro */
+  border-color: #99ff99 !important;
+  color: #000 !important;               /* testo nero, se preferisci */
+  transition: background-color 0.2s ease; /* transizione morbida */
+}
+
+.editor-green-button:hover {
+  background-color: #66ff66 !important; /* verde più scuro al hover */
+  border-color: #66ff66 !important;
+}
+
+.buttons-pane {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}

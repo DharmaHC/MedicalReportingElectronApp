@@ -1,0 +1,64 @@
+.pane-content {
+  padding: 10px;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+.less-margin {
+  margin-top: 10px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.header-left {
+  font-size: 18px;
+}
+
+.header-right {
+  margin-right: 10px;
+}
+
+.logout-button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.logout-button:hover {
+  background-color: #c82333;
+}
+
+/* Colore "verde petrolio" e colore testo bianco */
+.profile-button {
+  background-color: #dc3545; /* teal */
+  color: white;
+  border: none;             /* rimuove bordi default */
+  border-radius: 5px;
+  padding: 10px 15px;
+  cursor: pointer;
+}
+
+/* Hover più scuro */
+.profile-button:hover {
+  background-color: #c82333;
+  color: white;
+}
+
+/* Per ridurre la larghezza del popup */
+.profile-button .k-menu-popup {
+  min-width: 160px !important;
+  max-width: 200px !important;
+}

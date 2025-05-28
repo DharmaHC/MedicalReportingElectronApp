@@ -1,0 +1,42 @@
+/* Rimuoviamo l'overflow: hidden sul body */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: auto; /* o almeno non hidden */
+  font-family: Arial, sans-serif; /* un font a scelta */
+}
+
+/* Struttura a colonna dell'app */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1; /* spinge il footer in fondo se i contenuti sono pochi */
+}
+
+/* Footer */
+.app-footer {
+  background: #212121;
+  color: #fff;
+  padding: 20px 0;
+}
+
+/* Se vuoi differenziare o vedere bene il footer, puoi aggiungere un bordo */
+.app-footer {
+  border-top: 1px solid #444;
+}
+
+/* Eventuali stili per la navbar */
+.navbar {
+  background-color: #fff;
+  border-bottom: 1px solid #ccc;
+  padding: 15px 0;
+}
+
+/* Utility margin */
+.margin-t-20 {
+  margin-top: 20px;
+}

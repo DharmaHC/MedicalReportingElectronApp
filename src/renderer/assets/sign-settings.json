@@ -1,0 +1,27 @@
+{
+  "yPosLogo":                10,
+  "logoWidth":               303,
+  "logoHeight":              87.5,
+
+  "yPosFooterImage":           0,
+  "footerImageWidth":        160,
+  "footerImageHeight":       32,
+  "footerImageXPositionOffset": 0,
+
+  "footerTextFontFamily":    "Times New Roman",
+  "footerTextPointFromBottom": 90,
+  "footerTextFontSize":      10,
+
+  "footerCompanyDataPointFromBottom": 37,
+  "footerCompanyDataMultiline": true,
+
+  "printSignedPdfIfAvailable": false,
+
+  "pkcs11Lib": "C:\\\\Windows\\\\System32\\\\bit4ipki.dll",
+  "cspSlotIndex": 0,
+  "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
+  "tsaUrl": "https://freetsa.org/tsr",
+
+  "useMRAS": true
+
+}

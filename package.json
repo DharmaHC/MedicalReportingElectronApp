@@ -1,0 +1,134 @@
+{
+  "name": "medreportandsign",
+  "productName": "MedReportAndSign",
+  "version": "1.0.1",
+  "description": "Applicazione Electron per la refertazione medica con firma digitale",
+  "author": "Dharma Healthcare <info@dharmahealthcare.net>",
+  "license": "MIT",
+  "private": true,
+  "main": "renderer-dist/main.js",
+  "scripts": {
+    "dev": "vite",
+    "start": "electron-forge start",
+    "start:dev": "cross-env electron-forge start --inspect-electron -- --remote-debugging-port=9222",
+    "build:main": "vite build --config vite.main.config.mjs",
+    "build:renderer": "vite build --config vite.renderer.config.mjs",
+    "build": "npm run build:main && npm run build:renderer && npm run build:preload",
+    "build:preload": "tsc --project tsconfig.preload.json",
+    "make": "electron-forge make",
+    "lint": "echo \"No linting configured\""
+  },
+  "build": {
+    "appId": "net.dharmahealthcare.medreportandsign",
+    "productName": "MedReportAndSign",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "asarUnpack": [
+      "**/node_modules/electron-log/**",
+      "**/node_modules/electron-updater/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DharmaHC",
+        "repo": "MedicalReportingElectronApp"
+      }
+    ],
+    "files": [
+      "renderer-dist/**",
+      "preload/**",
+      "package.json",
+      "!**/*.ts",
+      "!**/*.tsx",
+      "!**/*.map",
+      "!src/",
+      "!test/"
+    ],
+    "extraResources": [
+      {
+        "from": "preload",
+        "to": "preload"
+      },
+      {
+        "from": "src/renderer/assets/",
+        "to": "assets"
+      }
+    ],
+    "asar": true,
+    "extraMetadata": {
+      "main": "renderer-dist/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MedReportAndSign"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Utility"
+    }
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.1",
+    "@electron-forge/maker-deb": "^7.8.1",
+    "@electron-forge/maker-rpm": "^7.8.1",
+    "@electron-forge/maker-squirrel": "^7.8.1",
+    "@electron-forge/maker-zip": "^7.8.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
+    "@electron-forge/plugin-fuses": "^7.8.1",
+    "@electron-forge/plugin-vite": "^7.8.1",
+    "@electron/fuses": "^1.8.0",
+    "@types/node": "^22.15.18",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.4.1",
+    "cross-env": "^7.0.3",
+    "electron": "^36.2.1",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-static-copy": "^3.0.0"
+  },
+  "dependencies": {
+    "asn1js": "^2.1.0",
+    "axios": "^1.9.0",
+    "electron-is-dev": "^3.0.1",
+    "electron-log": "^5.4.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.6.2",
+    "pdf-lib": "^1.17.1",
+    "pkcs11js": "^2.1.6",
+    "pkijs": "^2.1.97",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
