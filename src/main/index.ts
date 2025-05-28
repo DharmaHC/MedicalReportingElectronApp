@@ -131,7 +131,7 @@ function createWindow() {
   } else {
     // In produzione, index.html è in dist/index.html dentro app.asar
     const indexPath = path.join(__dirname, 'renderer', 'index.html');
-    console.log('Loading file:', indexPath);
+    console.log('Loading file path:', indexPath);
     mainWindow.loadFile(indexPath);
   }
 
