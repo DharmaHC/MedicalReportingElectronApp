@@ -1695,7 +1695,7 @@ const handleResultClick = async (result: any) => {
             <Checkbox
               style={{ display: "none" }} // Nascosto come da codice originale.
               checked={showLivePreview}
-              label="Mostra anteprima live referto"
+              label=""
               onChange={e => setShowLivePreview(e.value)}
             />
           </div>
