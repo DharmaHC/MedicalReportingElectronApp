@@ -5,8 +5,14 @@
   overflow: auto;
 }
 
-h2 {
+h4 {
   margin-top: 0;
+}
+
+h5 {
+  margin-top: 5px;
+  margin-left: 15px;
+  padding-left: 15px;
 }
 
 .less-margin {
@@ -22,10 +28,14 @@ h2 {
 
 .header-left {
   font-size: 18px;
+  align-items: right;
+  align-content: right;
 }
 
 .header-right {
   margin-right: 10px;
+  align-items: right;
+  align-content: right;
 }
 
 .logout-button {

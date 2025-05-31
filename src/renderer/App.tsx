@@ -19,18 +19,50 @@ import { RootState } from "./store";
 import { url_token } from "./utility/urlLib";
 import ProtectedRoute from "./utility/ProtectedRoute";
 import UpdateNotifier from './components/UpdateNotifier';
-
+const ipcRenderer = window.electron?.ipcRenderer;
 
 function AppWrapper() {
   const dispatch = useDispatch();
+
+  // --------------------------------------------------
+  // Forza logout (se l'utente precedente non si è sloggato)
+  // --------------------------------------------------
+ useEffect(() => {
+    dispatch(logout());
+  }, [dispatch]);
+
+
+// Stato Redux per sapere se l’editor è aperto e ha modifiche
+  const isEditorOpen = useSelector((state: RootState) => state.editor?.isOpen);
+  const isEditorModified = useSelector((state: RootState) => state.editor?.hasUnsavedChanges);
+
+  // --------------------------------------------------
+  // Gestione chiusura applicazione con editor modificato
+  // --------------------------------------------------
+  useEffect(() => {
+    if (!ipcRenderer) return;
+
+    // Quando ricevi la richiesta di chiusura dal main
+    ipcRenderer.on('check-editor-unsaved', () => {
+      // Se l’editor è aperto e modificato, mostra il dialog di EditorPage!
+      if (isEditorOpen && isEditorModified) {
+        // Usa un eventEmitter/dispatch Redux per notificare EditorPage!
+        window.dispatchEvent(new Event('show-editor-cancel-dialog'));
+      } else {
+        // Nessuna modifica, si può chiudere
+        ipcRenderer.send('proceed-close');
+      }
+    });
+
+    return () => {
+      ipcRenderer.removeAllListeners('check-editor-unsaved');
+    };
+  }, [isEditorOpen, isEditorModified]);
+
   const rememberMe = useSelector((state: RootState) => state.auth.rememberMe);
   const location = useLocation();
 
-// --------------------------------------------------
-  // 0. handleLogout definito con useCallback
-  // --------------------------------------------------
   const handleLogout = useCallback(() => {
-    dispatch(logout());
     dispatch(clearSelectedMoreExams());
     dispatch(clearRegistrations());
     dispatch(resetExaminationState());
@@ -46,13 +78,8 @@ function AppWrapper() {
       try {
         const response = await fetch(url_token, {
           method: "POST",
-					
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ clientId: "client", clientSecret: "secret" }),
-								
-							   
-								   
-			 
         });
 
         if (response.ok) {

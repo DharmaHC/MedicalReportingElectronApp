@@ -565,8 +565,8 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       <LoadingModal isLoading={isLoading} />
 
       {/* Sezione Filtri */}
-      <div className="filters bordered-div">
-        <h3>{labels.gestioneReferti.filtriDiRicerca}</h3>
+      <div className="bordered-div">
+        <h5>{labels.gestioneReferti.filtriDiRicerca}</h5>
 
         <div className="filter-group-row">
           <div className="filter-group">
@@ -712,7 +712,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
       {/* Sezione Ricerca paziente */}
       <div className="patient-search bordered-div">
-        <h3>{labels.gestioneReferti.ricercaPaziente}</h3>
+        <h5>{labels.gestioneReferti.ricercaPaziente}</h5>
         <label>{labels.gestioneReferti.cognome}</label>
         <Input
            ref={lastNameRef}                     /// MODIFICA: aggiungi ref
@@ -737,7 +737,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
            }}
          />
         <div className="search-mode">
-          <h4>Modalità di ricerca</h4>
+          <h5>Modalità di ricerca</h5>
           <div>
             <input
               type="radio"
@@ -773,7 +773,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
       {/* Sezione Utilities */}
       <div className="utilities bordered-div">
-        <h3>{labels.gestioneReferti.utilitaEPreferenze}</h3>
+        <h5>{labels.gestioneReferti.utilitaEPreferenze}</h5>
         <Button icon=".k-i-file-txt">{labels.gestioneReferti.prescrizione}</Button>
         <Button icon="k-i-calendar">{labels.gestioneReferti.anamnesi}</Button>
         <Button icon="k-i-folder">{labels.gestioneReferti.documenti}</Button>

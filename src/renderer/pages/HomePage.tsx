@@ -134,6 +134,21 @@ const dispatch = useDispatch();
   };
 
 
+  const handleLogoutAndExit = () => {
+
+  if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.send('app-quit');
+  dispatch(logout());
+  dispatch(clearSelectedMoreExams());
+  dispatch(clearRegistrations());
+  dispatch(resetExaminationState());
+  persistor.purge();
+
+  } else {
+    window.location.reload();
+  }
+};
+
   // FetchDoctorInfo”
   const fetchDoctorInfo = async () => {
     if (!userName || !token) return;
@@ -222,7 +237,7 @@ const dispatch = useDispatch();
         style={{ height: "100vh" }}
       >
         <div>
-          <h2>{labels.homepage.gestioneReferti}</h2>
+          <h4>{labels.homepage.gestioneReferti}</h4>
           {filtersReady && <GestioneReferti />}
         </div>
 
@@ -236,25 +251,22 @@ const dispatch = useDispatch();
             <div className="header">
               <div className="header-left">
                 {doctorPropeName && (
-                  <h3 className="less-margin">Dr. {doctorPropeName}</h3>
+                  <h4 className="less-margin">Dr. {doctorPropeName}</h4>
                 )}
               </div>
 
               {/* ---- (3) DropDownButton “Profilo” con gearIcon */}
               <div className="header-right">
-				<ProfileDropDown 
-				onLogout={handleLogout}
-				onChangePassword={handleChangePasswordSubmit}
-			/>
+        				<ProfileDropDown onLogout={handleLogout} onChangePassword={handleChangePasswordSubmit} onLogoutAndExit={handleLogoutAndExit}/>
               </div>
             </div>
 
-            <h2>{labels.homepage.elencoRegistrazioni}</h2>
+            <h5>{labels.homepage.elencoRegistrazioni}</h5>
             {filtersReady && <ElencoRegistrazioni />}
           </div>
 
           <div>
-            <h2>{labels.homepage.prestazioniRisultati}</h2>
+            <h5>{labels.homepage.prestazioniRisultati}</h5>
             {filtersReady && <PrestazioniRisultati />}
           </div>
         </Splitter>

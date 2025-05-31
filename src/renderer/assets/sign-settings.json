@@ -22,6 +22,6 @@
   "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
   "tsaUrl": "https://freetsa.org/tsr",
 
-  "useMRAS": true
-
+  "useMRAS": true,
+  "showAppMenu": true
 }

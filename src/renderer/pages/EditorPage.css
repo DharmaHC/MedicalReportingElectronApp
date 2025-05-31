@@ -155,7 +155,10 @@ ul li button {
   background-color: #f8f8f8;
 }
 
-.k-editor {
+.k-treeview * {
+  user-select: none;
+}
+  .k-editor {
 	height: 82% !important;
 }
 
@@ -178,6 +181,10 @@ or-content {
 .k-editor .k-editor-content p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
+}
+
+.preview-window-no-bar .k-window-titlebar {
+  display: none !important;
 }
 
 .editor-green-button {

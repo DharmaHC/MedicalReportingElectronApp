@@ -2,7 +2,7 @@ const labels = {
   homepage: {
     gestioneReferti: "Gestione Referti",
     elencoRegistrazioni: "Elenco Registrazioni",
-    prestazioniRisultati: "Prestazione Risultati",
+    prestazioniRisultati: "Prestazioni",
   },
   elencoRegistrazioni: {
     dataRitiro: "Data Ritiro",

@@ -75,9 +75,6 @@ const PrestazioniRisultati = () => {
   const allResults = null;
 
   const [selectedUniqueRefs, setSelectedUniqueRefs] = useState<string[]>([]);
-  const companyId = useSelector(
-    (state: RootState) => state.exam.selectedMoreExams[0]?.companyId
-  );
 
   // Sorting
   const [sort, setSort] = useState<SortDescriptor[]>([]);
@@ -177,7 +174,7 @@ const PrestazioniRisultati = () => {
   // -------------------------------------------------
   // fetchSingleReport (aggiungiamo readOnly come 3° arg)
   // -------------------------------------------------
-  const fetchSingleReport = async (doctorCode: string, exam: any, readOnly: boolean) => {
+  const fetchSingleReport = async (doctorCode: string, exam: any, readOnly: boolean, openedByOtherDoctor: boolean) => {
     // Seleziona l'esame
     dispatch(setSelectedExamId(exam.examId));
     dispatch(addExamToSelectedMoreExams(exam));
@@ -205,7 +202,7 @@ const PrestazioniRisultati = () => {
         if (response.ok) {
           const htmlContent = await response.text();
           // Passiamo readOnly
-          navigate("/editor", { state: { htmlContent, readOnly } });
+          navigate("/editor", { state: { htmlContent, readOnly, openedByOtherDoctor } });
         } else {
           console.error("Failed to fetch existing report");
         }
@@ -250,8 +247,8 @@ const PrestazioniRisultati = () => {
   const fetchMoreReports = async (
     examIds: string[],
     doctorCode: string,
-    readOnly: boolean
-  ) => {
+    readOnly: boolean,
+    openedByOtherDoctor: boolean) => {
     const selectedExams = resultsData.filter((item) =>
       examIds.includes(item.examId)
     );
@@ -292,7 +289,7 @@ const PrestazioniRisultati = () => {
         );
         if (response.ok) {
           const htmlContent = await response.text();
-          navigate("/editor", { state: { htmlContent, readOnly } });
+          navigate("/editor", { state: { htmlContent, readOnly, openedByOtherDoctor } });
         } else {
           console.error("Failed to fetch existing reports");
         }
@@ -409,137 +406,127 @@ const PrestazioniRisultati = () => {
     setPdfPreviewVisible(true);
   };
 
-  // -------------------------------------------------
-  // handleIconClick => calcola readOnly, poi decide se fetchSingle o fetchMore
-  // -------------------------------------------------
-  const handleIconClick = (subExamTypeId: number, exam: any) => {
-    // 1) Se subExamTypeId === 5 => gestiamo PDF
-    if (subExamTypeId === 5) {
-      setSelectedExamForPdf(exam);
-      setShouldFetchPdf(true);
-      return;
-    }
+const handleIconClick = (subExamTypeId: number, exam: any) => {
+  if (subExamTypeId === 5) {
+    setSelectedExamForPdf(exam);
+    setShouldFetchPdf(true);
+    return;
+  }
 
-    // 2) Calcolo readOnly => se esame ha stateId == 8 e la data insert è < oggi
-	// 1) refertato?
-	const isRefertato = exam.examResultStateId === 8;
+  const doctorCodeResult = (exam.doctorCode ?? "").trim();
+  const doctorCodeUser = (doctorCode ?? "").trim();
+  const openedByOtherDoctor = doctorCodeResult && doctorCodeUser && (doctorCodeResult !== doctorCodeUser);
 
-	// 2) data di risultato originale
-	let examResultInsertDate = moment(exam.resultInsertDate, "YYYY-MM-DD");
-	let examResultModifyDate = moment(exam.resultInsertDate, "YYYY-MM-DD");
+  const isRefertato = exam.examResultStateId === 8;
+  let examResultInsertDate = moment(exam.resultInsertDate, "YYYY-MM-DD");
+  let examResultModifyDate = moment(exam.resultInsertDate, "YYYY-MM-DD");
 
-	// 3) se esiste lastModifyDate ed è successiva a examResultInsertDate, la usiamo
-	if (exam.lastModifyDate) {
-	  const lastMod = moment(exam.lastModifyDate, "YYYY-MM-DD");
-	  if (lastMod.isAfter(examResultInsertDate)) {
+  if (exam.lastModifyDate) {
+    const lastMod = moment(exam.lastModifyDate, "YYYY-MM-DD");
+    if (lastMod.isAfter(examResultInsertDate)) {
       examResultModifyDate = lastMod;
-	  }
-	}
+    }
+  }
 
-	// 4) confronto con "oggi"
-	const oggi = moment().startOf("day");
-	const olderThanToday = examResultModifyDate.isBefore(oggi);
+  const oggi = moment().startOf("day");
+  const olderThanToday = examResultModifyDate.isBefore(oggi);
 
-	// 5) readonly se refertato E la data (inserimento o ultima modifica) è prima di oggi
-	const readOnly = isRefertato && olderThanToday;
+  let readOnly = false;
+  if (openedByOtherDoctor) {
+    readOnly = true;
+  } else {
+    readOnly = isRefertato && olderThanToday;
+  }
 
+  const insertDate = exam.resultInsertDate;
+  const isLinked =
+    exam.isLinkedResult === true ||
+    (exam.linkedResults && exam.linkedResults.trim() !== "");
+  const isRefUnicoSelected = selectedUniqueRefs.includes(exam.examId);
 
-    // 3) Se l'esame ha insertDate => fetchSingle / fetchMore
-    const insertDate = exam.resultInsertDate; // se è quella la data di "risultato"
-    const isLinked =
-      exam.isLinkedResult === true ||
-      (exam.linkedResults && exam.linkedResults.trim() !== "");
-    const isRefUnicoSelected = selectedUniqueRefs.includes(exam.examId);
+  if (insertDate != null) {
+    if (isLinked) {
+      let linkedExamResultIds: string[] = [];
+      if (exam.linkedResults && exam.linkedResults.trim() !== "") {
+        linkedExamResultIds = exam.linkedResults
+          .split(",")
+          .map((id: string) => id.trim());
+      }
 
-    // Se insertDate != null => sign che c'è un result
-    if (insertDate != null) {
-      if (isLinked) {
-        // multi-lavoro
-        let linkedExamResultIds: string[] = [];
-        if (exam.linkedResults && exam.linkedResults.trim() !== "") {
-          linkedExamResultIds = exam.linkedResults
-            .split(",")
-            .map((id: string) => id.trim());
-        }
+      const linkedExamIds = resultsData
+        .filter((item: any) =>
+          linkedExamResultIds.includes(item.examResultId.toString())
+        )
+        .map((item: any) => item.examId);
 
-        const linkedExamIds = resultsData
-          .filter((item: any) =>
-            linkedExamResultIds.includes(item.examResultId.toString())
-          )
-          .map((item: any) => item.examId);
-
-        if (linkedExamIds.length > 1) {
-          dispatch(setSelectedExamId(exam.examId));
-          dispatch(
-            addMultipleExamsToSelectedMoreExams(
-              resultsData.filter((item: any) =>
-                linkedExamIds.includes(item.examId)
-              )
+      if (linkedExamIds.length > 1) {
+        dispatch(setSelectedExamId(exam.examId));
+        dispatch(
+          addMultipleExamsToSelectedMoreExams(
+            resultsData.filter((item: any) =>
+              linkedExamIds.includes(item.examId)
             )
-          );
-          if (doctorCode && doctorCode.trim() !== "") {
-            // Passo readOnly
-            fetchMoreReports(linkedExamIds, doctorCode, readOnly);
-          } else {
-            console.error("Doctor code is null or empty");
-          }
+          )
+        );
+        if (doctorCode && doctorCode.trim() !== "") {
+          fetchMoreReports(linkedExamIds, doctorCode, readOnly, openedByOtherDoctor);
         } else {
-          dispatch(setSelectedExamId(exam.examId));
-          if (doctorCode && doctorCode.trim() !== "") {
-            // Passo readOnly
-            fetchSingleReport(doctorCode, exam, readOnly);
-          } else {
-            console.error("Doctor code is null or empty");
-          }
+          console.error("Doctor code is null or empty");
         }
       } else {
-        // non linked => singolo
         dispatch(setSelectedExamId(exam.examId));
         if (doctorCode && doctorCode.trim() !== "") {
-          fetchSingleReport(doctorCode, exam, readOnly);
+          fetchSingleReport(doctorCode, exam, readOnly, openedByOtherDoctor);
         } else {
           console.error("Doctor code is null or empty");
         }
       }
     } else {
-      // 4) Caso in cui insertDate == null
-      if (isRefUnicoSelected) {
-        const selectedAndNotWorked = selectedUniqueRefs.filter((id) => {
-          const record = resultsData.find((r: any) => r.examId === id);
-          return record && record.resultInsertDate == null;
-        });
+      dispatch(setSelectedExamId(exam.examId));
+      if (doctorCode && doctorCode.trim() !== "") {
+        fetchSingleReport(doctorCode, exam, readOnly, openedByOtherDoctor);
+      } else {
+        console.error("Doctor code is null or empty");
+      }
+    }
+  } else {
+    if (isRefUnicoSelected) {
+      const selectedAndNotWorked = selectedUniqueRefs.filter((id) => {
+        const record = resultsData.find((r: any) => r.examId === id);
+        return record && record.resultInsertDate == null;
+      });
 
-        if (selectedAndNotWorked.length > 1) {
-          dispatch(setSelectedExamId(exam.examId));
-          const selectedExams = resultsData.filter(
-            (item: any) =>
-              selectedAndNotWorked.includes(item.examId) &&
-              item.subExamTypeId === 4
-          );
-          dispatch(addMultipleExamsToSelectedMoreExams(selectedExams));
-          if (doctorCode && doctorCode.trim() !== "") {
-            fetchMoreReports(selectedAndNotWorked, doctorCode, readOnly);
-          } else {
-            console.error("Doctor code is null or empty");
-          }
+      if (selectedAndNotWorked.length > 1) {
+        dispatch(setSelectedExamId(exam.examId));
+        const selectedExams = resultsData.filter(
+          (item: any) =>
+            selectedAndNotWorked.includes(item.examId) &&
+            item.subExamTypeId === 4
+        );
+        dispatch(addMultipleExamsToSelectedMoreExams(selectedExams));
+        if (doctorCode && doctorCode.trim() !== "") {
+          fetchMoreReports(selectedAndNotWorked, doctorCode, readOnly, openedByOtherDoctor);
         } else {
-          dispatch(setSelectedExamId(exam.examId));
-          if (doctorCode && doctorCode.trim() !== "") {
-            fetchSingleReport(doctorCode, exam, readOnly);
-          } else {
-            console.error("Doctor code is null or empty");
-          }
+          console.error("Doctor code is null or empty");
         }
       } else {
         dispatch(setSelectedExamId(exam.examId));
         if (doctorCode && doctorCode.trim() !== "") {
-          fetchSingleReport(doctorCode, exam, readOnly);
+          fetchSingleReport(doctorCode, exam, readOnly, openedByOtherDoctor);
         } else {
           console.error("Doctor code is null or empty");
         }
       }
+    } else {
+      dispatch(setSelectedExamId(exam.examId));
+      if (doctorCode && doctorCode.trim() !== "") {
+        fetchSingleReport(doctorCode, exam, readOnly, openedByOtherDoctor);
+      } else {
+        console.error("Doctor code is null or empty");
+      }
     }
-  };
+  }
+};
 
 
 

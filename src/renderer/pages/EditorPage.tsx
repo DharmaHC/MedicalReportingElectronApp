@@ -19,8 +19,7 @@ import {
   printIcon,
   downloadIcon,
   saveIcon,
-  fileAddIcon,
-  checkIcon,
+  checkIcon
 } from "@progress/kendo-svg-icons";
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -52,7 +51,8 @@ import {
 } from "@progress/kendo-react-layout";
 import { clearRegistrations } from "../store/registrationSlice";
 import { resetExaminationState, clearSelectedMoreExams } from "../store/examinationSlice";
-
+import CustomEditor from '../components/CustomEditor';
+import PreviewA4Window from '../components/PreviewA4Window';
 
 // Interfaccia per la struttura di una frase predefinita.
 interface Phrase {
@@ -101,10 +101,25 @@ interface ReportData {
   pdfContent: string | null; // Contenuto Base64 del PDF, usato per la firma e l'invio.
 }
 
-// Componente funzionale React per la pagina dell'editor.
-const EditorPage: React.FC = () => {
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return function(this: any, ...args: any[]) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), delay);
+    } as T;
+  }
 
-const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
+  
+// Componente funzionale React per la pagina dell'editor.
+function EditorPage() {
+
+  const editorRef = useRef<Editor>(null); // Riferimento all'istanza del componente Editor Kendo.
+  const [previewScale, setPreviewScale] = useState(0.27);
+  // Stati locali per gestire la visibilità dell'anteprima live.
+  const [showLivePreview, setShowLivePreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('<p></p>'); // Aggiorna col contenuto editor
+
+  const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
   
   const [lastSignedPdfBase64, setLastSignedPdfBase64] = useState<string | null>(null); // si usaper la stampa
@@ -112,19 +127,40 @@ const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boole
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(true);
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
 
-const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
-const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
+  const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
+  const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
 
-useEffect(() => {
-    // Accedi ai settings globali esposti dal preload
-    window.appSettings.get().then(settings => {
-      setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
-      setUseMRAS(settings.useMRAS ?? false);
-    });
-  }, []);
+  const [exitReason, setExitReason] = useState<null | "editor" | "app">(null);
 
 
-  const editorRef = useRef<Editor>(null); // Riferimento all'istanza del componente Editor Kendo.
+  const updatePreviewHtmlDebounced = useRef(
+    debounce((html: string) => setPreviewHtml(html), 400)).current;
+
+
+  useEffect(() => {
+  console.log('typeof window.electron:', typeof window.electron);
+  console.log('typeof window.appSettings:', typeof window.appSettings);
+      // Accedi ai settings globali esposti dal preload
+      window.appSettings.get().then(settings => {
+        setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
+        setUseMRAS(settings.useMRAS ?? false);
+      });
+    }, []);
+
+
+  useEffect(() => {
+  // Listener custom per mostrare la modale annulla su chiusura
+  function onShowCancelDialog() {
+    setExitReason("app");
+    setIsCancelDialogVisible(true);
+  }
+  window.addEventListener('show-editor-cancel-dialog', onShowCancelDialog);
+  return () => {
+    window.removeEventListener('show-editor-cancel-dialog', onShowCancelDialog);
+  };
+}, []);
+
+
   /* ────────────────────────────────────────────────────────────── */
   /* Lista globale degli studi aperti per questa pagina (RemotEye) */
   /* ────────────────────────────────────────────────────────────── */
@@ -217,7 +253,8 @@ const renderPinDialog = () =>
   const location = useLocation(); // Hook per accedere allo stato e ai parametri della route corrente.
   const [isDraftOperation, setIsDraftOperation] = useState(false); // Flag per indicare se l'operazione corrente è un salvataggio bozza.
   const readOnly = location.state?.readOnly === true; // Determina se l'editor è in modalità sola lettura (es. referto già finalizzato).
-  
+  const openedByOtherDoctor = location.state?.openedByOtherDoctor === true; // Indica se il referto è stato refertato da un altro medico (anche in bozza).
+
   // Selettori Redux per accedere a parti dello stato globale.
   const printReportWhenFinished = useSelector(
     (state: RootState) => state.auth.printReportWhenFinished // Preferenza utente per stampare il referto dopo la finalizzazione.
@@ -284,12 +321,19 @@ const renderPinDialog = () =>
         html = html.replace('<p>', '<p style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;">');
       }
       setIsModified(true); // Segna il documento come modificato.
+      if (showLivePreview && editorRef.current?.view?.dom) {
+        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
+      }
+
       return html; // L'HTML processato viene inserito nell'editor.
     }
-    // Se la clipboard contiene solo testo semplice.
-    const plainText = event.nativeEvent.clipboardData?.getData("text/plain") || "";
-    setIsModified(true);
-    return plainText.replace(/<br\s*\/?>/gi, ""); // Rimuove i tag <br> e restituisce testo semplice.
+      // Se la clipboard contiene solo testo semplice.
+      const plainText = event.nativeEvent.clipboardData?.getData("text/plain") || "";
+      setIsModified(true);
+      if (showLivePreview && editorRef.current?.view?.dom) {
+        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
+      }
+      return plainText.replace(/<br\s*\/?>/gi, ""); // Rimuove i tag <br> e restituisce testo semplice.
   };
 
   // Dati Redux relativi alle registrazioni e all'esame selezionato.
@@ -332,6 +376,7 @@ const renderPinDialog = () =>
   // Se ci sono modifiche non salvate, mostra un dialogo di conferma.
   const handleCancel = () => {
     if (isModified) {
+      setExitReason("editor");
       setIsCancelDialogVisible(true);
     } else {
       dispatch(clearSelectedMoreExams()); // Pulisce gli esami aggiuntivi dallo stato Redux.
@@ -339,14 +384,20 @@ const renderPinDialog = () =>
     }
   };
 
-  // Conferma l'annullamento (dal dialogo).
-  const confirmCancel = () => {
-    setIsCancelDialogVisible(false);
-    dispatch(clearSelectedMoreExams());
-    navigate("/", { state: { reload: false } });
-  };
+  // Gestisce l'aggiornamento dell'anteprima.
+  useEffect(() => {
+    if (!showLivePreview) return;
+    // Aggiorna solo se la preview è attiva e l'editor modificato
+    if (isModified && editorRef.current?.view?.dom) {
+      const html = editorRef.current.view.dom.innerHTML;
+      updatePreviewHtmlDebounced(html);
+    }
+    // NB: l’effetto si attiva ogni volta che isModified cambia (quindi dopo ogni modifica)
+  }, [isModified, showLivePreview, updatePreviewHtmlDebounced]);
 
-  // Chiude il dialogo di conferma annullamento.
+
+
+// Chiude il dialogo di conferma annullamento.
   const handleCancelDialogClose = () => {
     setIsCancelDialogVisible(false);
   };
@@ -388,15 +439,30 @@ const renderPinDialog = () =>
 
   // Inserisce la frase selezionata nell'editor.
   const handlePhraseClick = (phrase: string) => {
-    if (editorRef.current && editorRef.current.view) {
-      editorRef.current.view.focus(); // Assicura che l'editor abbia il focus.
-      // Inserisce il testo nella posizione corrente del cursore.
-      editorRef.current.view.dispatch(
-        editorRef.current.view.state.tr.insertText(phrase)
-      );
-      // setIsModified(true) sarà gestito dal plugin docChangePlugin.
-    }
-  };
+    if (!editorRef.current?.view) return;
+    const view = editorRef.current.view;
+    view.focus();
+
+    const { state, dispatch } = view;
+    const { from } = state.selection;
+    let pos = from;
+    let tr = state.tr;
+
+    const lines = phrase.split(/\r?\n/);
+
+    lines.forEach((line, idx) => {
+      if (idx > 0) {
+        // Inserisce un hard break (<br />)
+        tr = tr.insert(pos, state.schema.nodes.hard_break.create());
+        pos += 1;
+      }
+      tr = tr.insertText(line, pos);
+      pos += line.length;
+    });
+
+    dispatch(tr);
+          // setIsModified(true) sarà gestito dal plugin docChangePlugin.
+    };
 
   // Stato per la configurazione dei pannelli dello Splitter.
   const [panes, setPanes] = useState<SplitterPaneProps[]>([
@@ -711,7 +777,6 @@ const renderPinDialog = () =>
       const pdfBlob = base64ToBlob(reportData.pdfContent, "application/pdf");
       const pdfBlobUrl = URL.createObjectURL(pdfBlob);
       setPdfUrl(pdfBlobUrl); // Imposta l'URL per il componente PdfPreview.
-      setIsModified(true); // Segna come modificato perché l'utente ha visualizzato l'anteprima e potrebbe voler salvare.
     } else {
       console.error("Dati PDF non disponibili per l'anteprima.");
       setErrorMessage("Impossibile generare l'anteprima del PDF.");
@@ -1068,6 +1133,9 @@ if (signedPdfBase64) {
     }
 
     setIsModified(true);
+      if (showLivePreview && editorRef.current?.view?.dom) {
+        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
+      }
   } else {
     console.error("Dati PDF non disponibili per la stampa");
     setErrorMessage("Dati PDF non disponibili per la stampa.");
@@ -1088,6 +1156,9 @@ if (signedPdfBase64) {
       document.body.removeChild(link); // Rimuove il link dal DOM.
       URL.revokeObjectURL(pdfBlobUrl); // Revoca l'URL del Blob.
       setIsModified(true);
+      if (showLivePreview && editorRef.current?.view?.dom) {
+        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
+      }
     } else {
       console.error("Dati PDF non disponibili per il download.");
       setErrorMessage("Impossibile generare il PDF per il download.");
@@ -1404,6 +1475,9 @@ const handleResultClick = async (result: any) => {
           update(view, prevState) {
             if (!view.state.doc.eq(prevState.doc)) { // Confronta se il documento è cambiato.
               setIsModified(true);
+              if (showLivePreview && editorRef.current?.view?.dom) {
+                updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
+              }
             }
           }
         };
@@ -1441,10 +1515,24 @@ const handleResultClick = async (result: any) => {
     )}
     {renderPinDialog()}
     
-      {/* Avviso se l'editor è in modalità sola lettura */}
-      {readOnly && (
-        <div style={{ color: "red", fontWeight: "bold", margin: "0.5rem 1rem", textAlign: "center", padding: "0.5rem", border: "1px solid red", backgroundColor: "#ffeeee" }}>
-          ATTENZIONE: Questo referto è già refertato e non è più modificabile.
+      {/* Avviso se l'editor è in modalità sola lettura (per referto di altro medico o precedente ad oggi) */}
+      {readOnly && openedByOtherDoctor && (
+        <div style={{ fontSize: "10pt", color: "red", fontWeight: "bold", margin: "0.5rem 1rem", textAlign: "center", padding: "0.5rem", border: "1px solid red", backgroundColor: "#ffeeee" }}>
+          ATTENZIONE: Questo referto è già refertato da un altro medico (anche in bozza) e non è più modificabile.
+        </div>
+      )}
+      {readOnly && !openedByOtherDoctor && (
+        <div style={{
+          fontSize: "10pt",
+          color: "red",
+          fontWeight: "bold",
+          margin: "0.5rem 1rem",
+          textAlign: "center",
+          padding: "0.5rem",
+          border: "1px solid red",
+          backgroundColor: "#ffeeee"
+        }}>
+          ATTENZIONE: Questo referto è precedente alla data odierna e non è più modificabile.
         </div>
       )}
 
@@ -1571,7 +1659,7 @@ const handleResultClick = async (result: any) => {
               </div>
             )}
             {/* Componente Editor Kendo */}
-            <Editor
+            <CustomEditor
               ref={editorRef}
               defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"} // Contenuto iniziale (o 3 paragrafi vuoti).
               onMount={handleEditorMount} // Gestore per aggiungere plugin all'avvio.
@@ -1603,6 +1691,12 @@ const handleResultClick = async (result: any) => {
               checked={printSignedPdf}
               label="Stampa referto firmato quando termini (se disponibile)"
               onChange={e => setPrintSignedPdf(e.value)}
+            />
+            <Checkbox
+              style={{ display: "none" }} // Nascosto come da codice originale.
+              checked={showLivePreview}
+              label="Mostra anteprima live referto"
+              onChange={e => setShowLivePreview(e.value)}
             />
           </div>
           </div>
@@ -1647,6 +1741,7 @@ const handleResultClick = async (result: any) => {
                 svgIcon={printIcon}
                 onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
                 className="margin-buttons-scar"
+              style={{ display: "none" }}
               >
                 {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
               </Button>
@@ -1668,13 +1763,14 @@ const handleResultClick = async (result: any) => {
               className="margin-buttons-scar"
               title="Salva il referto senza chiudere l'editor"
             >
-              Salva
+              Salva Bozza
             </Button>
             {/* Pulsante Salva Bozza e Chiudi */}
             <Button
               svgIcon={checkIcon} // Icona più adatta per "Salva Bozza"
               onClick={() => handleProcessReport(true, true, false)} // rtfNeedsToBeStored = true, draft = true, stayHere = false
               disabled={readOnly}
+              style={{ display: "none" }}
               className="margin-buttons-scar"
               title="Salva come bozza e chiudi l'editor"
             >
@@ -1682,7 +1778,7 @@ const handleResultClick = async (result: any) => {
             </Button>
             {/* Pulsante Termina e Invia */}
             <Button
-              svgIcon={fileAddIcon}
+              svgIcon={checkIcon}
               onClick={() => handleProcessReport(true, false, false)} // rtfNeedsToBeStored = true, draft = false, stayHere = false
               // Disabilitato se readOnly E la firma non è permessa (se è permessa, si potrebbe voler firmare un referto readOnly?)
               // La logica originale era: disabled={readOnly && !allowMedicalReportDigitalSignature}
@@ -1718,27 +1814,63 @@ const handleResultClick = async (result: any) => {
         </Dialog>
       )}
 
-      {/* Dialogo di Conferma Annullamento con Modifiche Non Salvate */}
+      <select value={previewScale} onChange={e => setPreviewScale(Number(e.target.value))}>
+        <option value={0.15}>Mini</option>
+        <option value={0.21}>Piccola</option>
+        <option value={0.27}>Media</option>
+        <option value={0.33}>Grande</option>
+      </select>
+      {showLivePreview && (
+      <PreviewA4Window
+        htmlContent={previewHtml}
+        onClose={() => setShowLivePreview(false)}
+        scale={previewScale}
+      />
+    )}
+
+      {/* Dialogo di Conferma Annullamento con Modifiche Non Salvate - (Condiviso in caso si esca dall'editor o dall'App)*/ }
       {isCancelDialogVisible && (
-        <Dialog title="Modifiche non salvate" onClose={handleCancelDialogClose}>
-          <p style={{ margin: "20px 0"}}>Il referto è stato modificato. Vuoi salvare le modifiche prima di uscire?</p>
+        <Dialog
+          title="Modifiche non salvate"
+          onClose={() => setIsCancelDialogVisible(false)}
+        >
+          <p>Hai delle modifiche non salvate. Vuoi salvarle prima di {exitReason === "editor" ? "uscire dall'editor" : "chiudere l'applicazione"}?</p>
           <DialogActionsBar>
-            <Button onClick={handleCancelDialogClose}>Annulla Uscita</Button>
-            <Button onClick={confirmCancel} themeColor="warning">Non salvare ed Esci</Button>
             <Button
-              onClick={async () => {
-                setIsCancelDialogVisible(false); // Chiudi questo dialogo prima
-                await handleProcessReport(true, false, false); // Salva e invia, poi naviga (se non `stayHere`)
-                // Se handleProcessReport non naviga via in caso di errore, confirmCancel() non verrà chiamato.
-                // La navigazione è gestita da handleProcessReport/callProcessReportApi.
-              }}
               themeColor="primary"
+              onClick={async () => {
+                await handleSave();
+                setIsCancelDialogVisible(false);
+                if (exitReason === "app") {
+                  window.electron.ipcRenderer.send('proceed-close');
+                } else {
+                  // Naviga fuori dall’editor
+                  navigate("/", { state: { reload: false } });
+                }
+              }}
             >
-              Salva e Esci
+              Sì, salva e chiudi
+            </Button>
+            <Button
+              themeColor="error"
+              onClick={() => {
+                setIsCancelDialogVisible(false);
+                if (exitReason === "app") {
+                  window.electron.ipcRenderer.send('proceed-close');
+                } else {
+                  navigate("/", { state: { reload: false } });
+                }
+              }}
+            >
+              No, esci senza salvare
+            </Button>
+            <Button onClick={() => setIsCancelDialogVisible(false)}>
+              Annulla
             </Button>
           </DialogActionsBar>
         </Dialog>
       )}
+
 
       {/* Componente per l'Anteprima del PDF */}
       {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}

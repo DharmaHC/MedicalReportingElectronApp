@@ -1,5 +1,5 @@
 // src/main/index.ts
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import isDev from 'electron-is-dev';
 import { signPdfService } from './signPdfService';
@@ -12,6 +12,9 @@ import log from 'electron-log';
 autoUpdater.logger = log;
 
 log.info('App starting...');
+
+let isForceClosing = false;
+let proceedCloseTriggered = false;
 
 // ---------------- SETTINGS & UTILS ----------------
 interface Settings {
@@ -33,6 +36,7 @@ interface Settings {
   remoteSignUrl: string;
   tsaUrl: string;
   useMRAS: boolean;
+  showAppMenu: boolean;
 }
 
 export function loadGlobalSettings(): Settings {
@@ -53,29 +57,169 @@ export function loadGlobalSettings(): Settings {
 }
 
 ipcMain.handle('verify-pin', async (_ev, pin: string) => {
-  const settings = await loadGlobalSettings();
-  const pkcs11 = new pkcs11js.PKCS11();
-  pkcs11.load(settings.pkcs11Lib);
-  pkcs11.C_Initialize();
+  console.log('[VERIFY-PIN] Inizio verifica PIN');
+  console.log(`[VERIFY-PIN] PIN ricevuto: ${pin ? `[${pin.length} caratteri]` : 'null/undefined'}`);
+  
+  let pkcs11: any = null;
+  let sess: any = null;
+  let slot: any = null;
+  let settings: any = null;
+  
   try {
-    const slot = pkcs11.C_GetSlotList(true)[settings.cspSlotIndex ?? 0];
-    const sess = pkcs11.C_OpenSession(
-      slot,
-      pkcs11js.CKF_SERIAL_SESSION | pkcs11js.CKF_RW_SESSION
-    );
-    pkcs11.C_Login(sess, pkcs11js.CKU_USER, pin);
-    pkcs11.C_Logout(sess);
-    pkcs11.C_CloseSession(sess);
-    return true;
+    // Caricamento impostazioni globali
+    console.log('[VERIFY-PIN] Caricamento impostazioni globali...');
+    settings = await loadGlobalSettings();
+    console.log('[VERIFY-PIN] Impostazioni caricate:', {
+      pkcs11Lib: settings.pkcs11Lib,
+      cspSlotIndex: settings.cspSlotIndex,
+      hasSettings: !!settings
+    });
+    
+    // Inizializzazione PKCS11
+    console.log('🔧 [VERIFY-PIN] Inizializzazione PKCS11...');
+    pkcs11 = new pkcs11js.PKCS11();
+    console.log('✅ [VERIFY-PIN] Oggetto PKCS11 creato');
+    
+    // Caricamento libreria PKCS11
+    console.log(`📚 [VERIFY-PIN] Caricamento libreria: ${settings.pkcs11Lib}`);
+    pkcs11.load(settings.pkcs11Lib);
+    console.log('✅ [VERIFY-PIN] Libreria PKCS11 caricata');
+    
+    // Inizializzazione PKCS11
+    console.log('🚀 [VERIFY-PIN] Inizializzazione C_Initialize...');
+    pkcs11.C_Initialize();
+    console.log('✅ [VERIFY-PIN] C_Initialize completata');
+    
+    try {
+      // Ottenimento lista slot
+      console.log('🎰 [VERIFY-PIN] Ottenimento lista slot...');
+      const slotList = pkcs11.C_GetSlotList(true);
+      console.log('✅ [VERIFY-PIN] Lista slot ottenuta:', {
+        totalSlots: slotList.length,
+        slotList: slotList,
+        requestedIndex: settings.cspSlotIndex ?? 0
+      });
+      
+      if (slotList.length === 0) {
+        throw new Error('Nessuno slot disponibile');
+      }
+      
+      const slotIndex = settings.cspSlotIndex ?? 0;
+      if (slotIndex >= slotList.length) {
+        throw new Error(`Indice slot ${slotIndex} non valido. Slot disponibili: 0-${slotList.length - 1}`);
+      }
+      
+      slot = slotList[slotIndex];
+      console.log(`🎯 [VERIFY-PIN] Slot selezionato: ${slot} (indice: ${slotIndex})`);
+      
+      // Apertura sessione
+      console.log('🔓 [VERIFY-PIN] Apertura sessione...');
+      const sessionFlags = pkcs11js.CKF_SERIAL_SESSION | pkcs11js.CKF_RW_SESSION;
+      console.log(`📝 [VERIFY-PIN] Flag sessione: ${sessionFlags}`);
+      
+      sess = pkcs11.C_OpenSession(slot, sessionFlags);
+      console.log(`✅ [VERIFY-PIN] Sessione aperta con ID: ${sess}`);
+      
+      // Login utente
+      console.log('👤 [VERIFY-PIN] Tentativo di login utente...');
+      console.log(`🔑 [VERIFY-PIN] Tipo utente: ${pkcs11js.CKU_USER}`);
+      
+      pkcs11.C_Login(sess, pkcs11js.CKU_USER, pin);
+      console.log('✅ [VERIFY-PIN] Login utente riuscito');
+      
+      // Logout
+      console.log('👋 [VERIFY-PIN] Esecuzione logout...');
+      pkcs11.C_Logout(sess);
+      console.log('✅ [VERIFY-PIN] Logout completato');
+      
+      // Chiusura sessione
+      console.log('🔒 [VERIFY-PIN] Chiusura sessione...');
+      pkcs11.C_CloseSession(sess);
+      console.log('✅ [VERIFY-PIN] Sessione chiusa');
+      
+      console.log('🎉 [VERIFY-PIN] Verifica PIN completata con successo');
+      return true;
+      
+    } catch (err: any) {
+      console.error('❌ [VERIFY-PIN] Errore durante le operazioni PKCS11:', {
+        message: err.message,
+        code: err.code,
+        stack: err.stack,
+        name: err.name
+      });
+      
+      // Cleanup parziale in caso di errore
+      try {
+        if (sess) {
+          console.log('🧹 [VERIFY-PIN] Tentativo di chiusura sessione dopo errore...');
+          pkcs11.C_CloseSession(sess);
+          console.log('✅ [VERIFY-PIN] Sessione chiusa dopo errore');
+        }
+      } catch (cleanupErr) {
+        console.error('⚠️ [VERIFY-PIN] Errore durante cleanup sessione:', cleanupErr);
+      }
+      
+      let msg = 'Errore PIN';
+      let errorCode = err.code;
+      
+      console.log(`🔍 [VERIFY-PIN] Analisi codice errore: ${errorCode}`);
+      
+      if (err.code === 160) {
+        msg = 'PIN errato';
+        console.log('🚫 [VERIFY-PIN] PIN errato rilevato');
+      } else if (err.code === 164) {
+        msg = 'PIN bloccato';
+        console.log('🔒 [VERIFY-PIN] PIN bloccato rilevato');
+      } else {
+        console.log(`❓ [VERIFY-PIN] Codice errore sconosciuto: ${errorCode}`);
+      }
+      
+      console.log(`📤 [VERIFY-PIN] Creazione errore personalizzato: "${msg}"`);
+      const e = new Error(msg);
+      (e as any).code = errorCode;
+      throw e;
+    }
+    
   } catch (err: any) {
-    let msg = 'Errore PIN';
-    if (err.code === 160) msg = 'PIN errato';
-    else if (err.code === 164) msg = 'PIN bloccato';
-    const e = new Error(msg);
-    (e as any).code = err.code;
-    throw e;
+    console.error('💥 [VERIFY-PIN] Errore generale nella funzione:', {
+      message: err.message,
+      code: err.code,
+      stack: err.stack,
+      name: err.name,
+      phase: 'general'
+    });
+    
+    // Se l'errore non è già stato processato, lo rilanciamo
+    if (err.message === 'PIN errato' || err.message === 'PIN bloccato' || err.message === 'Errore PIN') {
+      console.log('🔄 [VERIFY-PIN] Rilancio errore già processato');
+      throw err;
+    }
+    
+    // Errore non gestito, creiamo un errore generico
+    console.log('🆕 [VERIFY-PIN] Creazione errore generico per errore non gestito');
+    const genericError = new Error('Errore durante la verifica del PIN');
+    (genericError as any).code = err.code || 'UNKNOWN';
+    (genericError as any).originalError = err;
+    throw genericError;
+    
   } finally {
-    pkcs11.C_Finalize();
+    console.log('🧹 [VERIFY-PIN] Inizio cleanup finale...');
+    
+    try {
+      if (pkcs11) {
+        console.log('🔚 [VERIFY-PIN] Finalizzazione PKCS11...');
+        pkcs11.C_Finalize();
+        console.log('✅ [VERIFY-PIN] PKCS11 finalizzato');
+      }
+    } catch (finalizeErr:any) {
+      console.error('⚠️ [VERIFY-PIN] Errore durante finalizzazione PKCS11:', {
+        message: finalizeErr.message,
+        code: finalizeErr.code,
+        stack: finalizeErr.stack
+      });
+    }
+    
+    console.log('🏁 [VERIFY-PIN] Cleanup finale completato');
   }
 });
 
@@ -111,19 +255,30 @@ function createWindow() {
 
   // --- Preload path ---
   const preloadPath = isDevMode
-    ? path.join(process.cwd(), '.vite', 'build', 'preload', 'index.js')
+    ? path.join(process.cwd(), 'preload', 'index.js')
     : path.join(process.resourcesPath, 'preload', 'index.js');
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    fullscreen: true,
+    fullscreen: false,
+    maximizable: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
     },
   });
+
+  mainWindow.maximize();
+
+  // 3. Parametrizza la visualizzazione del menu
+ const settings = loadGlobalSettings();
+   if (!settings.showAppMenu) {
+    Menu.setApplicationMenu(null);
+  }
+
+  mainWindow.closable = false;
 
   if (isDevMode) {
     mainWindow.loadURL('http://localhost:5173');
@@ -135,9 +290,32 @@ function createWindow() {
     mainWindow.loadFile(indexPath);
   }
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  // Intercetta la richiesta di chiusura della finestra
+mainWindow.on('close', (e) => {
+  console.log('Evento close', { isForceClosing });
+  // resto del codice
+});
+
+ ipcMain.on('proceed-close', () => {
+   if (!proceedCloseTriggered && mainWindow) {
+   console.log('proceedCloseTriggered', { proceedCloseTriggered });
+     proceedCloseTriggered = true;
+     isForceClosing = true;
+   console.log('mainWindow.close()');
+     mainWindow.close();
+    console.log('proceedCloseTriggered', { proceedCloseTriggered });
+   }
+ });
 }
 
+ipcMain.on('app-quit', () => {
+  console.log('IPC: app-quit ricevuto')
+  if (mainWindow) {
+    mainWindow.closable = true;
+    app.quit();
+    mainWindow.close();
+  }
+});
 
 // ---------------- AUTO UPDATE (electron-updater) ----------------
 function setupAutoUpdater() {
@@ -197,18 +375,18 @@ function setupAutoUpdater() {
 // ---------------- APP READY ----------------
 app.whenReady().then(() => {
   createWindow();
-  //setupAutoUpdater();
+  setupAutoUpdater();
 });
 
 // ---------------- CLOSE BEHAVIOR ---------------
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+// app.on('window-all-closed', () => {
+//   if (process.platform !== 'darwin') {
+//     app.quit();
+//   }
+// });
 
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
-});
+// app.on('activate', () => {
+//   if (mainWindow === null) {
+//     createWindow();
+//   }
+// });

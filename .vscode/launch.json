@@ -7,7 +7,7 @@
       "type": "node",
       "request": "attach",
       "port": 9229,
-      "outFiles": ["${workspaceFolder}/.vite/build/**/*.js"],
+      "outFiles": ["${workspaceFolder}/renderer-dist/**/*.js"],
       "sourceMaps": true
     },
 
@@ -18,7 +18,7 @@
       "request": "attach",
       "timeout": 9000, // Esempio: attendi fino a 30 secondi
       "port": 9223, // <--- Prova con questa porta, altrimenti modifica
-      "outFiles": ["${workspaceFolder}/.vite/build/**/*.js"], // <--- Assicurati che il percorso sia corretto per l'output del tuo preload script
+      "outFiles": ["${workspaceFolder}/renderer-dist/**/*.js"], // <--- Assicurati che il percorso sia corretto per l'output del tuo preload script
       "sourceMaps": true
     },
         /* ---------- RENDERER ---------------------------------------------- */

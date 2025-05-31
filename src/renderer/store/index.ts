@@ -16,6 +16,7 @@ import filtersReducer from "./filtersSlice";
 import registrationsReducer from "./registrationSlice";
 import examinationReducer from "./examinationSlice";
 import loadingReducer from "./loadingSlice";
+import editorReducer from './editorSlice';
 
 const persistConfig = {
   key: "root",
@@ -30,6 +31,7 @@ const rootReducer = combineReducers({
   registrations: registrationsReducer,
   exam: examinationReducer,
   loading: loadingReducer,
+  editor: editorReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);
