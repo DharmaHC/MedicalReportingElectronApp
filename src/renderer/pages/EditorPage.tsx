@@ -691,11 +691,6 @@ const renderPinDialog = () =>
       const byteString = btoa(
         byteArray.reduce((data, byte) => data + String.fromCharCode(byte), "")
       );
-      // Prepara i parametri della query string.
-      const queryParams = new URLSearchParams({
-        doctorCode: doctorCode?.trim() ?? "",
-        examinationId: selectedExaminationId || "",
-      });
       // Deduplica la lista degli esami aggiuntivi.
       const deduplicatedMoreExams = selectedMoreExams.filter(
         (exam, index, array) => {
@@ -710,6 +705,27 @@ const renderPinDialog = () =>
           );
         }
       );
+
+      let doctorCodeParameter = doctorCode?.trim() ?? "";
+      let doctorCodeNotReportDoctor = false;
+      let examResultId = deduplicatedMoreExams[0]?.examResultId ?? 0;
+
+      if (deduplicatedMoreExams[0].doctorCode && deduplicatedMoreExams[0].doctorCode.trim() !== doctorCode?.trim()) {
+              // Il codice del medico dell'esame selezionato non corrisponde al codice del medico corrente.
+              // Vuol dire che stamo visualizzando un esame di un altro medico. quindi passiamo come parametro il medico dell'esame,
+              // per evitare di aggiornare 
+              doctorCodeParameter = deduplicatedMoreExams[0].doctorCode.trim() ?? "";
+              doctorCodeNotReportDoctor = true; // Indica che il codice del medico non è quello del referto corrente.
+      }
+
+      // Prepara i parametri della query string.
+      const queryParams = new URLSearchParams({
+        doctorCode: doctorCodeParameter,
+        examinationId: selectedExaminationId || "",
+        doctorCodeNotReportDoctor: doctorCodeNotReportDoctor ? "true" : "false",
+        examResultId: examResultId.toString(),
+      });
+
       const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
         examId: exam.examId,
         examVersion: exam.examVersion,
@@ -732,7 +748,9 @@ const renderPinDialog = () =>
               rtfNeedsToBeStored: rtfNeedsToBeStored,
               isSigningProcess: isSigningProcess,
               linkedResultsList: linkedResultsList,
-            }),
+              doctorCodeNotReportDoctor: doctorCodeNotReportDoctor,
+              examResultId: examResultId, 
+              }),
           }
         );
         if (response.ok) {

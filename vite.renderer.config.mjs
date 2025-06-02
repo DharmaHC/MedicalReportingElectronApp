@@ -16,9 +16,14 @@ export default defineConfig({
       { find: '@/assets', replacement: path.resolve(process.cwd(), 'src/renderer/assets') }
     ]
   },
-  build: {
+  server: {
+    port: 5173,
+    host: 'localhost',
+    strictPort: true
+  },
+    build: {
     outDir: path.resolve(process.cwd(), 'renderer-dist/renderer'),
-    sourcemap: false,
+    sourcemap: true,
     emptyOutDir: true,
     rollupOptions: {
       input: path.resolve(process.cwd(), 'src/renderer/index.html')

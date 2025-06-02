@@ -13,14 +13,8 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/renderer/*"],
-      "@/components/*": ["src/renderer/components/*"],
-      "@/pages/*": ["src/renderer/pages/*"],
-      "@/store/*": ["src/renderer/store/*"]
-    },
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", ".vite"]
-}
+  "exclude": ["node_modules", "dist"]
+  }
