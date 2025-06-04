@@ -121,6 +121,8 @@ function EditorPage() {
 
   const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
+  const [companyDataMarginValue, setCompanyDataMarginValue] = useState<number>(25);
+  const [companyDataMarginRatio, setCompanyDataMarginRatio] = useState<number>(25);
   
   const [lastSignedPdfBase64, setLastSignedPdfBase64] = useState<string | null>(null); // si usaper la stampa
 
@@ -144,6 +146,8 @@ function EditorPage() {
       window.appSettings.get().then(settings => {
         setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
         setUseMRAS(settings.useMRAS ?? false);
+        setCompanyDataMarginValue(settings.companyDataMarginValue ?? 25);
+        setCompanyDataMarginRatio(settings.companyDataMarginRatio ?? 1.5);
       });
     }, []);
 
@@ -1171,7 +1175,7 @@ if (printSignedPdf && signedPdfBase64) {
       }
     }
 
-    const newPdfBlob = await addTopMarginToPdf(finalPdfBlob, 25); // Sposta tutto in basso di 10mm (1cm)
+    const newPdfBlob = await addTopMarginToPdf(finalPdfBlob, companyDataMarginValue); // Sposta tutto in basso di 10mm (1cm)
 
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
@@ -1221,7 +1225,7 @@ async function addTopMarginToPdf(pdfBlob: Blob, marginMm: number): Promise<Blob>
     const embeddedPage = await pdfDoc.embedPage(oldPage);
 
     // ATTENZIONE: y = marginPt (NON -marginPt!)
-    newPage.drawPage(embeddedPage, { x: 0, y: marginPt - (marginPt/2) });
+    newPage.drawPage(embeddedPage, { x: 0, y: marginPt - (marginPt/companyDataMarginRatio) });
 
     // Rimuovi la pagina originale (che ora è la successiva)
     pdfDoc.removePage(i + 1);

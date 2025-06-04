@@ -20,6 +20,8 @@ interface Settings {
   tsaUrl: string;
   useMRAS: boolean;
   showAppMenu: boolean;
+  companyDataMarginValue: number;
+  companyDataMarginRatio: number;
 }
 
 declare global {

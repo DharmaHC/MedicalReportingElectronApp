@@ -42,6 +42,8 @@ interface Settings {
   tsaUrl: string;
   useMRAS: boolean;
   showAppMenu: boolean;
+  companyDataMarginValue: number;
+  companyDataMarginRatio: number;
 }
 
 export function loadGlobalSettings(): Settings {
