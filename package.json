@@ -125,6 +125,7 @@
     "@progress/kendo-react-pdf-viewer": "^11.1.0",
     "asn1js": "^2.1.0",
     "axios": "^1.9.0",
+    "canvas": "^3.0.0-rc3",
     "electron-is-dev": "^3.0.1",
     "electron-log": "^5.4.0",
     "electron-squirrel-startup": "^1.0.1",
