@@ -121,8 +121,6 @@
   },
   "dependencies": {
     "@progress/kendo-licensing": "^1.6.0",
-    "@progress/kendo-react-pdf": "^11.1.0",
-    "@progress/kendo-react-pdf-viewer": "^11.1.0",
     "asn1js": "^2.1.0",
     "axios": "^1.9.0",
     "canvas": "^3.0.0-rc3",
