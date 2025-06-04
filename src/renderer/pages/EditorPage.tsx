@@ -1182,6 +1182,7 @@ if (printSignedPdf && signedPdfBase64) {
       executePrint(newPdfBlob);
     }
 
+    
     setIsModified(true);
       if (showLivePreview && editorRef.current?.view?.dom) {
         updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
