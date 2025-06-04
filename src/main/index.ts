@@ -3,10 +3,15 @@ import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import isDev from 'electron-is-dev';
 import { signPdfService } from './signPdfService';
+import os from 'os';
 import path from 'path';
 import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
+import { execFile } from 'child_process';
+
+// Inserisci il path corretto di SumatraPDF.exe
+const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
 
 // Configura electron-log anche per autoUpdater
 autoUpdater.logger = log;
@@ -245,6 +250,35 @@ ipcMain.handle('appSettings:reload', async () => {
 // ------ PDF SIGN IPC ------
 ipcMain.handle('sign-pdf', async (_e, req) => {
   return signPdfService(req);
+});
+
+// ------ PDF PRINT IPC ------
+ipcMain.on('print-pdf-native', async (event, pdfBase64: string) => {
+  // 1. Scrivi il file temporaneo PDF
+  const tempPath = path.join(os.tmpdir(), `stampa_${Date.now()}.pdf`);
+  fs.writeFileSync(tempPath, Buffer.from(pdfBase64, 'base64'));
+
+  // 2. Comando per stampa silenziosa (senza GUI, diretta sulla stampante predefinita)
+  // Opzioni utili: -print-to-default -silent
+  const args = [
+    '-print-to-default',
+    '-silent',
+    tempPath
+  ];
+
+  execFile(SUMATRA_PATH, args, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Errore stampa Sumatra:', error);
+      event.sender.send('print-pdf-native-result', { success: false, error: error.message });
+    } else {
+      event.sender.send('print-pdf-native-result', { success: true });
+    }
+
+    // Elimina il file dopo qualche secondo
+    setTimeout(() => {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    }, 10000);
+  });
 });
 
 // ---------------- MAIN WINDOW ----------------

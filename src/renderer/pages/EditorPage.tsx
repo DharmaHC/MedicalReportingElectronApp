@@ -914,192 +914,222 @@ const renderPinDialog = () =>
   }
 
   // Stampa referto PDF o RTF, gestendo la firma digitale se disponibile.
-// Componente Modal per l'anteprima di stampa
+// Componente Modal per l'anteprima di stampa (con timeout e loader)
 const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
   const pdfUrl = URL.createObjectURL(pdfBlob);
-  
-  // Crea il modal
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.8);
-    z-index: 1000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  // 1. Mostra loader temporaneo subito
+  const loader = document.createElement('div');
+  loader.style.cssText = `
+    position: fixed;top:0;left:0;width:100vw;height:100vh;
+    display:flex;align-items:center;justify-content:center;z-index:9999;
+    background:rgba(0,0,0,0.4);color:white;font-size:20px;
   `;
-  
-  const container = document.createElement('div');
-  container.style.cssText = `
-    background: white;
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  `;
-  
-  // Header con titolo e pulsanti
-  const header = document.createElement('div');
-  header.style.cssText = `
-    padding: 16px 24px;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #f9fafb;
-    border-radius: 12px 12px 0 0;
-  `;
-  
-  const title = document.createElement('h3');
-  title.textContent = 'Anteprima di Stampa';
-  title.style.cssText = `
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #111827;
-  `;
-  
-  const buttonContainer = document.createElement('div');
-  buttonContainer.style.cssText = 'display: flex; gap: 12px;';
-  
-  const printBtn = document.createElement('button');
-  printBtn.innerHTML = `
-    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
-      <path d="M6 9a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3A.5.5 0 0 1 6 9zM3.854 4.146a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2z"/>
-      <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v4.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2V2a2 2 0 0 1 2-2H2z"/>
-    </svg>
-    Stampa
-  `;
-  printBtn.style.cssText = `
-    padding: 10px 20px;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    transition: background-color 0.2s;
-  `;
-  
-  const closeBtn = document.createElement('button');
-  closeBtn.innerHTML = `
-    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
-      <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
-    </svg>
-    Chiudi
-  `;
-  closeBtn.style.cssText = `
-    padding: 10px 20px;
-    background: #6b7280;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    transition: background-color 0.2s;
-  `;
-  
-  // Hover effects
-  printBtn.onmouseover = () => printBtn.style.background = '#2563eb';
-  printBtn.onmouseout = () => printBtn.style.background = '#3b82f6';
-  closeBtn.onmouseover = () => closeBtn.style.background = '#4b5563';
-  closeBtn.onmouseout = () => closeBtn.style.background = '#6b7280';
-  
-  // Contenitore per l'iframe
-  const iframeContainer = document.createElement('div');
-  iframeContainer.style.cssText = `
-    flex: 1;
-    padding: 16px;
-    background: #f3f4f6;
-  `;
-  
-  const iframe = document.createElement('iframe');
-  iframe.src = pdfUrl;
-  iframe.style.cssText = `
-    width: 100%;
-    height: 100%;
-    border: 2px solid #d1d5db;
-    border-radius: 8px;
-    background: white;
-  `;
-  
-  // Assembla il modal
-  buttonContainer.appendChild(printBtn);
-  buttonContainer.appendChild(closeBtn);
-  header.appendChild(title);
-  header.appendChild(buttonContainer);
-  iframeContainer.appendChild(iframe);
-  container.appendChild(header);
-  container.appendChild(iframeContainer);
-  modal.appendChild(container);
-  document.body.appendChild(modal);
-  
-  // Event handlers
-  printBtn.onclick = (): void => {
-    onPrint(); // Chiama la funzione di stampa originale
-    closeModal();
-  };
-  
-  const closeModal = (): void => {
-    document.body.removeChild(modal);
-    URL.revokeObjectURL(pdfUrl);
-  };
-  
-  closeBtn.onclick = closeModal;
-  
-  // Chiudi cliccando fuori dal modal
-  modal.onclick = (e): void => {
-    if (e.target === modal) {
+  loader.textContent = 'Caricamento anteprima...';
+  document.body.appendChild(loader);
+
+  // 2. Timeout per permettere al browser di propagare il blob e DOM
+  setTimeout(() => {
+    // Rimuovi il loader
+    if (loader.parentElement) loader.parentElement.removeChild(loader);
+
+    // Crea il modal vero e proprio
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    const container = document.createElement('div');
+    container.style.cssText = `
+      background: white;
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    `;
+
+    // Header con titolo e pulsanti
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 16px 24px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f9fafb;
+      border-radius: 12px 12px 0 0;
+    `;
+
+    const title = document.createElement('h3');
+    title.textContent = 'Anteprima di Stampa';
+    title.style.cssText = `
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #111827;
+    `;
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 12px;';
+
+    const printBtn = document.createElement('button');
+    printBtn.innerHTML = `
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+        <path d="M6 9a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3A.5.5 0 0 1 6 9zM3.854 4.146a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2z"/>
+        <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v4.5h2a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2V2a2 2 0 0 1 2-2H2z"/>
+      </svg>
+      Stampa
+    `;
+    printBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      transition: background-color 0.2s;
+    `;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+      </svg>
+      Chiudi
+    `;
+    closeBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #6b7280;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      transition: background-color 0.2s;
+    `;
+
+    // Hover effects
+    printBtn.onmouseover = () => printBtn.style.background = '#2563eb';
+    printBtn.onmouseout = () => printBtn.style.background = '#3b82f6';
+    closeBtn.onmouseover = () => closeBtn.style.background = '#4b5563';
+    closeBtn.onmouseout = () => closeBtn.style.background = '#6b7280';
+
+    // Contenitore per l'iframe
+    const iframeContainer = document.createElement('div');
+    iframeContainer.style.cssText = `
+      flex: 1;
+      padding: 16px;
+      background: #f3f4f6;
+    `;
+
+    const iframe = document.createElement('iframe');
+    iframe.src = pdfUrl;
+    iframe.style.cssText = `
+      width: 100%;
+      height: 100%;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      background: white;
+    `;
+
+    // Assembla il modal
+    buttonContainer.appendChild(printBtn);
+    buttonContainer.appendChild(closeBtn);
+    header.appendChild(title);
+    header.appendChild(buttonContainer);
+    iframeContainer.appendChild(iframe);
+    container.appendChild(header);
+    container.appendChild(iframeContainer);
+    modal.appendChild(container);
+    document.body.appendChild(modal);
+
+    // Event handlers
+    printBtn.onclick = (): void => {
+      onPrint(); // Chiama la funzione di stampa originale
       closeModal();
-    }
-  };
-  
-  // Chiudi con Escape
-  const escapeHandler = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      closeModal();
-      document.removeEventListener('keydown', escapeHandler);
-    }
-  };
-  document.addEventListener('keydown', escapeHandler);
-  
-  // Focus sul pulsante di stampa
-  setTimeout(() => printBtn.focus(), 100);
+    };
+
+    const closeModal = (): void => {
+      document.body.removeChild(modal);
+      URL.revokeObjectURL(pdfUrl);
+    };
+
+    closeBtn.onclick = closeModal;
+
+    // Chiudi cliccando fuori dal modal
+    modal.onclick = (e): void => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    };
+
+    // Chiudi con Escape
+    const escapeHandler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', escapeHandler);
+      }
+    };
+    document.addEventListener('keydown', escapeHandler);
+
+    // Focus sul pulsante di stampa
+    setTimeout(() => printBtn.focus(), 100);
+  }, 100); // timeout di 100ms, regolabile se serve
 };
 
 // Funzione di stampa che apre il PDF nel visualizzatore predefinito
-const executePrint = (finalPdfBlob: Blob): void => {
-  const pdfUrl = URL.createObjectURL(finalPdfBlob);
-  const link = document.createElement('a');
-  link.href = pdfUrl;
-  link.target = '_blank';
-  link.download = `referto_${new Date().getTime()}.pdf`;
-  
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  
-  setTimeout(() => {
-    URL.revokeObjectURL(pdfUrl);
-  }, 10000);
+const executePrint = async (finalPdfBlob: Blob): Promise<void> => {
+  const pdfArrayBuffer = await finalPdfBlob.arrayBuffer();
+  const pdfBase64 = arrayBufferToBase64(pdfArrayBuffer);
+
+  // Invia stampa
+  window.electron.ipcRenderer.send('print-pdf-native', pdfBase64);
+
+  // Attendi la risposta (una sola volta)
+  window.electron.ipcRenderer.once('print-pdf-native-result', (event, { success, failureReason }) => {
+    if (success) {
+      // Solo ora puoi navigare via o chiudere
+          dispatch(clearSelectedMoreExams());
+          dispatch(resetExaminationState());
+          dispatch(clearRegistrations());
+          navigate("/", { state: { reload: true } }); // Torna alla home e forza il ricaricamento dei dati.
+    } else {
+      setErrorMessage(`Stampa fallita: ${failureReason}`);
+    }
+  });
 };
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
 // Funzione principale modificata con possibilità di anteprima
 const handlePrintReferto = async (signedPdfBase64?: string): Promise<void> => {
 let pdfContent: string | null = null;
 
-if (signedPdfBase64) {
+if (printSignedPdf && signedPdfBase64) {
   // Usa direttamente il PDF firmato passato come argomento
   pdfContent = signedPdfBase64;
 } else if (printSignedPdf && lastSignedPdfBase64) {
@@ -1141,13 +1171,15 @@ if (signedPdfBase64) {
       }
     }
 
+    const newPdfBlob = await addTopMarginToPdf(finalPdfBlob, 25); // Sposta tutto in basso di 10mm (1cm)
+
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
-      showPrintPreviewModal(finalPdfBlob, () => {
-        executePrint(finalPdfBlob);
+      showPrintPreviewModal(newPdfBlob, () => {
+        executePrint(newPdfBlob);
       });
     } else {
-      executePrint(finalPdfBlob);
+      executePrint(newPdfBlob);
     }
 
     setIsModified(true);
@@ -1160,7 +1192,45 @@ if (signedPdfBase64) {
   }
 };
 
-  // Gestisce il download del referto PDF (funzionalità attualmente nascosta nell'UI).
+/**
+ * Aggiunge margine superiore a ogni pagina e aumenta l'altezza della pagina.
+ * @param pdfBlob Blob PDF di input
+ * @param marginMm Margine superiore in millimetri (mm)
+ * @returns Promise<Blob> Blob PDF modificato
+ */
+async function addTopMarginToPdf(pdfBlob: Blob, marginMm: number): Promise<Blob> {
+  const marginPt = marginMm * 2.83465;
+
+  const pdfBytes = await pdfBlob.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+
+  const pageCount = pdfDoc.getPageCount();
+
+  for (let i = 0; i < pageCount; i++) {
+    const oldPage = pdfDoc.getPage(i);
+    const { width, height } = oldPage.getSize();
+
+    // Nuova altezza della pagina
+    const newHeight = height + marginPt;
+
+    // Inserisci nuova pagina con altezza aumentata
+    const newPage = pdfDoc.insertPage(i, [width, newHeight]);
+
+    // Incorpora la pagina originale come PDFEmbeddedPage
+    const embeddedPage = await pdfDoc.embedPage(oldPage);
+
+    // ATTENZIONE: y = marginPt (NON -marginPt!)
+    newPage.drawPage(embeddedPage, { x: 0, y: marginPt - (marginPt/2) });
+
+    // Rimuovi la pagina originale (che ora è la successiva)
+    pdfDoc.removePage(i + 1);
+  }
+
+  const modifiedPdfBytes = await pdfDoc.save();
+  return new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+}
+
+// Gestisce il download del referto PDF (funzionalità attualmente nascosta nell'UI).
   const handleDownloadReferto = async () => {
     const reportData = await generateReportData(false, false);
     if (reportData?.pdfContent) {
@@ -1263,10 +1333,7 @@ if (signedPdfBase64) {
         }
 
         if (!stayHere) { // Se non si deve rimanere sulla pagina.
-          dispatch(clearSelectedMoreExams());
-          dispatch(resetExaminationState());
-          dispatch(clearRegistrations());
-          navigate("/", { state: { reload: true } }); // Torna alla home e forza il ricaricamento dei dati.
+
         }
       } else { // Errore dalla API.
         const errorData = await response.json().catch(() => ({ title: "Errore sconosciuto o risposta non JSON." }));

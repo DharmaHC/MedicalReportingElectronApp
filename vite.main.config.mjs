@@ -17,7 +17,7 @@ export default defineConfig({
 
     lib: { entry: path.resolve('src/main/index.ts'), formats: ['cjs'] },
     rollupOptions: {
-      external: ['electron', 'fs', 'path', 'pkcs11js', 'asn1js', 'pkijs', 'crypto', 'electron-log', 'electron-updater'],
+      external: ['electron', 'child_process', 'fs', 'path', 'pkcs11js', 'asn1js', 'pkijs', 'crypto', 'electron-log', 'electron-updater'],
       output: { entryFileNames: 'main.js' }
     }
   }
