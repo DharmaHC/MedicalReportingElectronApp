@@ -1,22 +1,23 @@
 {
   "name": "medreportandsign",
   "productName": "MedReportAndSign",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Applicazione Electron per la refertazione medica con firma digitale",
   "author": "Dharma Healthcare <info@dharmahealthcare.net>",
   "license": "MIT",
   "private": true,
-  "main": "renderer-dist/main.js",
+  "main": "renderer-dist/main/index.js",
   "scripts": {
     "dev": "vite",
     "start": "electron-forge start",
     "start:dev": "cross-env electron-forge start --inspect-electron -- --remote-debugging-port=9222",
-    "build:main": "vite build --config vite.main.config.mjs",
+    "build:main": "tsc --project tsconfig.main.json",
+    "build:preload": "vite build --config vite.preload.config.mjs",
     "build:renderer": "vite build --config vite.renderer.config.mjs",
     "build": "npm run build:main && npm run build:renderer && npm run build:preload",
-    "build:preload": "tsc --project tsconfig.preload.json",
     "make": "electron-forge make",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "postinstall": "electron-builder install-app-deps"
   },
   "build": {
     "appId": "net.dharmahealthcare.medreportandsign",
@@ -26,6 +27,7 @@
       "buildResources": "resources"
     },
     "asarUnpack": [
+      "**/node_modules/pkcs11js/**",
       "**/node_modules/electron-log/**",
       "**/node_modules/electron-updater/**"
     ],
@@ -38,6 +40,9 @@
     ],
     "files": [
       "renderer-dist/**",
+      "renderer-dist/main/**",
+      "renderer-dist/renderer/**",
+      "renderer-dist/preload/**",
       "preload/**",
       "package.json",
       "!**/*.ts",
@@ -58,7 +63,7 @@
     ],
     "asar": true,
     "extraMetadata": {
-      "main": "renderer-dist/main.js"
+      "main": "renderer-dist/main/index.js"
     },
     "win": {
       "target": [
@@ -105,12 +110,15 @@
     "@electron-forge/plugin-vite": "^7.8.1",
     "@electron/fuses": "^1.8.0",
     "@types/node": "^22.15.18",
+    "@types/pkijs": "^3.0.1",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.4.1",
+    "copyfiles": "^2.4.1",
     "cross-env": "^7.0.3",
     "electron": "^36.2.1",
     "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vite-plugin-static-copy": "^3.0.0"
@@ -119,7 +127,7 @@
     "@progress/kendo-licensing": "^1.6.0",
     "asn1js": "^2.1.0",
     "axios": "^1.9.0",
-    "electron-is-dev": "^3.0.1",
+    "electron-is-dev": "^2.0.0",
     "electron-log": "^5.4.0",
     "electron-updater": "^6.6.2",
     "pdf-lib": "^1.17.1",

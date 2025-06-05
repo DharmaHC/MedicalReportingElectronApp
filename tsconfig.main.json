@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "renderer-dist/main",
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": ["ES2020"],
+    "esModuleInterop": true,
+    "strict": true,
+    "allowJs": true,
+    "rootDir": "src/main",
+    "noEmitOnError": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/main/**/*",
+    "src/types",
+    "globals.d.ts"]
+}

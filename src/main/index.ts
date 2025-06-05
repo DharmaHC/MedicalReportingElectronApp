@@ -254,35 +254,71 @@ ipcMain.handle('sign-pdf', async (_e, req) => {
   return signPdfService(req);
 });
 
-// ------ PDF PRINT IPC ------
+// ------ PDF SIGN IPC ------
 ipcMain.on('print-pdf-native', async (event, pdfBase64: string) => {
-  // 1. Scrivi il file temporaneo PDF
-  const tempPath = path.join(os.tmpdir(), `stampa_${Date.now()}.pdf`);
-  fs.writeFileSync(tempPath, Buffer.from(pdfBase64, 'base64'));
+  try {
+    // 1. Scrivi il file temporaneo PDF
+    const tempPath = path.join(os.tmpdir(), `stampa_${Date.now()}.pdf`);
+    log.info('[PRINT] Ricevuto print-pdf-native. tempPath:', tempPath);
 
-  // 2. Comando per stampa silenziosa (senza GUI, diretta sulla stampante predefinita)
-  // Opzioni utili: -print-to-default -silent
-  const args = [
-    '-print-to-default',
-    '-silent',
-    tempPath
-  ];
-
-  execFile(SUMATRA_PATH, args, (error, stdout, stderr) => {
-    if (error) {
-      const errMessage = error + ' ' + stdout + ' ' + stderr;
-      console.error('Errore stampa Sumatra:', errMessage);
-      event.sender.send('print-pdf-native-result', { success: false, error: errMessage });
-    } else {
-      event.sender.send('print-pdf-native-result', { success: true });
+    try {
+      fs.writeFileSync(tempPath, Buffer.from(pdfBase64, 'base64'));
+      log.info('[PRINT] PDF temporaneo scritto:', tempPath);
+    } catch (writeErr) {
+      log.error('[PRINT] Errore scrittura file temporaneo:', writeErr);
+      event.sender.send('print-pdf-native-result', { success: false, error: 'Errore scrittura file PDF temporaneo: ' + writeErr });
+      dialog.showErrorBox('Stampa fallita', 'Errore scrittura file PDF temporaneo: ' + writeErr);
+      return;
     }
 
-    // Elimina il file dopo qualche secondo
-    setTimeout(() => {
+    // 2. Comando per stampa silenziosa (senza GUI, diretta sulla stampante predefinita)
+    const args = [
+      '-print-to-default',
+      '-silent',
+      tempPath
+    ];
+
+    if (!fs.existsSync(SUMATRA_PATH)) {
+      log.error('[PRINT] SumatraPDF non trovato:', SUMATRA_PATH);
+      event.sender.send('print-pdf-native-result', { success: false, error: 'SumatraPDF non trovato' });
+      dialog.showErrorBox('Stampa fallita', 'SumatraPDF non trovato su questo PC.');
+      // Elimina comunque il file temporaneo se presente
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    }, 10000);
-  });
+      return;
+    }
+    log.info('[PRINT] Lancio SumatraPDF:', SUMATRA_PATH, args);
+
+    execFile(SUMATRA_PATH, args, (error, stdout, stderr) => {
+      if (error) {
+        const errMessage = error + ' ' + stdout + ' ' + stderr;
+        log.error('Errore stampa Sumatra:', errMessage);
+        event.sender.send('print-pdf-native-result', { success: false, error: errMessage });
+        dialog.showErrorBox('Errore stampa', errMessage);
+      } else {
+        event.sender.send('print-pdf-native-result', { success: true });
+      }
+
+      // Cleanup file temporaneo
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(tempPath)) {
+            fs.unlinkSync(tempPath);
+            log.info('[PRINT] File temporaneo eliminato:', tempPath);
+          }
+        } catch (delErr) {
+          log.error('[PRINT] Errore eliminazione file temporaneo:', delErr);
+        }
+      }, 10000);
+    });
+
+  } catch (err) {
+    // Catch di errori NON previsti (es. errori sincroni, permessi, out-of-memory ecc.)
+    log.error('[PRINT] Errore imprevisto in print-pdf-native:', err);
+    event.sender.send('print-pdf-native-result', { success: false, error: 'Errore imprevisto: ' + err });
+    dialog.showErrorBox('Stampa fallita', 'Errore imprevisto: ' + err);
+  }
 });
+
 
 // ---------------- MAIN WINDOW ----------------
 let mainWindow: BrowserWindow | null = null;
@@ -317,15 +353,15 @@ function createWindow() {
 
   mainWindow.closable = false;
 
-  if (isDevMode) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
-  } else {
-    // In produzione, index.html è in dist/index.html dentro app.asar
-    const indexPath = path.join(__dirname, 'renderer', 'index.html');
-    console.log('Loading file path:', indexPath);
-    mainWindow.loadFile(indexPath);
-  }
+    const indexPath = isDevMode
+        ? 'http://localhost:5173'
+        : path.resolve(__dirname, '..', 'renderer', 'index.html');
+    if (isDevMode) {
+      mainWindow.loadURL(indexPath);
+      mainWindow.webContents.openDevTools();
+    } else {
+      mainWindow.loadFile(indexPath);
+    }
 
   // Intercetta la richiesta di chiusura della finestra
 mainWindow.on('close', (e) => {

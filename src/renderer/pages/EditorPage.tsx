@@ -1108,17 +1108,22 @@ const executePrint = async (finalPdfBlob: Blob): Promise<void> => {
   window.electron.ipcRenderer.send('print-pdf-native', pdfBase64);
 
   // Attendi la risposta (una sola volta)
-  window.electron.ipcRenderer.once('print-pdf-native-result', (event, { success, failureReason }) => {
-    if (success) {
-      // Solo ora puoi navigare via o chiudere
-          dispatch(clearSelectedMoreExams());
-          dispatch(resetExaminationState());
-          dispatch(clearRegistrations());
-          navigate("/", { state: { reload: true } }); // Torna alla home e forza il ricaricamento dei dati.
-    } else {
-      setErrorMessage(`Stampa fallita: ${failureReason}`);
-    }
-  });
+window.electron.ipcRenderer.once('print-pdf-native-result', (event, { success, error, failureReason }) => {
+  if (success) {
+    // Solo ora puoi navigare via o chiudere
+    dispatch(clearSelectedMoreExams());
+    dispatch(resetExaminationState());
+    dispatch(clearRegistrations());
+    navigate("/", { state: { reload: true } }); // Torna alla home e forza il ricaricamento dei dati.
+  } else {
+    // Log di dettaglio per debug (salva su console browser)
+    const reason = failureReason || error || "Motivo non disponibile";
+    console.error('[PRINT] Errore nella stampa PDF:', reason);
+
+    // Mostra messaggio utente
+    setErrorMessage(`Stampa fallita: ${reason}`);
+  }
+});
 };
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
