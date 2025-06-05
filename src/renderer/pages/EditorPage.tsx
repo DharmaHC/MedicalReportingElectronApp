@@ -1176,8 +1176,8 @@ if (printSignedPdf && signedPdfBase64) {
       }
     }
 
-    //const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
-    const newPdfBlob = finalPdfBlob; // Usa il PDF finale senza margini aggiuntivi
+    const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
+    //const newPdfBlob = finalPdfBlob; // Usa il PDF finale senza margini aggiuntivi
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
       showPrintPreviewModal(newPdfBlob, () => {
@@ -1248,7 +1248,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
     newPage.drawPage(embeddedPage, {
       x: 0,
-      y: 0
+      y: 70
     });
 
     // 8. Rimuovi la vecchia pagina (ora si trova a i+1)
