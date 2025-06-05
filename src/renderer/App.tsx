@@ -191,14 +191,14 @@ function AppWrapper() {
                 </p>
               </div>
             </div>
-            <div className="row">
+            {/* <div className="row">
               <div className="col-md-12">
                 <p>
                   Aster Diagnostica &egrave; un marchio registrato utilizzato dalle societ&agrave; Aster Diagnostica Srl e
                   Radiologia Mostacciano Srl. | Note Legali | Privacy
                 </p>
               </div>
-            </div>
+            </div> */}
           </div>
         </footer>
       )}

@@ -42,8 +42,8 @@ interface Settings {
   tsaUrl: string;
   useMRAS: boolean;
   showAppMenu: boolean;
-  companyDataMarginValue: number;
-  companyDataMarginRatio: number;
+  reportPageWidth: number;
+  reportPageHeight: number;
 }
 
 export function loadGlobalSettings(): Settings {
@@ -270,8 +270,9 @@ ipcMain.on('print-pdf-native', async (event, pdfBase64: string) => {
 
   execFile(SUMATRA_PATH, args, (error, stdout, stderr) => {
     if (error) {
-      console.error('Errore stampa Sumatra:', error);
-      event.sender.send('print-pdf-native-result', { success: false, error: error.message });
+      const errMessage = error + ' ' + stdout + ' ' + stderr;
+      console.error('Errore stampa Sumatra:', errMessage);
+      event.sender.send('print-pdf-native-result', { success: false, error: errMessage });
     } else {
       event.sender.send('print-pdf-native-result', { success: true });
     }

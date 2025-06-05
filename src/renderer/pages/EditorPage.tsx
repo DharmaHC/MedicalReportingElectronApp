@@ -121,8 +121,8 @@ function EditorPage() {
 
   const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
-  const [companyDataMarginValue, setCompanyDataMarginValue] = useState<number>(25);
-  const [companyDataMarginRatio, setCompanyDataMarginRatio] = useState<number>(25);
+  const [reportPageWidth, setreportPageWidth] = useState<number>(25);
+  const [reportPageHeight, setreportPageHeight] = useState<number>(25);
   
   const [lastSignedPdfBase64, setLastSignedPdfBase64] = useState<string | null>(null); // si usaper la stampa
 
@@ -146,8 +146,8 @@ function EditorPage() {
       window.appSettings.get().then(settings => {
         setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
         setUseMRAS(settings.useMRAS ?? false);
-        setCompanyDataMarginValue(settings.companyDataMarginValue ?? 25);
-        setCompanyDataMarginRatio(settings.companyDataMarginRatio ?? 1.5);
+        setreportPageWidth(settings.reportPageWidth ?? 25);
+        setreportPageHeight(settings.reportPageHeight ?? 1.5);
       });
     }, []);
 
@@ -728,6 +728,7 @@ const renderPinDialog = () =>
         examinationId: selectedExaminationId || "",
         doctorCodeNotReportDoctor: doctorCodeNotReportDoctor ? "true" : "false",
         examResultId: examResultId.toString(),
+        forceA4: "true",
       });
 
       const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
@@ -1175,8 +1176,8 @@ if (printSignedPdf && signedPdfBase64) {
       }
     }
 
-    const newPdfBlob = await addTopMarginToPdf(finalPdfBlob, companyDataMarginValue); // Sposta tutto in basso di 10mm (1cm)
-
+    //const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
+    const newPdfBlob = finalPdfBlob; // Usa il PDF finale senza margini aggiuntivi
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
       showPrintPreviewModal(newPdfBlob, () => {
@@ -1203,36 +1204,60 @@ if (printSignedPdf && signedPdfBase64) {
  * @param marginMm Margine superiore in millimetri (mm)
  * @returns Promise<Blob> Blob PDF modificato
  */
-async function addTopMarginToPdf(pdfBlob: Blob, marginMm: number): Promise<Blob> {
-  const marginPt = marginMm * 2.83465;
-
+// reportPageWidth/Height in millimetri (mm)
+async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
+  
+  // 1. Ottieni bytes dal Blob
   const pdfBytes = await pdfBlob.arrayBuffer();
+
+  // 2. Carica il PDF originale
   const pdfDoc = await PDFDocument.load(pdfBytes);
+
+  // 3. Converti le nuove dimensioni da mm a punti PDF (1mm = 2.83465pt)
+  const newPageWidth = reportPageWidth * 2.83465;
+  const newPageHeight = reportPageHeight * 2.83465;
 
   const pageCount = pdfDoc.getPageCount();
 
   for (let i = 0; i < pageCount; i++) {
     const oldPage = pdfDoc.getPage(i);
-    const { width, height } = oldPage.getSize();
 
-    // Nuova altezza della pagina
-    const newHeight = height + marginPt;
+    // 4. Dimensioni originali della pagina (in punti)
+    const { width: oldPageWidth, height: oldPageHeight } = oldPage.getSize();
 
-    // Inserisci nuova pagina con altezza aumentata
-    const newPage = pdfDoc.insertPage(i, [width, newHeight]);
+    // 5. Calcola l'offset per centrare il contenuto
+    var marginLeft = (newPageWidth - oldPageWidth) / 2;
+    var marginTop = (newPageHeight - oldPageHeight) / 2;
 
-    // Incorpora la pagina originale come PDFEmbeddedPage
+    if (marginLeft < 0) {
+      marginLeft = marginLeft*-1; // Non permettere margini negativi
+      marginLeft = marginLeft/2;
+    }
+    if (marginTop < 0) {
+      marginTop = marginTop*-1; // Non permettere margini negativi
+      marginTop = marginTop/2;
+    }
+
+
+
+    // 6. Crea una nuova pagina con le nuove dimensioni
+    const newPage = pdfDoc.insertPage(i, [newPageWidth, newPageHeight]);
+
+    // 7. Inserisci la pagina originale nella nuova SENZA SCALARE!
     const embeddedPage = await pdfDoc.embedPage(oldPage);
 
-    // ATTENZIONE: y = marginPt (NON -marginPt!)
-    newPage.drawPage(embeddedPage, { x: 0, y: marginPt - (marginPt/companyDataMarginRatio) });
+    newPage.drawPage(embeddedPage, {
+      x: 0,
+      y: 0
+    });
 
-    // Rimuovi la pagina originale (che ora è la successiva)
+    // 8. Rimuovi la vecchia pagina (ora si trova a i+1)
     pdfDoc.removePage(i + 1);
   }
 
+  // 9. Salva e restituisci il nuovo Blob PDF
   const modifiedPdfBytes = await pdfDoc.save();
-  return new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+  return new Blob([modifiedPdfBytes], { type: "application/pdf" });
 }
 
 // Gestisce il download del referto PDF (funzionalità attualmente nascosta nell'UI).

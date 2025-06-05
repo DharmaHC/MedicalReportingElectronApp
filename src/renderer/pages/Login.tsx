@@ -273,8 +273,7 @@ const Login = () => {
                 component={Checkbox}
                 label="Ricorda Username"
               />
-			    <a
-				  href="#"
+			    <a href="#"
 				  onClick={(e) => {
 				    e.preventDefault();
 				    setForgotPasswordVisible(true); // Mostra il dialog
@@ -286,6 +285,12 @@ const Login = () => {
 			  <div>
               <Button themeColor={"primary"} type="submit">
                 Login
+              </Button>
+              <Button themeColor={"base"} style={ {marginLeft:10} } onClick={() => {
+                // Chiude l'applicazione}>
+                window.close();
+              }}>
+                Chiudi App
               </Button>
 			  </div>
             </FormElement>

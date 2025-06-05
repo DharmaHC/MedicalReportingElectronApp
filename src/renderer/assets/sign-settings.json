@@ -17,8 +17,8 @@
 
   "printSignedPdfIfAvailable": false,
 
-  "companyDataMarginValue": 25,
-  "companyDataMarginRatio": 1.5,
+  "reportPageWidth": 210,
+  "reportPageHeight": 297,
 
   "pkcs11Lib": "C:\\\\Windows\\\\System32\\\\bit4ipki.dll",
   "cspSlotIndex": 0,
