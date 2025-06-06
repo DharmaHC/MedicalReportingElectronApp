@@ -1253,7 +1253,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
     newPage.drawPage(embeddedPage, {
       x: 0,
-      y: 70
+      y: 65
     });
 
     // 8. Rimuovi la vecchia pagina (ora si trova a i+1)

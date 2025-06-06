@@ -214,10 +214,20 @@ const Login = () => {
     setPasswordVisible(!passwordVisible);
   };
 
-  return (<>
+
+  const getAssetPath = (assetRelPath: string) => {
+    // Dev: Vite serve tutto da /assets
+    if (!window.location.href.startsWith("file://")) {
+      return `/assets/${assetRelPath}`;
+    }
+    // Prod: file://, index.html in renderer-dist/renderer, assets in ../../assets
+    return `../../../assets/${assetRelPath}`;
+  };
+
+return (<>
     <div className="login-container">
       <div className="login-image">
-        <img src="../assets/Images/login2-img.jpg" alt="Login" />
+        <img src={getAssetPath('Images/login2-img.jpg')} alt="Login" />
       </div>
 
       <div className="login-form-container">
