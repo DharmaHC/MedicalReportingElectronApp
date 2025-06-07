@@ -19,9 +19,5 @@ export default defineConfig({
       ],
       output: { entryFileNames: 'index.js' }
     }
-  },
-  // 👇 Indica a Vite quale tsconfig usare!
-  esbuild: {
-    tsconfig: 'tsconfig.main.json'
   }
 });
