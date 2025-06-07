@@ -44,6 +44,7 @@ interface Settings {
   showAppMenu: boolean;
   reportPageWidth: number;
   reportPageHeight: number;
+  editorZoomDefault: number;
 }
 
 export function loadGlobalSettings(): Settings {
@@ -352,6 +353,7 @@ function createWindow() {
   }
 
   mainWindow.closable = false;
+  console.log('[DEBUG] IsDevMode: ', isDevMode);
 
     const indexPath = isDevMode
         ? 'http://localhost:5173'

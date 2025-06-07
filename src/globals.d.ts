@@ -22,6 +22,7 @@ interface Settings {
   showAppMenu: boolean;
   reportPageWidth: number;
   reportPageHeight: number;
+  editorZoomDefault: number;
 }
 
 declare global {

@@ -3,7 +3,7 @@ import { Editor, EditorProps, EditorTools } from '@progress/kendo-react-editor';
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
 
-// ---------- ZoomControls (tutto in un container centrato) ----------
+  // ---------- ZoomControls (tutto in un container centrato) ----------
 const ZoomControls: React.FC<{
   zoomLevel: number;
   setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
@@ -85,7 +85,18 @@ const ZoomControls: React.FC<{
 
 // ---------- Componente principale CustomEditor ----------
 const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
+
+  // 1. Inizializza a 1.3 (130%) o altro default
+  const [zoomLevel, setZoomLevel] = useState<number>(1.3);
+
+  // 2. All'avvio, leggi i settings e aggiorna
+  useEffect(() => {
+    window.appSettings.get().then(settings => {
+      if (settings && typeof settings.editorZoomDefault === 'number') {
+        setZoomLevel(settings.editorZoomDefault);
+      }
+    });
+  }, []);
 
   const defaultTools = [
     [

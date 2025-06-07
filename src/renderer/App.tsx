@@ -31,7 +31,6 @@ function AppWrapper() {
     dispatch(logout());
   }, [dispatch]);
 
-
 // Stato Redux per sapere se l’editor è aperto e ha modifiche
   const isEditorOpen = useSelector((state: RootState) => state.editor?.isOpen);
   const isEditorModified = useSelector((state: RootState) => state.editor?.hasUnsavedChanges);

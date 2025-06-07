@@ -20,6 +20,8 @@
   "reportPageWidth": 210,
   "reportPageHeight": 297,
 
+  "editorZoomDefault": 1.3,
+
   "pkcs11Lib": "C:\\\\Windows\\\\System32\\\\bit4ipki.dll",
   "cspSlotIndex": 0,
   "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
