@@ -181,6 +181,7 @@ or-content {
 .k-editor .k-editor-content p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
+  width: 570px !important;
 }
 
 .preview-window-no-bar .k-window-titlebar {
