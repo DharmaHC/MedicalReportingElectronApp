@@ -134,6 +134,24 @@ function EditorPage() {
 
   const [exitReason, setExitReason] = useState<null | "editor" | "app">(null);
 
+   // --- PATCH: Stati per tenere traccia degli ID per debug/log
+
+  // In component scope:
+const userName = useSelector((state: RootState) => state.auth.userName);
+
+// Funzione di log (ora sincronica, più semplice)
+const logToFile = (msg: string, details?: any) => {
+  if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.send(
+      "log-to-file",
+      msg + (details ? " " + JSON.stringify(details) : ""),
+      { username: userName }
+    );
+  } else {
+    // fallback: console.log
+    console.log(`[${new Date().toISOString()}][${userName}] ${msg}`, details || "");
+  }
+};
 
   const updatePreviewHtmlDebounced = useRef(
     debounce((html: string) => setPreviewHtml(html), 400)).current;
@@ -376,6 +394,7 @@ const renderPinDialog = () =>
   const [isProcessing, setIsProcessing] = useState(false); // Flag per mostrare un dialogo di caricamento durante operazioni lunghe (salvataggio/firma).
   const [isFetchingPreviousResults, setIsFetchingPreviousResults] = useState(false); // Flag per indicare il caricamento dei referti precedenti.
 
+  
   // Gestisce il click sul pulsante "Annulla".
   // Se ci sono modifiche non salvate, mostra un dialogo di conferma.
   const handleCancel = () => {
@@ -388,7 +407,7 @@ const renderPinDialog = () =>
     }
   };
 
-  // Gestisce l'aggiornamento dell'anteprima.
+// Gestisce l'aggiornamento dell'anteprima.
   useEffect(() => {
     if (!showLivePreview) return;
     // Aggiorna solo se la preview è attiva e l'editor modificato
@@ -398,13 +417,6 @@ const renderPinDialog = () =>
     }
     // NB: l’effetto si attiva ogni volta che isModified cambia (quindi dopo ogni modifica)
   }, [isModified, showLivePreview, updatePreviewHtmlDebounced]);
-
-
-
-// Chiude il dialogo di conferma annullamento.
-  const handleCancelDialogClose = () => {
-    setIsCancelDialogVisible(false);
-  };
 
   // Gestisce l'espansione/compressione dei nodi nella TreeView delle frasi.
   const handleExpandChange = (event: TreeViewExpandChangeEvent) => {
@@ -479,49 +491,91 @@ const renderPinDialog = () =>
     setPanes(event.newState);
   };
 
-  // Carica i referti precedenti del paziente.
-  // Utilizza useCallback per memoizzare la funzione e ottimizzare le performance.
+// PATCH: Resetta previousResults ogni volta che cambiano patientId o selectedExaminationId
+  useEffect(() => {
+    logToFile("RESET previousResults: cambio paziente o esame", { patientId, selectedExaminationId });
+    setPreviousResults([]);
+  }, [patientId, selectedExaminationId]);
+
+  // PATCH: Carica referti precedenti solo quando patientId e examinationId sono valorizzati
   const fetchPreviousResults = useCallback(async () => {
-    if (!patientId || !selectedExaminationId) return; // Non procedere se mancano ID paziente o esame.
+    if (!patientId || !selectedExaminationId) {
+      logToFile("SALTO fetchPreviousResults: patientId o examinationId mancante", { patientId, selectedExaminationId });
+      return;
+    }
     setIsFetchingPreviousResults(true);
+    logToFile("FETCH previousResults: INIZIO", { patientId, selectedExaminationId });
+
     try {
       const response = await fetch(
         `${url_getPatientReportsNoPdf}?patientId=${patientId}&examinationId=${selectedExaminationId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`, // Invia il token di autenticazione.
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.ok) {
         const raw = await response.json();
-        // Ordina i risultati per data decrescente.
-        raw.sort(
-          (a: any, b: any) =>
-            new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+        raw.sort((a: any, b: any) =>
+          new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
         );
-        // Appiattisce la struttura dei dati per la ListView.
         const flattened = raw.flatMap((ex: any) =>
           (ex.examResults ?? []).map((er: any) => ({
             examinationId: ex.examinationId,
-            startDate     : ex.startDate,
+            startDate: ex.startDate,
             examinationMnemonicCodeFull: ex.examinationMnemonicCodeFull,
-            examResult    : er // Singolo referto.
+            examResult: er,
+            patientLastName: er.patientLastName,
+            patientFirstName: er.patientFirstName
           }))
         );
         setPreviousResults(flattened);
+        logToFile("FETCH previousResults: OK", { patientId, selectedExaminationId, resultCount: flattened.length });
+        if (flattened && flattened.length > 0) {
+            const elenco = flattened.map((item: any) => ({
+            PatientId: item.examResult.patientId ?? item.patientId ?? "ND",
+            ExaminationId: item.examinationId ?? "ND",
+            Nome: item.examResult.firstName ?? item.examResult.name ?? "ND",
+            Cognome: item.patientLastName ?? "ND",
+            IdRegistrazione: item.patientFirstName ?? "ND",
+            patientLastName: item.patientLastName,
+            patientFirstName: item.patientFirstName
+          }));
+          logToFile(
+            "LISTA ESITI PRECEDENTI",
+            { patientId, selectedExaminationId, elenco }
+          );
+        } else {
+          logToFile(
+            "LISTA ESITI PRECEDENTI VUOTA",
+            { patientId, selectedExaminationId }
+          );
+        }
       } else {
+        logToFile("FETCH previousResults: ERRORE RESPONSE", { patientId, selectedExaminationId, status: response.status });
         console.error("Errore nel recupero dei referti pregressi:", response.status);
       }
     } catch (error) {
+      logToFile("FETCH previousResults: ERRORE CATCH", { patientId, selectedExaminationId, error });
       console.error("Errore nella richiesta dei referti pregressi:", error);
     } finally {
       setIsFetchingPreviousResults(false);
     }
-  }, [patientId, selectedExaminationId, token]); // Dipendenze del useCallback.
+  }, [patientId, selectedExaminationId, token]);
 
-  // useEffect per caricare i referti precedenti al mount del componente o al cambio delle dipendenze.
-  useEffect(() => { fetchPreviousResults(); }, [fetchPreviousResults]);
+  // PATCH: useEffect con [patientId, selectedExaminationId] per fetchare i risultati SEMPRE su cambio
+  useEffect(() => {
+    // Solo se entrambi sono valorizzati (skip a mount "vuoto")
+    if (patientId && selectedExaminationId) {
+      fetchPreviousResults();
+    }
+  }, [patientId, selectedExaminationId, fetchPreviousResults]);
+
+  // PATCH: Logga ogni volta che patientId/examinationId cambiano e cosa visualizzi a schermo (controllo incrociato)
+  useEffect(() => {
+    logToFile("VISUALIZZAZIONE DATI EDITOR: HEAD", {
+      patientId,
+      selectedExaminationId,
+      patient: patient ? { firstName: patient.firstName, lastName: patient.lastName, age: patient.age } : null
+    });
+  }, [patientId, selectedExaminationId, patient]);
 
   // Costruisce la struttura ad albero delle frasi predefinite a partire da un array flat.
   // Filtra le frasi in base al termine di ricerca.
@@ -1656,266 +1710,274 @@ const handleResultClick = async (result: any) => {
         </div>
       )}
 
-      {/* Splitter principale per dividere la pagina in pannelli ridimensionabili */}
-      <Splitter
-        panes={panes}
-        onChange={handlePanesChange}
-        style={{ height: readOnly ? "calc(100vh - 40px)" : "100vh" }} // Altezza dinamica se readOnly per fare spazio all'avviso
+{/* Splitter principale per dividere la pagina in pannelli ridimensionabili */}
+<Splitter
+  panes={panes}
+  onChange={handlePanesChange}
+  style={{ height: readOnly ? "calc(100vh - 40px)" : "100vh" }}
+>
+  {/* Pannello Sinistro: Frasi Comuni e Referti Precedenti */}
+  <div className="left-pane bordered-div">
+    {/* Sezione Frasi Comuni */}
+    <div className="upper-section">
+      <h3 style={{ marginTop: "0.2rem" }}>
+        {labels.editorPage.frasiComuni}
+      </h3>
+      {/* Filtro per le frasi */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.5rem" }}>
+        <span>Filtra:</span>
+        <Input
+          value={searchTerm}
+          onChange={handleSearchChange}
+          style={{ flex: 1 }}
+          placeholder="Cerca frase..."
+        />
+      </div>
+      {/* Checkbox per opzioni di filtro delle frasi */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.3rem",
+          alignItems: "flex-start",
+          justifyContent: "start",
+          marginTop: "0.2rem",
+          marginBottom: "0.5rem",
+        }}
       >
-        {/* Pannello Sinistro: Frasi Comuni e Referti Precedenti */}
-        <div className="left-pane bordered-div">
-          {/* Sezione Frasi Comuni */}
-          <div className="upper-section">
-            <h3 style={{ marginTop: "0.2rem" }}>
-              {labels.editorPage.frasiComuni}
-            </h3>
-            {/* Filtro per le frasi */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.5rem" }}>
-              <span>Filtra:</span>
-              <Input
-                value={searchTerm}
-                onChange={handleSearchChange}
-                style={{ flex: 1 }}
-                placeholder="Cerca frase..."
-              />
-            </div>
-            {/* Checkbox per opzioni di filtro delle frasi */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column", // Layout verticale per i checkbox
-                gap: "0.3rem",
-                alignItems: "flex-start",
-                justifyContent: "start",
-                marginTop: "0.2rem",
-                marginBottom: "0.5rem",
-              }}
-            >
-              <Checkbox
-                checked={includeAllExamsPhrases}
-                label="Testi di Tutti gli Esami"
-                onChange={(e) => setIncludeAllExamsPhrases(e.value)}
-              />
-              <Checkbox
-                checked={includeAllDoctorsPhrases}
-                label="Testi di tutti i medici"
-                onChange={(e) => setIncludeAllDoctorsPhrases(e.value)}
-              />
-              <Checkbox
-                checked={includeNotAssignedPhrases}
-                label="Includi non assegnate"
-                onChange={(e) => setincludeNotAssignedPhrases(e.value)}
-              />
-            </div>
-            {/* TreeView per visualizzare le frasi */}
-            <div className="treeview-container">
-            <TreeView
-              data={treeData}
-              expandIcons = {true}
-              textField="text"
-              expandField="expanded"
-              childrenField="items"
-              onExpandChange={handleExpandChange}
-              onItemClick={handleItemClick}
-            />
-            </div>
+        <Checkbox
+          checked={includeAllExamsPhrases}
+          label="Testi di Tutti gli Esami"
+          onChange={(e) => setIncludeAllExamsPhrases(e.value)}
+        />
+        <Checkbox
+          checked={includeAllDoctorsPhrases}
+          label="Testi di tutti i medici"
+          onChange={(e) => setIncludeAllDoctorsPhrases(e.value)}
+        />
+        <Checkbox
+          checked={includeNotAssignedPhrases}
+          label="Includi non assegnate"
+          onChange={(e) => setincludeNotAssignedPhrases(e.value)}
+        />
+      </div>
+      {/* TreeView per visualizzare le frasi */}
+      <div className="treeview-container">
+        <TreeView
+          data={treeData}
+          expandIcons={true}
+          textField="text"
+          expandField="expanded"
+          childrenField="items"
+          onExpandChange={handleExpandChange}
+          onItemClick={handleItemClick}
+        />
+      </div>
+    </div>
+    <hr />
+    {/* Sezione Referti Precedenti */}
+    <div className="listview-wrapper">
+      <h4 className="listview-title">Esiti Precedenti</h4>
+      {isFetchingPreviousResults && (
+        <p className="listview-loading">Caricamento in corso...</p>
+      )}
+      <div className="listview-container">
+        <ListView
+          data={previousResults}
+          item={renderResultItem}
+          style={{
+            height: "100%",
+            cursor: "pointer",
+          }}
+        />
+        {!isFetchingPreviousResults && previousResults.length === 0 && (
+          <div style={{ color: "#b91c1c", textAlign: "center", marginTop: "1rem" }}>
+            Nessun esito precedente disponibile per questo paziente.
           </div>
-          <hr />
-          {/* Sezione Referti Precedenti */}
-          <div className="listview-wrapper">
-            <h4 className="listview-title">Esiti Precedenti</h4>
-            {isFetchingPreviousResults && (
-              <p className="listview-loading">Caricamento in corso...</p>
-            )}
-          <div className="listview-container">
-            <ListView
-              data={previousResults}
-              item={renderResultItem}
-              style={{
-                height: "100%", // Occupa tutto lo spazio disponibile nel contenitore.
-                cursor: "pointer",
-              }}
-            />
-            {!isFetchingPreviousResults && previousResults.length === 0 && (
-              <div style={{ color: "#b91c1c", textAlign: "center", marginTop: "1rem" }}>
-                Nessun esito precedente disponibile per questo paziente.
+        )}
+      </div>
+    </div>
+  </div>
+
+  {/* Pannello Destro: Flexbox, NO Splitter interno! */}
+  <div className="right-pane bordered-div editor-area"
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      maxHeight: 'none',
+      minHeight: 0,
+      paddingLeft: 3 // se vuoi padding a sinistra rimettilo qui
+    }}>
+    {/* Blocco Info Paziente */}
+    <div className="patient-info bordered-div"
+      style={{
+        height: '100px', flex: '0 0 100px', marginBottom: 10,
+        display: patient ? "block" : "none"
+      }}>
+      {patient && (
+        <>
+          <h3 className="info-pat">Informazioni Paziente</h3>
+          <div className="patient-details"
+            style={{
+              display: "flex", flexWrap: "wrap", gap: "10px 20px", padding: "5px"
+            }}>
+            <div><strong>Nome:</strong> {patient.firstName}</div>
+            <div><strong>Cognome:</strong> {patient.lastName}</div>
+            <div><strong>Età:</strong> {patient.age} anni</div>
+            {patient.diagnosticQuestion && (
+              <div style={{ width: "100%" }}>
+                <strong>Quesito Diagnostico:</strong>{" "}
+                {patient.diagnosticQuestion}
               </div>
             )}
           </div>
-          </div>
-        </div>
+        </>
+      )}
+    </div>
 
-        {/* Pannello Destro: Editor e Pulsanti Azione */}
-        <Splitter
-          orientation="vertical" // Splitter interno verticale per separare editor e pulsanti.
-          panes={[{ collapsible: false, resizable: true }, { size: "80px", collapsible: false, resizable: false }]}
-        >
-          {/* Area Editor */}
-          <div className="right-pane bordered-div editor-area">
-            {/* Informazioni Paziente (se disponibili) */}
-            {patient && (
-              <div className="patient-info bordered-div">
-                <h3 className="info-pat">Informazioni Paziente</h3>
-                <div
-                  className="patient-details" // Classe per i dettagli specifici
-                  style={{ display: "flex", flexWrap: "wrap", gap: "10px 20px", padding: "5px" }}
-                >
-                  <div>
-                    <strong>Nome:</strong> {patient.firstName}
-                  </div>
-                  <div>
-                    <strong>Cognome:</strong> {patient.lastName}
-                  </div>
-                  <div>
-                    <strong>Età:</strong> {patient.age} anni
-                  </div>
-                  {patient.diagnosticQuestion && (
-                    <div style={{width: "100%"}}> {/* Quesito su riga intera se presente */}
-                      <strong>Quesito Diagnostico:</strong>{" "}
-                      {patient.diagnosticQuestion}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Componente Editor Kendo */}
-            <CustomEditor
-              ref={editorRef}
-              defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"} // Contenuto iniziale (o 3 paragrafi vuoti).
-              onMount={handleEditorMount} // Gestore per aggiungere plugin all'avvio.
-              onPasteHtml={handlePasteHtml} // Gestore per la pulizia dell'HTML incollato.
-              // Rimosso: `paste={pasteSettings}` non è una prop valida qui. La logica è in onPasteHtml.
-              defaultEditMode="div" // Modalità di editing (div o iframe).
-              tools={[ // Configurazione della toolbar dell'editor.
-                [Bold, Italic, Underline, Strikethrough],
-                [Subscript, Superscript],
-                [ForeColor, BackColor],
-                [CleanFormatting],
-                [AlignLeft, AlignCenter, AlignRight, AlignJustify],
-                [Indent, Outdent],
-                [OrderedList, UnorderedList],
-                [Undo, Redo], [ViewHtml],
-              ]}
-              // contentStyle può essere usato per definire l'altezza dell'area di testo,
-              // ma è meglio gestirlo con CSS per flessibilità.
-              // contentStyle={{ height: "calc(100vh - 250px)" }}
-            />
-          {/* Area CheckBox */}
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'normal', marginBottom: '0px', marginTop: '10px', fontSize: '0.8rem' }}>
-            <Checkbox
-              checked={showPrintPreview}
-              label="Mostra anteprima prima di stampare"
-              onChange={e => setShowPrintPreview(e.value)}
-            />
-            <Checkbox
-              checked={printSignedPdf}
-              label="Stampa referto firmato quando termini (se disponibile)"
-              onChange={e => setPrintSignedPdf(e.value)}
-            />
-            <Checkbox
-              style={{ display: "none" }} // Nascosto come da codice originale.
-              checked={showLivePreview}
-              label=""
-              onChange={e => setShowLivePreview(e.value)}
-            />
-          </div>
-          </div>
+    {/* Wrapper scrollabile per l'editor */}
+    <div
+      className="editor-scroll-wrapper"
+      style={{
+        flex: '1 1 0%',
+        minHeight: 0,
+        maxHeight: 'none',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+      <CustomEditor
+        ref={editorRef}
+        defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"}
+        onMount={handleEditorMount}
+        onPasteHtml={handlePasteHtml}
+        defaultEditMode="div"
+        tools={[
+          [Bold, Italic, Underline, Strikethrough],
+          [Subscript, Superscript],
+          [ForeColor, BackColor],
+          [CleanFormatting],
+          [AlignLeft, AlignCenter, AlignRight, AlignJustify],
+          [Indent, Outdent],
+          [OrderedList, UnorderedList],
+          [Undo, Redo], [ViewHtml],
+        ]}
+      />
+    </div>
 
-          {/* Area Pulsanti Azione */}
-          <div className="buttons-pane bordered-div">
-            {/* Pulsante Dettatura (nascosto di default) */}
-            <Button
-              svgIcon={volumeUpIcon}
-              onClick={handleDictationClick}
-              style={{ display: "none" }} // Nascosto come da codice originale.
-              title="Avvia Dettatura Vocale"
-            >
-              Dettatura
-            </Button>
-            {/* Pulsanti principali */}
-            <Button
-              svgIcon={imageIcon}
-              onClick={openCurrentStudy}
-              className="margin-buttons-scar"
-              title="Apri immagini dell'esame nel viewer"
-            >
-              {labels.editorPage.apriImmagini || "Apri Immagini"}
-            </Button>
-            <Button
-              svgIcon={cancelIcon}
-              onClick={handleCancel}
-              className="margin-buttons-scar"
-              title="Annulla le modifiche e torna alla lista"
-            >
-              {labels.editorPage.annulla || "Annulla"}
-            </Button>
-            <Button
-              svgIcon={eyeIcon}
-              onClick={previewPDF}
-              className="margin-buttons-scar"
-              title="Visualizza anteprima del referto in PDF"
-            >
-              {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
-            </Button>
-              <Button
-                svgIcon={printIcon}
-                onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
-                className="margin-buttons-scar"
-              style={{ display: "none" }}
-              >
-                {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
-              </Button>
-            {/* Pulsante Scarica Referto (nascosto) */}
-            <Button
-              svgIcon={downloadIcon}
-              onClick={handleDownloadReferto}
-              className="margin-buttons-scar"
-              style={{ display: "none" }}
-              title="Scarica il referto in formato PDF"
-            >
-              {labels.editorPage.scaricaReferto || "Scarica Referto"}
-            </Button>
-            {/* Pulsante Salva (senza uscire) */}
-            <Button
-              svgIcon={saveIcon}
-              onClick={handleSaveWithoutExit}
-              disabled={readOnly} // Disabilitato se in sola lettura.
-              className="margin-buttons-scar"
-              title="Salva il referto senza chiudere l'editor"
-            >
-              Salva Bozza
-            </Button>
-            {/* Pulsante Salva Bozza e Chiudi */}
-            <Button
-              svgIcon={checkIcon} // Icona più adatta per "Salva Bozza"
-              onClick={() => handleProcessReport(true, true, false)} // rtfNeedsToBeStored = true, draft = true, stayHere = false
-              disabled={readOnly}
-              style={{ display: "none" }}
-              className="margin-buttons-scar"
-              title="Salva come bozza e chiudi l'editor"
-            >
-              Salva e Chiudi
-            </Button>
-            {/* Pulsante Termina e Invia */}
-            <Button
-              svgIcon={checkIcon}
-              onClick={() => handleProcessReport(true, false, false)} // rtfNeedsToBeStored = true, draft = false, stayHere = false
-              // Disabilitato se readOnly E la firma non è permessa (se è permessa, si potrebbe voler firmare un referto readOnly?)
-              // La logica originale era: disabled={readOnly && !allowMedicalReportDigitalSignature}
-              // Se un referto è readOnly, non dovrebbe essere possibile "Termina e Invia" a meno di logiche specifiche.
-              // Presumo che se readOnly, non si possa modificare né finalizzare ulteriormente.
-              disabled={readOnly}
-              className="margin-buttons-scar editor-green-button" // Stile per evidenziare l'azione finale.
-              title="Finalizza e invia il referto"
-            >
-              Termina e Invia
-            </Button>
-          </div>
-        </Splitter>
-      </Splitter>
+    {/* Area Pulsanti Azione */}
+    <div className="buttons-pane bordered-div"
+      style={{
+        height: 80, flex: '0 0 80px', marginTop: 12, display: "flex", alignItems: "left"
+      }}>
+      <Button
+        svgIcon={volumeUpIcon}
+        onClick={handleDictationClick}
+        style={{ display: "none" }}
+        title="Avvia Dettatura Vocale"
+      >
+        Dettatura
+      </Button>
+      <Button
+        svgIcon={imageIcon}
+        onClick={openCurrentStudy}
+        className="margin-buttons-scar"
+        title="Apri immagini dell'esame nel viewer"
+      >
+        {labels.editorPage.apriImmagini || "Apri Immagini"}
+      </Button>
+      <Button
+        svgIcon={cancelIcon}
+        onClick={handleCancel}
+        className="margin-buttons-scar"
+        title="Annulla le modifiche e torna alla lista"
+      >
+        {labels.editorPage.annulla || "Annulla"}
+      </Button>
+      <Button
+        svgIcon={eyeIcon}
+        onClick={previewPDF}
+        className="margin-buttons-scar"
+        title="Visualizza anteprima del referto in PDF"
+      >
+        {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
+      </Button>
+      <Button
+        svgIcon={printIcon}
+        onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
+        className="margin-buttons-scar"
+        style={{ display: "none" }}
+      >
+        {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
+      </Button>
+      <Button
+        svgIcon={downloadIcon}
+        onClick={handleDownloadReferto}
+        className="margin-buttons-scar"
+        style={{ display: "none" }}
+        title="Scarica il referto in formato PDF"
+      >
+        {labels.editorPage.scaricaReferto || "Scarica Referto"}
+      </Button>
+      <Button
+        svgIcon={saveIcon}
+        onClick={handleSaveWithoutExit}
+        disabled={readOnly}
+        className="margin-buttons-scar"
+        title="Salva il referto senza chiudere l'editor"
+      >
+        Salva Bozza
+      </Button>
+      <Button
+        svgIcon={checkIcon}
+        onClick={() => handleProcessReport(true, true, false)}
+        disabled={readOnly}
+        style={{ display: "none" }}
+        className="margin-buttons-scar"
+        title="Salva come bozza e chiudi l'editor"
+      >
+        Salva e Chiudi
+      </Button>
+      <Button
+        svgIcon={checkIcon}
+        onClick={() => handleProcessReport(true, false, false)}
+        disabled={readOnly}
+        className="margin-buttons-scar editor-green-button"
+        title="Finalizza e invia il referto"
+      >
+        Termina e Invia
+      </Button>
+      {/* Area CheckBox */}
+      <div style={{
+        display: 'flex', gap: '20px', alignItems: 'normal', marginBottom: '0px', marginTop: '10px', fontSize: '0.8rem'
+      }}>
+        <Checkbox
+          checked={showPrintPreview}
+          label="Mostra anteprima prima di stampare"
+          onChange={e => setShowPrintPreview(e.value)}
+        />
+        <Checkbox
+          checked={printSignedPdf}
+          label="Stampa referto firmato quando termini (se disponibile)"
+          onChange={e => setPrintSignedPdf(e.value)}
+        />
+        <Checkbox
+          style={{ display: "none" }}
+          checked={showLivePreview}
+          label=""
+          onChange={e => setShowLivePreview(e.value)}
+        />
+      </div>
+    </div>
+  </div>
+</Splitter>
 
-      {/* Dialogo per la Dettatura */}
-      {isDialogVisible && (
+
+    {/* Dialogo per la Dettatura */}
+    {isDialogVisible && (
         <Dialog title={labels.editorPage.dettatura || "Dettatura"} onClose={handleCloseDialog}>
           <textarea
             style={{ width: "clamp(300px, 80vw, 500px)", height: "200px", margin: "10px 0" }}
@@ -1932,20 +1994,6 @@ const handleResultClick = async (result: any) => {
             </Button>
           </DialogActionsBar>
         </Dialog>
-      )}
-
-      <select value={previewScale} onChange={e => setPreviewScale(Number(e.target.value))}>
-        <option value={0.15}>Mini</option>
-        <option value={0.21}>Piccola</option>
-        <option value={0.27}>Media</option>
-        <option value={0.33}>Grande</option>
-      </select>
-      {showLivePreview && (
-      <PreviewA4Window
-        htmlContent={previewHtml}
-        onClose={() => setShowLivePreview(false)}
-        scale={previewScale}
-      />
     )}
 
       {/* Dialogo di Conferma Annullamento con Modifiche Non Salvate - (Condiviso in caso si esca dall'editor o dall'App)*/ }
@@ -1991,6 +2039,8 @@ const handleResultClick = async (result: any) => {
         </Dialog>
       )}
 
+      {/* Componente per l'Anteprima del PDF */}
+      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}
 
       {/* Componente per l'Anteprima del PDF */}
       {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}
@@ -2003,9 +2053,12 @@ const handleResultClick = async (result: any) => {
           onClose={() => setIsModalVisible(false)}
           htmlReport={selectedResult.examResult.htmlReport}
           signedPdf={selectedResultPdf ?? undefined}
-          pdfError={resultPdfError} // nuovo prop!
+          pdfError={resultPdfError}
           title={`Referto del ${new Date(selectedResult.startDate).toLocaleDateString("it-IT")} - ${selectedResult.examResult.examName}`}
           reportingDoctor={selectedResult.examResult.reportingDoctor}
+          // aggiungi props:
+          patientFirstName={selectedResult.examResult.patientFirstName || ""}
+          patientLastName={selectedResult.examResult.patientLastName || ""}
         />
       )}
       {/* Dialogo di Caricamento durante il Salvataggio/Firma */}
@@ -2026,7 +2079,6 @@ const handleResultClick = async (result: any) => {
           </div>
         </Dialog>
       )}
-      {renderPinDialog()}
     </>
   );
 };

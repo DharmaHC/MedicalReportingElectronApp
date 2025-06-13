@@ -4,31 +4,31 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import { Button } from "@progress/kendo-react-buttons";
 import { imageIcon, checkIcon } from "@progress/kendo-svg-icons";
 
-export interface PreviousResultModalProps {
-  /** Il codice di accesso (Accession Number) da passare al viewer */
+interface PreviousResultModalProps {
   accNum: string;
-  /** Chiusura del modal */
-  onClose: () => void;
-  /** Callback che riceve l'accNum per aprire le immagini */
   onOpenImages: (accNum: string) => void;
-  htmlReport?: string;
-  pdfError?: string | null;
-  title?: string;
+  onClose: () => void;
+  htmlReport: string;
   signedPdf?: string;
+  pdfError?: string | null;
+  title: string;
   reportingDoctor?: string;
+  patientFirstName?: string;
+  patientLastName?: string;
 }
-
-const PreviousResultModal: React.FC<PreviousResultModalProps> = ({
-  accNum,
-  onClose,
-  onOpenImages,
-  htmlReport,
-  pdfError,
-  signedPdf,
-  reportingDoctor,
-  title,
-}) => {
-  const handleDownloadPdf = () => {
+    const PreviousResultModal: React.FC<PreviousResultModalProps> = ({
+      accNum,
+      onOpenImages,
+      onClose,
+      htmlReport,
+      signedPdf,
+      pdfError,
+      title,
+      reportingDoctor,
+      patientFirstName,
+      patientLastName,
+    }) => {
+        const handleDownloadPdf = () => {
     if (!signedPdf) return;
     const link = document.createElement("a");
     link.href = `data:application/pdf;base64,${signedPdf}`;
@@ -58,7 +58,10 @@ return (
 
       <div style={{ marginBottom: 12 }}>
         <strong>Acc. Numero:</strong> {accNum}
-      </div>
+        <span style={{ marginLeft: 18 }}>
+          <strong>Paziente:</strong> {patientLastName} {patientFirstName}
+        </span>
+        </div>
 
       {htmlReport ? (
         <div

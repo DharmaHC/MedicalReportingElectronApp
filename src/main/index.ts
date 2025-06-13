@@ -231,6 +231,20 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
   }
 });
 
+
+const logPath = path.join(app.getPath('userData'), 'medreport-editor.log');
+
+ipcMain.on('log-to-file', (event, logMsg, logOptions = {}) => {
+  try {
+    const username = logOptions.username || "ND";
+    const line = `[${new Date().toISOString()}][${username}] ${logMsg}\n`;
+    fs.appendFileSync(logPath, line, 'utf8');
+  } catch (e) {
+    // Fallback in console
+    console.error("Errore log-to-file:", e);
+  }
+});
+
 // ------ SETTINGS HANDLER ------
 let settingsCache: Settings | null = null;
 

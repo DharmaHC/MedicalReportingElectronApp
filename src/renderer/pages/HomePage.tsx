@@ -127,6 +127,7 @@ const dispatch = useDispatch();
     dispatch(clearSelectedMoreExams());
     dispatch(clearRegistrations());
     dispatch(resetExaminationState());
+    sessionStorage.removeItem('medreport_editor_zoom');
     persistor.purge();
     setTimeout(() => {
       window.location.reload();

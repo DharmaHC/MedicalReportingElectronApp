@@ -12,39 +12,29 @@
 
 /* Aggiornamento della classe .right-pane */
 .right-pane {
-  height: 98%;
-  overflow-y: auto;
+  /* height: 98%; */
+  /* overflow: auto; */
   padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Manteniamo le altre classi */
 .patient-info {
   display: flex;
   gap: 20px;
-  text-align: center;
-  align-items: center;
+  text-align: left;
+  align-items: left;
 }
 
 .info-pat {
-  margin-top: 0.5rem;
+  margin-top: 0.1rem;
 }
 
 .upper-section {
   margin-bottom: 0.2rem;
-  overflow-y: auto;
-}
-
-.lower-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  min-height: 300px;
-  margin-bottom: 20px;
-}
-
-.scrollable-content {
-  max-height: 400px;
   overflow-y: auto;
 }
 
@@ -159,7 +149,7 @@ ul li button {
   user-select: none;
 }
   .k-editor {
-	height: 82% !important;
+	height: 100% !important;
 }
 
 .k-editor span {
@@ -184,6 +174,14 @@ or-content {
   width: 570px !important;
 }
 
+.page-break-marker {
+  border-top: 2px dashed #d946ef;
+  opacity: 0.5;
+  width: 100%;
+  position: absolute;
+  left: 0;
+}
+
 .preview-window-no-bar .k-window-titlebar {
   display: none !important;
 }
@@ -206,4 +204,29 @@ or-content {
   padding: 4px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.right-pane.editor-area > div {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.k-pane {
+  height: 100%;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+
+.k-editor {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+.k-editor-content {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
 }
