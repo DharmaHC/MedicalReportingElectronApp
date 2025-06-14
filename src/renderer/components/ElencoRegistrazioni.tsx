@@ -7,6 +7,7 @@ import "./ElencoRegistrazioni.css";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "../store";
 import {
+  resetExaminationState,
   setSelectedDoctorCode,
   setSelectedExaminationId,
   setSelectedPatientId,
@@ -44,7 +45,10 @@ const ElencoRegistrazioni = () => {
       const clinicDepartmentId = event.dataItem?.clinicDepartmentId;
       const workareaId = event.dataItem?.workareaId;
 
-      console.log("Row Clicked:");
+    // [AZIONE CHIAVE] Resetta completamente lo stato dell'esame precedente
+      dispatch(resetExaminationState());
+    
+    console.log("Row Clicked:");
       console.log("Examination ID:", selectedExaminationId);
       console.log("Doctor Code:", doctorCode);
       console.log("Patient ID:", patientId);
@@ -90,8 +94,7 @@ const ElencoRegistrazioni = () => {
   return (
     <div className="elenco-registrazioni">
       <Grid
-        // [MODIFICA] Al posto di data={data}, usiamo data={orderBy(data, sort)}
-        data={orderBy(data, sort)}
+        data={orderBy(data.map(d => ({...d, selected: d.examinationId === Number(selectedExaminationId)})), sort)}
         style={{ height: "100%", cursor: "pointer" }}
         onRowClick={handleRowClick}
         rowRender={rowRender}
@@ -101,6 +104,12 @@ const ElencoRegistrazioni = () => {
         onSortChange={(e: GridSortChangeEvent) => {
           setSort(e.sort);
         }}
+        selectedField="examinationId"
+        selectable={{
+          enabled: true,
+          mode: 'single',
+        }}
+        dataItemKey={"examinationId"}
       >
         <Column
           field="withdrawalDate"

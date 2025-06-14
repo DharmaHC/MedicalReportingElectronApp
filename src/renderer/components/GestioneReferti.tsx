@@ -23,6 +23,8 @@ import { startLoading, stopLoading } from "../store/loadingSlice";
 import LoadingModal from "../components/LoadingModal";
 import { setRegistrations } from "../store/registrationSlice";
 import {
+  resetExaminationState,
+  setSelectedPatientId,
   setSelectedExaminationId,
   setSelectedFromDate,
   setSelectedToDate,
@@ -242,7 +244,21 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       if (rsp.ok) {
         const data = await rsp.json();
         dispatch(setRegistrations(data));
-        dispatch(setSelectedExaminationId(data[0]?.examinationId ?? ""));
+
+        if (data[0]) {
+          const {
+            examinationId,
+            patientId,
+          } = data[0];
+
+          dispatch(resetExaminationState());
+          dispatch(setSelectedExaminationId(examinationId));
+          dispatch(setSelectedPatientId(patientId));
+        } else {
+          dispatch(resetExaminationState()); // opzionale: azzera tutto se lista vuota
+        }
+
+
         dispatch(setFilters({ lastName: "", firstName: "" }));
       } else { console.error("Failed to fetch worklist"); }
     } catch (err) { console.error("Error fetching worklist:", err); }
@@ -553,7 +569,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
   const onSearch = () => {
     // reset eventuale selezione
-    // dispatch(resetExaminationState());
+    dispatch(resetExaminationState());
     handleSearch(getSearchParams());
   };
   

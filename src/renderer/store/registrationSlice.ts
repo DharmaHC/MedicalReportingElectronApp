@@ -6,6 +6,7 @@ interface Registration {
   lastName: string;
   firstName: string;
   examinationId: number;
+  patientId: number;
   withdrawalDate: string;
   doctorCode: string;
   clinicDepartmentId: string;

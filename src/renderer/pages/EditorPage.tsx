@@ -76,8 +76,8 @@ const {
   Italic,
   Underline,
   Strikethrough,
-  Subscript,
-  Superscript,
+//  Subscript,
+//  Superscript,
   ForeColor,
   BackColor,
   CleanFormatting,
@@ -783,6 +783,7 @@ const renderPinDialog = () =>
         doctorCodeNotReportDoctor: doctorCodeNotReportDoctor ? "true" : "false",
         examResultId: examResultId.toString(),
         forceA4: "true",
+        patientId: String(patientId) || "",
       });
 
       const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
@@ -1857,7 +1858,7 @@ const handleResultClick = async (result: any) => {
         defaultEditMode="div"
         tools={[
           [Bold, Italic, Underline, Strikethrough],
-          [Subscript, Superscript],
+//          [Subscript, Superscript],
           [ForeColor, BackColor],
           [CleanFormatting],
           [AlignLeft, AlignCenter, AlignRight, AlignJustify],

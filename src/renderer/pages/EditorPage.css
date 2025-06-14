@@ -224,6 +224,7 @@ or-content {
   height: auto !important;
   min-height: 0 !important;
   max-height: none !important;
+  border-color: #ffffff !important; /* Colore del bordo */
 }
 .k-editor-content {
   height: auto !important;

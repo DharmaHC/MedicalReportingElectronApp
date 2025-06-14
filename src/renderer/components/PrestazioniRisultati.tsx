@@ -58,12 +58,9 @@ const PrestazioniRisultati = () => {
 
   // Valori dal Redux store
   const doctorCode = useSelector((state: RootState) => state.auth.doctorCode);
-  const selectedExaminationId = useSelector(
-    (state: RootState) => state.exam.selectedExaminationId
-  );
-  const selectedDoctorCode = useSelector(
-    (state: RootState) => state.exam.selectedDoctorCode
-  );
+  const selectedExaminationId = useSelector((state: RootState) => state.exam.selectedExaminationId);
+  const selectedPatientId = useSelector((state: RootState) => state.exam.selectedPatientId);
+  const selectedDoctorCode = useSelector((state: RootState) => state.exam.selectedDoctorCode);
   const registrations = useSelector((state: RootState) => state.registrations);
   const units = useSelector((state: RootState) => state.filters.units);
   const sectors = useSelector((state: RootState) => state.filters.sectors);
@@ -407,6 +404,27 @@ const PrestazioniRisultati = () => {
   };
 
 const handleIconClick = (subExamTypeId: number, exam: any) => {
+
+    // 1. [CONTROLLO DI SICUREZZA] Verifica che la combinazione esista nella lista caricata
+    const isValidCombination = registrations.some(
+      (reg) => 
+        reg.examinationId === Number(selectedExaminationId) && 
+        reg.patientId === Number(selectedPatientId)
+    );
+
+    if (!isValidCombination) {
+      // Questo blocco non dovrebbe mai essere raggiunto dati i controlli precedenti,
+      // ma agisce come un'importante rete di sicurezza.
+      console.error("Tentativo di accesso all'editor con dati incoerenti:", {
+        selectedExaminationId,
+        selectedPatientId,
+      });
+      alert(
+        "Errore di coerenza dei dati. Impossibile aprire l'editor. Si prega di riavviare la ricerca manualmente e segnalare il problema all'assistenza tecnica."
+      );
+      return;
+    }
+
   if (subExamTypeId === 5) {
     setSelectedExamForPdf(exam);
     setShouldFetchPdf(true);
