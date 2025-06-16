@@ -114,10 +114,8 @@ function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
 function EditorPage() {
 
   const editorRef = useRef<Editor>(null); // Riferimento all'istanza del componente Editor Kendo.
-  const [previewScale, setPreviewScale] = useState(0.27);
   // Stati locali per gestire la visibilità dell'anteprima live.
   const [showLivePreview, setShowLivePreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState('<p></p>'); // Aggiorna col contenuto editor
 
   const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
@@ -153,13 +151,9 @@ const logToFile = (msg: string, details?: any) => {
   }
 };
 
-  const updatePreviewHtmlDebounced = useRef(
-    debounce((html: string) => setPreviewHtml(html), 400)).current;
 
 
   useEffect(() => {
-  console.log('typeof window.electron:', typeof window.electron);
-  console.log('typeof window.appSettings:', typeof window.appSettings);
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
         setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
@@ -343,18 +337,12 @@ const renderPinDialog = () =>
         html = html.replace('<p>', '<p style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;">');
       }
       setIsModified(true); // Segna il documento come modificato.
-      if (showLivePreview && editorRef.current?.view?.dom) {
-        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
-      }
 
       return html; // L'HTML processato viene inserito nell'editor.
     }
       // Se la clipboard contiene solo testo semplice.
       const plainText = event.nativeEvent.clipboardData?.getData("text/plain") || "";
       setIsModified(true);
-      if (showLivePreview && editorRef.current?.view?.dom) {
-        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
-      }
       return plainText.replace(/<br\s*\/?>/gi, ""); // Rimuove i tag <br> e restituisce testo semplice.
   };
 
@@ -402,21 +390,11 @@ const renderPinDialog = () =>
       setExitReason("editor");
       setIsCancelDialogVisible(true);
     } else {
+      closeViewer();
       dispatch(clearSelectedMoreExams()); // Pulisce gli esami aggiuntivi dallo stato Redux.
       navigate("/", { state: { reload: false } }); // Torna alla pagina principale senza ricaricare i dati.
     }
   };
-
-// Gestisce l'aggiornamento dell'anteprima.
-  useEffect(() => {
-    if (!showLivePreview) return;
-    // Aggiorna solo se la preview è attiva e l'editor modificato
-    if (isModified && editorRef.current?.view?.dom) {
-      const html = editorRef.current.view.dom.innerHTML;
-      updatePreviewHtmlDebounced(html);
-    }
-    // NB: l’effetto si attiva ogni volta che isModified cambia (quindi dopo ogni modifica)
-  }, [isModified, showLivePreview, updatePreviewHtmlDebounced]);
 
   // Gestisce l'espansione/compressione dei nodi nella TreeView delle frasi.
   const handleExpandChange = (event: TreeViewExpandChangeEvent) => {
@@ -973,6 +951,33 @@ const renderPinDialog = () =>
     openViewer(acc, mode);
   }
 
+  /**
+ * Chiude gli studi attualmente aperti nel viewer RemotEye senza chiudere l'app.
+ */
+  function closeViewer() {
+    // Svuota la lista locale degli accNum aperti
+    viewerAccNumsRef.current = [];
+
+    // Costruisce l’URL JNLP per inviare il comando "genericRemoveAllFromMemory"
+    const BASE = "http://172.16.18.52/LPW/Display";
+    const USER = "radiologia";
+    const PWD  = "radiologia";
+
+    let jnlpURL =
+      `${BASE}?username=${encodeURIComponent(USER)}` +
+      `&password=${encodeURIComponent(PWD)}` +
+      `&jnlpArgName0=execViewerActionOnStartup` +
+      `&jnlpArgValue0=genericRemoveAllFromMemory`;
+
+    const payload = {
+      msgType: "MSG_LAUNCHJNLP_RQ",
+      dataMap: { jnlpURL }
+    };
+
+    // Invia al protocol handler RemotEye
+    window.location.href = "rhjnlp:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
   // Stampa referto PDF o RTF, gestendo la firma digitale se disponibile.
 // Componente Modal per l'anteprima di stampa (con timeout e loader)
 const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
@@ -1169,6 +1174,7 @@ window.electron.ipcRenderer.once('print-pdf-native-result', (event, { success, e
     dispatch(clearSelectedMoreExams());
     dispatch(resetExaminationState());
     dispatch(clearRegistrations());
+    closeViewer();
     navigate("/", { state: { reload: true } }); // Torna alla home e forza il ricaricamento dei dati.
   } else {
     // Log di dettaglio per debug (salva su console browser)
@@ -1249,9 +1255,6 @@ if (printSignedPdf && signedPdfBase64) {
 
     
     setIsModified(true);
-      if (showLivePreview && editorRef.current?.view?.dom) {
-        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
-      }
   } else {
     console.error("Dati PDF non disponibili per la stampa");
     setErrorMessage("Dati PDF non disponibili per la stampa.");
@@ -1334,9 +1337,6 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       document.body.removeChild(link); // Rimuove il link dal DOM.
       URL.revokeObjectURL(pdfBlobUrl); // Revoca l'URL del Blob.
       setIsModified(true);
-      if (showLivePreview && editorRef.current?.view?.dom) {
-        updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
-      }
     } else {
       console.error("Dati PDF non disponibili per il download.");
       setErrorMessage("Impossibile generare il PDF per il download.");
@@ -1650,9 +1650,6 @@ const handleResultClick = async (result: any) => {
           update(view, prevState) {
             if (!view.state.doc.eq(prevState.doc)) { // Confronta se il documento è cambiato.
               setIsModified(true);
-              if (showLivePreview && editorRef.current?.view?.dom) {
-                updatePreviewHtmlDebounced(editorRef.current.view.dom.innerHTML);
-              }
             }
           }
         };
@@ -1801,179 +1798,178 @@ const handleResultClick = async (result: any) => {
   </div>
 
   {/* Pannello Destro: Flexbox, NO Splitter interno! */}
-  <div className="right-pane bordered-div editor-area"
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      maxHeight: 'none',
-      minHeight: 0,
-      paddingLeft: 3 // se vuoi padding a sinistra rimettilo qui
-    }}>
-    {/* Blocco Info Paziente */}
-    <div className="patient-info bordered-div"
-      style={{
-        height: '100px', flex: '0 0 100px', marginBottom: 10,
-        display: patient ? "block" : "none"
-      }}>
-      {patient && (
-        <>
-          <h3 className="info-pat">Informazioni Paziente</h3>
-          <div className="patient-details"
-            style={{
-              display: "flex", flexWrap: "wrap", gap: "10px 20px", padding: "5px"
-            }}>
-            <div><strong>Nome:</strong> {patient.firstName}</div>
-            <div><strong>Cognome:</strong> {patient.lastName}</div>
-            <div><strong>Età:</strong> {patient.age} anni</div>
-            {patient.diagnosticQuestion && (
-              <div style={{ width: "100%" }}>
-                <strong>Quesito Diagnostico:</strong>{" "}
-                {patient.diagnosticQuestion}
+  <Splitter
+      orientation="vertical"
+      panes={[{ collapsible: false }, { size: "80px", collapsible: false }]}
+    >
+      <div className="right-pane bordered-div">
+        {/* Blocco Info Paziente */}
+            {patient && (
+              <div className="patient-info bordered-div">
+                <h3 className="info-pat">Informazioni del paziente</h3>
+                <div
+                  className="patient-info"
+                  style={{ display: "flex", gap: "20px" }}
+                >
+                  <div>
+                    <strong>Nome:</strong> {patient.firstName}
+                  </div>
+                  <div>
+                    <strong>Cognome:</strong> {patient.lastName}
+                  </div>
+                  <div>
+                    <strong>Età:</strong> {patient.age} anni
+                  </div>
+                  {patient.diagnosticQuestion && (
+                    <div>
+                      <strong>Quesito Diagnostico:</strong>{" "}
+                      {patient.diagnosticQuestion}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+          <CustomEditor
+            ref={editorRef}
+            defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"}
+            onMount={handleEditorMount}
+            onPasteHtml={handlePasteHtml}
+			  // @ts-ignore
+			  paste={pasteSettings}						  
+            defaultEditMode="div"
+            tools={[
+              [Bold, Italic, Underline, Strikethrough],
+    //          [Subscript, Superscript],
+              [ForeColor, BackColor],
+              [CleanFormatting],
+              [AlignLeft, AlignCenter, AlignRight, AlignJustify],
+              [Indent, Outdent],
+              [OrderedList, UnorderedList],
+              [Undo, Redo], [ViewHtml],
+            ]}
+																
+          />
+        </div>
+
+        {/* Area Pulsanti Azione */}
+        <div className="buttons-pane bordered-div"
+												 
+          style={{
+              display: "flex",
+              gap: "10px",
+              justifyContent: "space-between",
+              alignItems: "left",
+          }}>
+
+		    <div>		 
+          <Button
+            svgIcon={volumeUpIcon}
+            onClick={handleDictationClick}
+            style={{ display: "none" }}
+            title="Avvia Dettatura Vocale"
+          >
+            Dettatura
+          </Button>
+          <Button
+            svgIcon={imageIcon}
+            onClick={openCurrentStudy}
+            className="margin-buttons-scar"
+            title="Apri immagini dell'esame nel viewer"
+          >
+            {labels.editorPage.apriImmagini || "Apri Immagini"}
+          </Button>
+          <Button
+            svgIcon={cancelIcon}
+            onClick={handleCancel}
+            className="margin-buttons-scar"
+            title="Annulla le modifiche e torna alla lista"
+          >
+            {labels.editorPage.annulla || "Annulla"}
+          </Button>
+          <Button
+            svgIcon={eyeIcon}
+            onClick={previewPDF}
+            className="margin-buttons-scar"
+            title="Visualizza anteprima del referto in PDF"
+          >
+            {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
+          </Button>
+          <Button
+            svgIcon={printIcon}
+            onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
+															   
+														   
+				  
+            className="margin-buttons-scar"
+            style={{ display: "none" }}
+          >
+            {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
+          </Button>
+												 
+          <Button
+            svgIcon={downloadIcon}
+            onClick={handleDownloadReferto}
+            className="margin-buttons-scar"
+            style={{ display: "none" }}
+            title="Scarica il referto in formato PDF"
+          >
+            {labels.editorPage.scaricaReferto || "Scarica Referto"}
+          </Button>
+          <Button
+            svgIcon={saveIcon}
+            onClick={handleSaveWithoutExit}
+            disabled={readOnly}
+            className="margin-buttons-scar"
+            title="Salva il referto senza chiudere l'editor"
+          >
+            Salva Bozza
+          </Button>
+								 
+          <Button
+            svgIcon={checkIcon}
+            onClick={() => handleProcessReport(true, true, false)}
+            disabled={readOnly}
+            style={{ display: "none" }}
+            className="margin-buttons-scar"
+            title="Salva come bozza e chiudi l'editor"
+          >
+            Salva e Chiudi
+          </Button>
+									 
+          <Button
+            svgIcon={checkIcon}
+            onClick={() => handleProcessReport(true, false, false)}
+            disabled={readOnly}
+            className="margin-buttons-scar editor-green-button"
+            title="Finalizza e invia il referto"
+          >
+            Termina e Invia
+          </Button>
+
+          {/* Area CheckBox */}
+          <div style={{
+            display: 'flex', gap: '10px', alignItems: 'normal', marginBottom: '0px', marginTop: '5px', fontSize: '0.8rem'
+          }}>
+            <Checkbox
+              checked={showPrintPreview}
+              label="Mostra anteprima prima di stampare"
+              onChange={e => setShowPrintPreview(e.value)}
+            />
+            <Checkbox
+              checked={printSignedPdf}
+              label="Stampa referto firmato quando termini (se disponibile)"
+              onChange={e => setPrintSignedPdf(e.value)}
+            />
+            <Checkbox
+              style={{ display: "none" }}
+              checked={showLivePreview}
+              label=""
+              onChange={e => setShowLivePreview(e.value)}
+            />
           </div>
-        </>
-      )}
-    </div>
-
-    {/* Wrapper scrollabile per l'editor */}
-    <div
-      className="editor-scroll-wrapper"
-      style={{
-        flex: '1 1 0%',
-        minHeight: 0,
-        maxHeight: 'none',
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
-      <CustomEditor
-        ref={editorRef}
-        defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"}
-        onMount={handleEditorMount}
-        onPasteHtml={handlePasteHtml}
-        defaultEditMode="div"
-        tools={[
-          [Bold, Italic, Underline, Strikethrough],
-//          [Subscript, Superscript],
-          [ForeColor, BackColor],
-          [CleanFormatting],
-          [AlignLeft, AlignCenter, AlignRight, AlignJustify],
-          [Indent, Outdent],
-          [OrderedList, UnorderedList],
-          [Undo, Redo], [ViewHtml],
-        ]}
-      />
-    </div>
-
-    {/* Area Pulsanti Azione */}
-    <div className="buttons-pane bordered-div"
-      style={{
-        height: 80, flex: '0 0 80px', marginTop: 12, display: "flex", alignItems: "left"
-      }}>
-      <Button
-        svgIcon={volumeUpIcon}
-        onClick={handleDictationClick}
-        style={{ display: "none" }}
-        title="Avvia Dettatura Vocale"
-      >
-        Dettatura
-      </Button>
-      <Button
-        svgIcon={imageIcon}
-        onClick={openCurrentStudy}
-        className="margin-buttons-scar"
-        title="Apri immagini dell'esame nel viewer"
-      >
-        {labels.editorPage.apriImmagini || "Apri Immagini"}
-      </Button>
-      <Button
-        svgIcon={cancelIcon}
-        onClick={handleCancel}
-        className="margin-buttons-scar"
-        title="Annulla le modifiche e torna alla lista"
-      >
-        {labels.editorPage.annulla || "Annulla"}
-      </Button>
-      <Button
-        svgIcon={eyeIcon}
-        onClick={previewPDF}
-        className="margin-buttons-scar"
-        title="Visualizza anteprima del referto in PDF"
-      >
-        {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
-      </Button>
-      <Button
-        svgIcon={printIcon}
-        onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
-        className="margin-buttons-scar"
-        style={{ display: "none" }}
-      >
-        {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
-      </Button>
-      <Button
-        svgIcon={downloadIcon}
-        onClick={handleDownloadReferto}
-        className="margin-buttons-scar"
-        style={{ display: "none" }}
-        title="Scarica il referto in formato PDF"
-      >
-        {labels.editorPage.scaricaReferto || "Scarica Referto"}
-      </Button>
-      <Button
-        svgIcon={saveIcon}
-        onClick={handleSaveWithoutExit}
-        disabled={readOnly}
-        className="margin-buttons-scar"
-        title="Salva il referto senza chiudere l'editor"
-      >
-        Salva Bozza
-      </Button>
-      <Button
-        svgIcon={checkIcon}
-        onClick={() => handleProcessReport(true, true, false)}
-        disabled={readOnly}
-        style={{ display: "none" }}
-        className="margin-buttons-scar"
-        title="Salva come bozza e chiudi l'editor"
-      >
-        Salva e Chiudi
-      </Button>
-      <Button
-        svgIcon={checkIcon}
-        onClick={() => handleProcessReport(true, false, false)}
-        disabled={readOnly}
-        className="margin-buttons-scar editor-green-button"
-        title="Finalizza e invia il referto"
-      >
-        Termina e Invia
-      </Button>
-      {/* Area CheckBox */}
-      <div style={{
-        display: 'flex', gap: '20px', alignItems: 'normal', marginBottom: '0px', marginTop: '10px', fontSize: '0.8rem'
-      }}>
-        <Checkbox
-          checked={showPrintPreview}
-          label="Mostra anteprima prima di stampare"
-          onChange={e => setShowPrintPreview(e.value)}
-        />
-        <Checkbox
-          checked={printSignedPdf}
-          label="Stampa referto firmato quando termini (se disponibile)"
-          onChange={e => setPrintSignedPdf(e.value)}
-        />
-        <Checkbox
-          style={{ display: "none" }}
-          checked={showLivePreview}
-          label=""
-          onChange={e => setShowLivePreview(e.value)}
-        />
-      </div>
-    </div>
-  </div>
+          </div>
+        </div>
+  </Splitter>
 </Splitter>
 
 
@@ -2027,6 +2023,7 @@ const handleResultClick = async (result: any) => {
                 if (exitReason === "app") {
                   window.electron.ipcRenderer.send('proceed-close');
                 } else {
+                  closeViewer(); // Chiude il viewer se aperto
                   navigate("/", { state: { reload: false } });
                 }
               }}

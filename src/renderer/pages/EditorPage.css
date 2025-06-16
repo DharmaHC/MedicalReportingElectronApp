@@ -4,33 +4,29 @@
 
 /* Aggiornamento della classe .left-pane */
 .left-pane {
-  /* occupa tutto lo spazio definito dal splitter */
-  flex: 1 1 auto;      /* permette la crescita e lo shrink all’interno dello splitter */
+  height: 93%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;       /* essenziale per far funzionare i figli flex con overflow */}
+}
 
 /* Aggiornamento della classe .right-pane */
 .right-pane {
-  /* height: 98%; */
-  /* overflow: auto; */
+  height: 100%;
+  width: 100%;
   padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 /* Manteniamo le altre classi */
 .patient-info {
   display: flex;
   gap: 20px;
-  text-align: left;
-  align-items: left;
+  text-align: center;
+  align-items: center;
 }
 
 .info-pat {
-  margin-top: 0.1rem;
+  margin-top: 0.5rem;
 }
 
 .upper-section {
@@ -38,8 +34,22 @@
   overflow-y: auto;
 }
 
+.lower-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 300px;
+  margin-bottom: 20px;
+}
+
+.scrollable-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .bordered-div {
-  border: 1px solid #ccc;
+  border: 2px solid #ccc;
   padding: 10px;
 }
 
@@ -106,10 +116,6 @@ ul li button {
   padding: 10px;
   background-color: #fafafa;
   border-radius: 4px;
-  display: flex;
-  flex-direction: column;
-  flex: 1;                /* fa crescere il wrapper fino allo spazio disponibile */
-  min-height: 0;          /* permette ai figli flex di scrollare correttamente */
 }
 
 .listview-title {
@@ -129,10 +135,9 @@ ul li button {
   background-color: #fff;
   border-radius: 4px;
   padding: 8px;
-  flex: 1;                /* occupa tutto lo spazio rimasto dentro il parent flex */
-  min-height: 0;          /* necessario perché il browser rispetti flex e overflow */
-  overflow-y: auto;       /* permette lo scroll verticale */
-  overflow-x: auto;    /* permette lo scroll orizzontale */}
+  max-height: 300px;
+  overflow-y: auto;
+}
 
 .listview-item-previous-item {
   padding: 8px;
@@ -148,8 +153,23 @@ ul li button {
 .k-treeview * {
   user-select: none;
 }
-  .k-editor {
-	height: 100% !important;
+
+.k-editor {
+  min-height: auto;
+  height: 420pt !important;
+  max-height: 420pt !important;
+  border-width: 2px !important;
+  width: 100% !important;
+  background-color: #f9f9f9 !important; /* Colore di sfondo chiaro */
+}
+
+.k-editor-content {
+  min-height: auto;
+  max-height: none !important;
+}
+
+.k-pane k-scrollable {
+  height: 100% !important;
 }
 
 .k-editor span {
@@ -171,19 +191,6 @@ or-content {
 .k-editor .k-editor-content p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
-  width: 570px !important;
-}
-
-.page-break-marker {
-  border-top: 2px dashed #d946ef;
-  opacity: 0.5;
-  width: 100%;
-  position: absolute;
-  left: 0;
-}
-
-.preview-window-no-bar .k-window-titlebar {
-  display: none !important;
 }
 
 .editor-green-button {
@@ -196,38 +203,4 @@ or-content {
 .editor-green-button:hover {
   background-color: #66ff66 !important; /* verde più scuro al hover */
   border-color: #66ff66 !important;
-}
-
-.buttons-pane {
-  display: flex;
-  gap: 2px;
-  padding: 4px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.right-pane.editor-area > div {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-}
-
-.k-pane {
-  height: 100%;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-
-.k-editor {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  border-color: #ffffff !important; /* Colore del bordo */
-}
-.k-editor-content {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
 }

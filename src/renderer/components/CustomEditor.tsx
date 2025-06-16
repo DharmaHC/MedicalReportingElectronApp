@@ -2,16 +2,13 @@ import React, { useRef, useEffect, useState, forwardRef } from 'react';
 import { Editor, EditorProps, EditorTools } from '@progress/kendo-react-editor';
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
-import { arrowsTopBottomIcon } from '@progress/kendo-svg-icons';
+//import { arrowsTopBottomIcon } from '@progress/kendo-svg-icons';
 
 // Costanti base
-const CHAR_PER_ROW = 86;
-const CHAR_WIDTH = 8.5;
-const BASE_WIDTH = CHAR_PER_ROW * CHAR_WIDTH;
 const ZOOM_STORAGE_KEY = 'medreport_editor_zoom';
 
-// Quante righe per pagina? Puoi variare a piacere.
-const ROWS_PER_PAGE = 43; // esempio: 43 righe da 16px ~ formato A4
+// Quante righe per pagina per il page break?
+const ROWS_PER_PAGE = 19; // in pt, considerando l'area stampabile del referto
 
 // === ZoomControls ===
 const ZoomControls: React.FC<{
@@ -104,7 +101,7 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const editorBoxRef = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
-
+  
   // ref "any" per view (Kendo Editor instance)
   const editorViewRef = useRef<any>(null);
 
@@ -147,55 +144,87 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
     };
   }, [props.defaultContent, zoomLevel]);
 
-  // ====== AGGIUNTA: Logica per auto-page-break grafico ======
-  useEffect(() => {
-    const interval = setTimeout(() => {
-      const editorBox = editorBoxRef.current;
-      if (!editorBox) return;
-      const content = editorBox.querySelector('.k-editor-content') as HTMLElement | null;
-      if (!content) return;
 
-      // Rimuovi tutti i vecchi marker (per evitare duplicati)
-      Array.from(content.querySelectorAll('.auto-page-break')).forEach(node => node.remove());
+  // ====== Page Break Overlay: Inserisce un separatore ogni N righe (pagina) ======
+useEffect(() => {
+  const editorBox = editorBoxRef.current;
+  if (!editorBox) return;
 
-      // Calcola l'altezza di una pagina (dipende dal fontSize, zoom, e lineHeight)
-      // Assumiamo che il line-height sia quello standard impostato nei CSS (es: 16px * 1.2)
-      const computedStyle = window.getComputedStyle(content);
-      const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
-      const pageHeight = lineHeight * ROWS_PER_PAGE * zoomLevel;
+  const content = editorBox.querySelector('.k-editor-content') as HTMLElement | null;
+  if (!content) return;
 
-      // Scorri tutti i figli blocco (paragrafi, div, elenchi, ecc)
-      let accumHeight = 0;
-      let currentPage = 1;
-      const blocks = Array.from(content.children);
+  content.style.position = 'relative';
 
-      for (let i = 0; i < blocks.length; ++i) {
-        const el = blocks[i] as HTMLElement;
-        if (!el || el.classList.contains('auto-page-break')) continue;
+  const proseMirror = content.querySelector('.ProseMirror') as HTMLElement | null;
+  if (!proseMirror) return;
 
-        const rect = el.getBoundingClientRect();
-        const prevHeight = accumHeight;
-        accumHeight += el.offsetHeight;
+  // 1. Rendi ProseMirror commisurato al numero di caratteri massimo per riga e adattato alla miglior visualizzazione sull'app
+  proseMirror.style.minWidth = '440pt';
+  proseMirror.style.maxWidth = '440pt';
+  proseMirror.style.height = '368pt';
+  proseMirror.style.marginLeft = '40pt';
 
-        // Se superi il limite della pagina e NON siamo già a fine contenuto, inserisci un separatore
-        if (accumHeight > currentPage * pageHeight && i !== blocks.length - 1) {
-          // Crea il marker
-          const marker = document.createElement('div');
-          marker.className = 'auto-page-break';
-          // Aggiungi testo/icone qui se vuoi renderlo più visibile (opzionale)
-          marker.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:100%;"><svg width="32" height="16" style="margin-right:8px;opacity:0.5;" viewBox="0 0 24 24" fill="none"><path d="M2 12h20M12 6v12" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 3"/></svg><span style="font-size:11px;color:#aaa;opacity:0.7;">SEPARATORE PAGINA</span></div>`;
-          // Inserisci subito prima dell'elemento corrente
-          el.parentNode?.insertBefore(marker, el);
-          currentPage++;
-          // Dopo aver aggiunto, aggiorna accumHeight come se fosse una riga in più
-          accumHeight += lineHeight;
-        }
-      }
-    }, 80); // leggero debounce
+  // 2. Cerca o crea l'overlay come figlio DIRETTO di ProseMirror
+  let overlay = proseMirror.querySelector('.page-break-overlay-layer') as HTMLElement | null;
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'page-break-overlay-layer';
+    proseMirror.appendChild(overlay); // <- Spostato qui
+  }
 
-    return () => clearTimeout(interval);
-  }, [props.defaultContent, zoomLevel]);
-  // Se vuoi page break anche in edit live, puoi aggiungere deps che triggerano ad ogni modifica
+  // Funzione che aggiorna solo l’overlay
+  const renderPageBreaks = () => {
+    while (overlay!.firstChild) overlay!.removeChild(overlay!.firstChild);
+
+    const computedStyle = window.getComputedStyle(proseMirror);
+    var lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+    lineHeight = 19.95 * zoomLevel
+    const pageHeightPt = lineHeight * ROWS_PER_PAGE;
+    const totalHeight = proseMirror.scrollHeight;
+
+    for (let y = pageHeightPt; y < totalHeight; y += pageHeightPt) {
+      const marker = document.createElement('div');
+      marker.className = 'auto-page-break';
+      // Posiziona i marker in modo assoluto rispetto all'overlay (che è dentro ProseMirror)
+      marker.style.position = 'absolute';
+      marker.style.top = `${y * zoomLevel}pt`;
+      marker.style.width = '100%';
+      marker.style.pointerEvents = 'none';
+      marker.style.zIndex = '20';
+      marker.style.borderTop = '1pt dashed #ff0000';
+
+      marker.innerHTML = `<div opacity:0.8;"> </div>`;
+      overlay!.appendChild(marker);
+    }
+  };
+
+ // Applica lo zoom al ProseMirror!
+  proseMirror.style.transform = `scale(${zoomLevel})`;
+  proseMirror.style.transformOrigin = "top left"; // Evita sfasamenti strani
+
+  // Facoltativo: aggiusta la larghezza perché lo scaling non "stringa" tutto
+  proseMirror.style.height = `${100 / zoomLevel}%`;
+
+  // L'observer rimane su ProseMirror, il che è corretto
+  const observer = new MutationObserver((mutations) => {
+    if (mutations.some(m => (m.target as HTMLElement).classList?.contains('page-break-overlay-layer'))) return;
+    renderPageBreaks();
+  });
+  observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+
+  renderPageBreaks();
+  window.addEventListener('resize', renderPageBreaks);
+
+  return () => {
+    observer.disconnect();
+    window.removeEventListener('resize', renderPageBreaks);
+    // Pulisci l'overlay quando il componente viene smontato
+    if (overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  };
+}, [props.defaultContent, zoomLevel]);
+
 
   const defaultTools = [
     [
@@ -221,64 +250,20 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
     ]
   ];
 
-  return (
-    <div
-      ref={wrapperRef}
-      className={`custom-editor-main-wrapper${overflow ? ' custom-editor-overflow' : ''}`}
-      style={{
-        width: '100%',
-        position: 'relative',
-        flex: '1 1 auto',
-        minHeight: 0,
-        height: '100% ! important',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: overflow ? 'flex-start' : 'top',
-        //overflowY: 'auto',
+return (
+  <div ref={editorBoxRef} style={{ position: 'relative', height: '100%' }}>
+    <Editor
+      ref={(node) => {
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as any).current = node;
+        editorViewRef.current = node?.view || node;
       }}
-    >
-      <div
-        ref={editorBoxRef}
-        style={{
-          width: `${BASE_WIDTH * zoomLevel}px`,
-          minWidth: `${BASE_WIDTH * 0.5}px`,
-          maxWidth: `${BASE_WIDTH * 2}px`,
-          margin: '0 auto',
-          background: '#fff',
-          borderRadius: 8,
-          height: '100%',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-          position: 'relative',
-          transition: 'box-shadow 0.15s'
-        }}
-      >
-        <Editor
-          ref={(node) => {
-            if (typeof ref === 'function') ref(node);
-            else if (ref) (ref as any).current = node;
-            editorViewRef.current = node?.view || node;
-          }}
-          {...props}
-          tools={tools}
-          defaultEditMode="div"
-          style={{ width: '100%' }}
-          contentStyle={{
-            width: `${BASE_WIDTH}px`,
-            maxWidth: `${BASE_WIDTH}px`,
-            minWidth: `${BASE_WIDTH}px`,
-            //overflowX: 'hidden',
-            transform: `scale(${zoomLevel})`,
-            transformOrigin: 'top left',
-            paddingBottom: '20',
-            height: '100%',
-            maxHeight: 'none',
-            transition: 'transform 0.2s',
-          }}
-        />
-      </div>
-    </div>
-  );
+      {...props}
+      tools={tools}
+      defaultEditMode="div"
+    />
+  </div>
+);
 });
 
 export default CustomEditor;
