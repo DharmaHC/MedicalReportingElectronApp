@@ -976,6 +976,14 @@ const renderPinDialog = () =>
 
     // Invia al protocol handler RemotEye
     window.location.href = "rhjnlp:" + encodeURIComponent(JSON.stringify(payload));
+
+    // Forza il focus sulla finestra principale dopo un breve timeout
+    window.setTimeout(() => {
+    if (window.electron?.ipcRenderer) {
+      window.electron.ipcRenderer.send('focus-main-window');
+    }
+  }, 500); // delay utile per dare tempo al viewer di aprirsi
+
   }
 
   // Stampa referto PDF o RTF, gestendo la firma digitale se disponibile.
@@ -1798,19 +1806,13 @@ const handleResultClick = async (result: any) => {
   </div>
 
   {/* Pannello Destro: Flexbox, NO Splitter interno! */}
-  <Splitter
-      orientation="vertical"
-      panes={[{ collapsible: false }, { size: "80px", collapsible: false }]}
-    >
-      <div className="right-pane bordered-div">
+  <div className="right-pane bordered-div">
         {/* Blocco Info Paziente */}
             {patient && (
               <div className="patient-info bordered-div">
-                <h3 className="info-pat">Informazioni del paziente</h3>
+                <h3 className="info-pat">Informazioni Paziente</h3>
                 <div
-                  className="patient-info"
-                  style={{ display: "flex", gap: "20px" }}
-                >
+                  className="patient-info">
                   <div>
                     <strong>Nome:</strong> {patient.firstName}
                   </div>
@@ -1849,127 +1851,119 @@ const handleResultClick = async (result: any) => {
             ]}
 																
           />
-        </div>
+          {/* Area Pulsanti Azione */}
+          <div className="borderedbottom-div">
 
-        {/* Area Pulsanti Azione */}
-        <div className="buttons-pane bordered-div"
-												 
-          style={{
-              display: "flex",
-              gap: "10px",
-              justifyContent: "space-between",
-              alignItems: "left",
-          }}>
+            <div>		 
+              <Button
+                svgIcon={volumeUpIcon}
+                onClick={handleDictationClick}
+                style={{ display: "none" }}
+                title="Avvia Dettatura Vocale"
+              >
+                Dettatura
+              </Button>
+              <Button
+                svgIcon={imageIcon}
+                onClick={openCurrentStudy}
+                className="margin-buttons-scar"
+                title="Apri immagini dell'esame nel viewer"
+              >
+                {labels.editorPage.apriImmagini || "Apri Immagini"}
+              </Button>
+              <Button
+                svgIcon={cancelIcon}
+                onClick={handleCancel}
+                className="margin-buttons-scar"
+                title="Annulla le modifiche e torna alla lista"
+              >
+                {labels.editorPage.annulla || "Annulla"}
+              </Button>
+              <Button
+                svgIcon={eyeIcon}
+                onClick={previewPDF}
+                className="margin-buttons-scar"
+                title="Visualizza anteprima del referto in PDF"
+              >
+                {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
+              </Button>
+              <Button
+                svgIcon={printIcon}
+                onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
+                                    
+                                  
+              
+                className="margin-buttons-scar"
+                style={{ display: "none" }}
+              >
+                {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
+              </Button>
+                            
+              <Button
+                svgIcon={downloadIcon}
+                onClick={handleDownloadReferto}
+                className="margin-buttons-scar"
+                style={{ display: "none" }}
+                title="Scarica il referto in formato PDF"
+              >
+                {labels.editorPage.scaricaReferto || "Scarica Referto"}
+              </Button>
+              <Button
+                svgIcon={saveIcon}
+                onClick={handleSaveWithoutExit}
+                disabled={readOnly}
+                className="margin-buttons-scar"
+                title="Salva il referto senza chiudere l'editor"
+              >
+                Salva Bozza
+              </Button>
+                    
+              <Button
+                svgIcon={checkIcon}
+                onClick={() => handleProcessReport(true, true, false)}
+                disabled={readOnly}
+                style={{ display: "none" }}
+                className="margin-buttons-scar"
+                title="Salva come bozza e chiudi l'editor"
+              >
+                Salva e Chiudi
+              </Button>
+                      
+              <Button
+                svgIcon={checkIcon}
+                onClick={() => handleProcessReport(true, false, false)}
+                disabled={readOnly}
+                className="margin-buttons-scar editor-green-button"
+                title="Finalizza e invia il referto"
+              >
+                Termina e Invia
+              </Button>
 
-		    <div>		 
-          <Button
-            svgIcon={volumeUpIcon}
-            onClick={handleDictationClick}
-            style={{ display: "none" }}
-            title="Avvia Dettatura Vocale"
-          >
-            Dettatura
-          </Button>
-          <Button
-            svgIcon={imageIcon}
-            onClick={openCurrentStudy}
-            className="margin-buttons-scar"
-            title="Apri immagini dell'esame nel viewer"
-          >
-            {labels.editorPage.apriImmagini || "Apri Immagini"}
-          </Button>
-          <Button
-            svgIcon={cancelIcon}
-            onClick={handleCancel}
-            className="margin-buttons-scar"
-            title="Annulla le modifiche e torna alla lista"
-          >
-            {labels.editorPage.annulla || "Annulla"}
-          </Button>
-          <Button
-            svgIcon={eyeIcon}
-            onClick={previewPDF}
-            className="margin-buttons-scar"
-            title="Visualizza anteprima del referto in PDF"
-          >
-            {labels.editorPage.anteprimaPDF || "Visualizza Referto"}
-          </Button>
-          <Button
-            svgIcon={printIcon}
-            onClick={() => handlePrintReferto(lastSignedPdfBase64 ?? undefined)}
-															   
-														   
-				  
-            className="margin-buttons-scar"
-            style={{ display: "none" }}
-          >
-            {labels.editorPage.stampaETerminaReferto || "Stampa Referto"}
-          </Button>
-												 
-          <Button
-            svgIcon={downloadIcon}
-            onClick={handleDownloadReferto}
-            className="margin-buttons-scar"
-            style={{ display: "none" }}
-            title="Scarica il referto in formato PDF"
-          >
-            {labels.editorPage.scaricaReferto || "Scarica Referto"}
-          </Button>
-          <Button
-            svgIcon={saveIcon}
-            onClick={handleSaveWithoutExit}
-            disabled={readOnly}
-            className="margin-buttons-scar"
-            title="Salva il referto senza chiudere l'editor"
-          >
-            Salva Bozza
-          </Button>
-								 
-          <Button
-            svgIcon={checkIcon}
-            onClick={() => handleProcessReport(true, true, false)}
-            disabled={readOnly}
-            style={{ display: "none" }}
-            className="margin-buttons-scar"
-            title="Salva come bozza e chiudi l'editor"
-          >
-            Salva e Chiudi
-          </Button>
-									 
-          <Button
-            svgIcon={checkIcon}
-            onClick={() => handleProcessReport(true, false, false)}
-            disabled={readOnly}
-            className="margin-buttons-scar editor-green-button"
-            title="Finalizza e invia il referto"
-          >
-            Termina e Invia
-          </Button>
-
-          {/* Area CheckBox */}
-          <div style={{
-            display: 'flex', gap: '10px', alignItems: 'normal', marginBottom: '0px', marginTop: '5px', fontSize: '0.8rem'
-          }}>
-            <Checkbox
-              checked={showPrintPreview}
-              label="Mostra anteprima prima di stampare"
-              onChange={e => setShowPrintPreview(e.value)}
-            />
-            <Checkbox
-              checked={printSignedPdf}
-              label="Stampa referto firmato quando termini (se disponibile)"
-              onChange={e => setPrintSignedPdf(e.value)}
-            />
-            <Checkbox
-              style={{ display: "none" }}
-              checked={showLivePreview}
-              label=""
-              onChange={e => setShowLivePreview(e.value)}
-            />
+              {/* Area CheckBox */}
+              <div style={{
+                display: 'flex', gap: '10px', alignItems: 'normal', marginBottom: '0px', marginTop: '5px', fontSize: '0.8rem'
+              }}>
+                <Checkbox
+                  checked={showPrintPreview}
+                  label="Mostra anteprima prima di stampare"
+                  onChange={e => setShowPrintPreview(e.value)}
+                />
+                <Checkbox
+                  checked={printSignedPdf}
+                  label="Stampa referto firmato quando termini (se disponibile)"
+                  onChange={e => setPrintSignedPdf(e.value)}
+                />
+                <Checkbox
+                  style={{ display: "none" }}
+                  checked={showLivePreview}
+                  label=""
+                  onChange={e => setShowLivePreview(e.value)}
+                />
+              </div>
+            </div>
           </div>
-          </div>
-        </div>
-  </Splitter>
+  </div>
+
 </Splitter>
 
 

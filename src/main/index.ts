@@ -64,6 +64,17 @@ export function loadGlobalSettings(): Settings {
   }
 }
 
+  // ---------------- IPC HANDLERS ----------------
+  // Forza il focus sulla finestra principale
+  ipcMain.on('focus-main-window', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.show();        // se era nascosta
+      win.focus();       // forza il focus
+    }
+  });
+
+
 ipcMain.handle('verify-pin', async (_ev, pin: string) => {
   console.log('[VERIFY-PIN] Inizio verifica PIN');
   console.log(`[VERIFY-PIN] PIN ricevuto: ${pin ? `[${pin.length} caratteri]` : 'null/undefined'}`);
