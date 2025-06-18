@@ -2,10 +2,10 @@ import React, { useRef, useEffect, useState, forwardRef, useCallback } from 'rea
 import { Editor, EditorProps, EditorTools } from '@progress/kendo-react-editor';
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
+import { TextSelection } from 'prosemirror-state';
 // import { arrowsTopBottomIcon } from '@progress/kendo-svg-icons';
 
 const ZOOM_STORAGE_KEY = 'medreport_editor_zoom';
-const ROWS_PER_PAGE = 18.8;
 
 const ZoomControls: React.FC<{ zoomLevel: number; setZoomLevel: (n: number) => void; }> = ({ zoomLevel, setZoomLevel }) => {
   const [inputValue, setInputValue] = useState(Math.round(zoomLevel * 100).toString());
@@ -55,52 +55,70 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
   });
 
   const editorBoxRef = useRef<HTMLDivElement>(null);
+  const editorViewRef = useRef<any>(null);
 
-  // Calcolo e rendering dei page break overlay
-  const renderPageBreaks = useCallback(() => {
-    const editorBox = editorBoxRef.current;
-    if (!editorBox) return;
-      editorBox.style.height = '73%';
+  const [useHighlight, setUseHighlight] = useState<boolean>(false);
+  const [rowsPerPage, setReportrowsPerPage] = useState<number>(30);
 
-    const content = editorBox.querySelector('.k-editor-content') as HTMLElement | null;
-    if (!content) return;
-    content.style.position = 'relative';
-    const proseMirror = content.querySelector('.ProseMirror') as HTMLElement | null;
-    if (!proseMirror) return;
+  useEffect(() => {
+      // Accedi ai settings globali esposti dal preload
+      window.appSettings.get().then(settings => {
+        setUseHighlight(settings.highlightPlaceholder ?? false);
+        setReportrowsPerPage(settings.rowsPerPage ?? 30);
+      });
+    }, []);
 
-    // Overlay solo diretto, mai annidato!
-    let overlay = proseMirror.querySelector('.page-break-overlay-layer') as HTMLElement | null;
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'page-break-overlay-layer';
-      proseMirror.appendChild(overlay);
-    }
 
-    while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+const renderPageBreaks = useCallback(() => {
+  const editorBox = editorBoxRef.current;
+  if (!editorBox) return;
 
-    let lineHeight = 18.8;
-    const pageHeightPt = lineHeight * ROWS_PER_PAGE;
-    const totalHeight = proseMirror.scrollHeight;
+      editorBox.style.height = '76%';
 
-    for (let y = pageHeightPt; y < totalHeight; y += pageHeightPt) {
-      const marker = document.createElement('div');
-      marker.className = 'auto-page-break';
-      marker.style.position = 'absolute';
-      marker.style.top = `${y}pt`;
-      marker.style.width = '100%';
-      marker.style.pointerEvents = 'none';
-      marker.style.zIndex = '20';
-      marker.style.borderTop = '1.2pt dashed #ff0000';
-      marker.innerHTML = `<div opacity:0.8;"> </div>`;
-      overlay.appendChild(marker);
-    }
-    proseMirror.style.width = '440pt';
+      const content = editorBox.querySelector('.k-editor-content') as HTMLElement | null;
+  if (!content) return;
+  const proseMirror = content.querySelector('.ProseMirror') as HTMLElement | null;
+  if (!proseMirror) return;
+
+  // Calcolo altezza riga da un <p>
+  const sampleParagraph = proseMirror.querySelector('p');
+  if (!sampleParagraph) return;
+  const lineHeight = parseFloat(window.getComputedStyle(sampleParagraph).lineHeight || "20") || 20;
+
+  const totalHeight = proseMirror.scrollHeight;
+  const pageHeightPx = lineHeight * rowsPerPage; // rows per page configurabili
+  const overlayClass = "page-break-overlay-layer";
+
+  let overlay = proseMirror.querySelector(`.${overlayClass}`) as HTMLElement | null;
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = overlayClass;
+    proseMirror.appendChild(overlay);
+  }
+
+  // Pulizia precedenti marker
+  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+
+  for (let y = pageHeightPx; y < totalHeight; y += pageHeightPx) {
+    const marker = document.createElement("div");
+    marker.className = "auto-page-break";
+    marker.style.position = "absolute";
+    marker.style.top = `${y}px`;
+    marker.style.width = "100%";
+    marker.style.pointerEvents = "none";
+    marker.style.zIndex = "20";
+    marker.style.borderTop = "1.2pt dashed #ff0000";
+    overlay.appendChild(marker);
+  }
+
+  // Apply scale & margin
+  proseMirror.style.transform = `scale(${zoomLevel})`;
+    proseMirror.style.width = '428pt';
     proseMirror.style.marginLeft = '100pt';
     proseMirror.style.overflowX = 'hidden';
-    proseMirror.style.transform = `scale(${zoomLevel})`;
     proseMirror.style.transformOrigin = "top left";
     proseMirror.style.height = `${100 / zoomLevel}%`;
-  }, [zoomLevel]);
+}, [zoomLevel, rowsPerPage]);
 
   useEffect(() => { sessionStorage.setItem(ZOOM_STORAGE_KEY, String(zoomLevel)); }, [zoomLevel]);
 
@@ -114,21 +132,26 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
 
     renderPageBreaks();
 
-    // -- PATCH: MutationObserver che ignora overlay
-    const observer = new MutationObserver((mutations) => {
-      // Se la mutazione coinvolge direttamente la page-break-overlay-layer o figli, IGNORA
-      const overlay = proseMirror.querySelector('.page-break-overlay-layer');
-      if (
-        mutations.some(m =>
-          (overlay && (m.target === overlay || overlay.contains(m.target as Node)))
-        )
-      ) {
-        return;
-      }
-      // Solo se riguarda il contenuto editoriale
-      renderPageBreaks();
-    });
-    observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+const observer = new MutationObserver((mutations) => {
+  const overlay = proseMirror.querySelector('.page-break-overlay-layer');
+  if (
+    mutations.some(m =>
+      (overlay && (m.target === overlay || overlay.contains(m.target as Node)))
+    )
+  ) {
+    return;
+  }
+
+
+  renderPageBreaks();
+  if (useHighlight) {
+  // Evita loop disconnettendo temporaneamente l'observer
+  observer.disconnect();
+    highlightHashes();
+  // Ricollega l'observer
+  observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+  }
+});
 
     window.addEventListener('resize', renderPageBreaks);
 
@@ -141,9 +164,135 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
     // eslint-disable-next-line
   }, [props.defaultContent, zoomLevel, renderPageBreaks]);
 
+
+  // Gestione del menu contestuale
+  useEffect(() => {
+    const editorElement = editorBoxRef.current;
+
+    if (!editorElement) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault(); // blocca il menu di default
+      if (window.electron?.ipcRenderer) {
+        window.electron.ipcRenderer.send('show-context-menu');
+      }
+    };
+
+    editorElement.addEventListener('contextmenu', handleContextMenu);
+    return () => editorElement.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
+  // Ref per tracciare l'ultima selezione di #
+  const lastHashPosRef = useRef<number | null>(null); // tiene traccia dell'ultima selezione
+
+  // Gestione tasto F3 per selezionare il primo #
+useEffect(() => {
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'F3') return;
+
+    e.preventDefault();
+    const view = editorViewRef.current;
+    if (!view) return;
+
+    const doc = view.state.doc;
+    const cursorPos = view.state.selection.from;
+
+    const hashes: number[] = [];
+
+    // Trova tutte le posizioni assolute dei caratteri '#'
+    doc.descendants((node: any, nodePos: number) => {
+      if (node.isText && node.text) {
+        let idx = -1;
+        let offset = 0;
+        while ((idx = node.text.indexOf('#', offset)) !== -1) {
+          hashes.push(nodePos + idx);
+          offset = idx + 1;
+        }
+      }
+      return true;
+    });
+
+    if (hashes.length === 0) return;
+
+    // Trova il prossimo hash dopo il cursore (o dopo l’ultimo visitato)
+    const current = lastHashPosRef.current;
+    const next = hashes.find(pos => (current !== null ? pos > current : pos > cursorPos));
+
+    const targetPos = next !== undefined ? next : hashes[0]; // wrap-around
+    lastHashPosRef.current = targetPos;
+
+    view.dispatch(
+      view.state.tr.setSelection(
+        TextSelection.create(doc, targetPos, targetPos + 1)
+      ).scrollIntoView()
+    );
+    view.focus();
+  };
+
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}, []);
+
+
+
+  // Evidenziazione degli # nel testo
+  const highlightHashes = () => {
+    const content = editorBoxRef.current?.querySelector('.ProseMirror') as HTMLElement | null;
+    if (!content) return;
+
+    // Pulisce eventuali highlight esistenti
+    const oldSpans = content.querySelectorAll('span.__hash-highlight');
+    oldSpans.forEach(span => {
+      const parent = span.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(span.textContent || ''), span);
+    });
+
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null);
+    const nodes: Text[] = [];
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      if (
+        node.nodeValue?.includes('#') &&
+        !node.parentElement?.classList.contains('__hash-highlight') // evita loop
+      ) {
+        nodes.push(node);
+      }
+    }
+
+    for (const textNode of nodes) {
+      const parent = textNode.parentElement;
+      if (!parent) continue;
+
+      const parts = textNode.nodeValue!.split(/(#)/); // mantiene i #
+      const frag = document.createDocumentFragment();
+
+      for (const part of parts) {
+        if (part === '#') {
+          const span = document.createElement('span');
+          span.className = '__hash-highlight';
+          span.textContent = '#';
+          span.style.backgroundColor = 'yellow';
+          span.style.color = 'black';
+          span.style.padding = '0 2px';
+          frag.appendChild(span);
+        } else {
+          frag.appendChild(document.createTextNode(part));
+        }
+      }
+
+      parent.replaceChild(frag, textNode);
+    }
+  };
+
   const handleEditorChange = (event: any, value?: any) => {
     setTimeout(() => {
       renderPageBreaks();
+      if (useHighlight) {
+        highlightHashes();
+      }
     }, 0);
     if (props.onChange) props.onChange(event);
   };
@@ -178,6 +327,7 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
         ref={(node) => {
           if (typeof ref === 'function') ref(node);
           else if (ref) (ref as any).current = node;
+          editorViewRef.current = node?.view || node;
         }}
         {...props}
         tools={tools}

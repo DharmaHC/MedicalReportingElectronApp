@@ -23,6 +23,8 @@ interface Settings {
   reportPageWidth: number;
   reportPageHeight: number;
   editorZoomDefault: number;
+  rowsPerPage: number;
+  highlightPlaceholder: boolean;
 }
 
 declare global {

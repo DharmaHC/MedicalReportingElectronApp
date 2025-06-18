@@ -832,7 +832,14 @@ const renderPinDialog = () =>
     if (reportData?.pdfContent) {
       const pdfBlob = base64ToBlob(reportData.pdfContent, "application/pdf");
       const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-      setPdfUrl(pdfBlobUrl); // Imposta l'URL per il componente PdfPreview.
+ 
+      const isDebug = window.location.href.startsWith("http://localhost");
+      if (isDebug) {
+          console.log("DEBUG MODE: delay preview render di 600ms");
+          setTimeout(() => setPdfUrl(pdfBlobUrl), 600);
+        } else {
+          setPdfUrl(pdfBlobUrl);
+        }
     } else {
       console.error("Dati PDF non disponibili per l'anteprima.");
       setErrorMessage("Impossibile generare l'anteprima del PDF.");
@@ -1836,8 +1843,9 @@ const handleResultClick = async (result: any) => {
             defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"}
             onMount={handleEditorMount}
             onPasteHtml={handlePasteHtml}
-			  // @ts-ignore
-			  paste={pasteSettings}						  
+            onChange={(e) => setIsModified(true)}
+            // @ts-ignore
+            paste={pasteSettings}						  
             defaultEditMode="div"
             tools={[
               [Bold, Italic, Underline, Strikethrough],
@@ -2032,10 +2040,8 @@ const handleResultClick = async (result: any) => {
       )}
 
       {/* Componente per l'Anteprima del PDF */}
-      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}
+      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={() => setPdfUrl(null)} />}
 
-      {/* Componente per l'Anteprima del PDF */}
-      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}
 
       {/* Modale per la Visualizzazione dei Referti Precedenti */}
       {isModalVisible && selectedResult && (

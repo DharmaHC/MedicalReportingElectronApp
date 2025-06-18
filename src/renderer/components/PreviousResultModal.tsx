@@ -1,5 +1,5 @@
 // PreviousResultModal.tsx
-import React from "react";
+import React, {useRef} from "react";
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import { Button } from "@progress/kendo-react-buttons";
 import { imageIcon, checkIcon } from "@progress/kendo-svg-icons";
@@ -36,7 +36,9 @@ interface PreviousResultModalProps {
     link.click();
   };
 
-  const handleViewPdf = () => {
+const htmlRef = useRef<HTMLDivElement>(null);
+
+const handleViewPdf = () => {
     if (!signedPdf) return;
     const bytes = atob(signedPdf);
     const buffer = new Uint8Array(bytes.length);
@@ -65,8 +67,13 @@ return (
 
       {htmlReport ? (
         <div
+          ref={htmlRef}
           dangerouslySetInnerHTML={{ __html: htmlReport }}
           style={{ height: 300, overflowY: "auto", marginBottom: 12 }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            window.electron?.ipcRenderer?.send('show-context-menu');
+          }}
         />
       ) : (
         <div style={{ marginBottom: 12 }}>

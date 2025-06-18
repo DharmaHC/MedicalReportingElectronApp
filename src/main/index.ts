@@ -1,5 +1,5 @@
 // src/main/index.ts
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Menu, MenuItem, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import isDev from 'electron-is-dev';
 import { signPdfService } from './signPdfService';
@@ -45,6 +45,8 @@ interface Settings {
   reportPageWidth: number;
   reportPageHeight: number;
   editorZoomDefault: number;
+  rowsPerPage: number;
+  highlightPlaceholder: boolean;
 }
 
 export function loadGlobalSettings(): Settings {
@@ -74,6 +76,68 @@ export function loadGlobalSettings(): Settings {
     }
   });
 
+
+  ipcMain.on('show-context-menu', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const menu = new Menu();
+
+    menu.append(new MenuItem({
+      label: 'Copia',
+      click: () => {
+        event.sender.copy(); // oppure clipboard.writeText(event.sender.getSelectedText()) in preload
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Taglia',
+      click: () => {
+        event.sender.cut();
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Incolla',
+      click: () => {
+        event.sender.paste();
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Seleziona Tutto',
+      click: () => {
+        event.sender.selectAll();
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: '_____________________',
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Zoom In',
+      click: () => {
+        event.sender.zoomLevel += 0.5;
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Zoom Out',
+      click: () => {
+        event.sender.zoomLevel -= 0.5;
+      }
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Reset Zoom',
+      click: () => {
+        event.sender.zoomLevel = 0;
+      }
+    }));
+
+    // eventualmente altri item
+
+    menu.popup({ window: win! });
+  });
 
 ipcMain.handle('verify-pin', async (_ev, pin: string) => {
   console.log('[VERIFY-PIN] Inizio verifica PIN');

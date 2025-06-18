@@ -1,14 +1,14 @@
 .bordered-div {
   border: 1px solid #ccc;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 5px !important;
+  margin-bottom: 5px;
   border-radius: 5px;
 }
 
 .filter-group-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
 }
 
 .filter-group {
@@ -44,20 +44,13 @@
   margin-top: 1.5em;
 }
 
-.bordered-div {
-  border: 2px solid #005f73; /* Colore sobrio e professionale */
-  padding: 15px;
-  margin-bottom: 20px;
-  border-radius: 5px;
-}
-
 h4 {
-  margin-bottom: 10px;
+  margin-bottom: 5px;
   color: #005f73; /* Colore del testo coordinato */
 }
 
 h5 {
   margin-left: -15px;
-  margin-bottom: 10px;
+  margin-bottom: 0px;
 }
 

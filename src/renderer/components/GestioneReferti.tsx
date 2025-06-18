@@ -632,6 +632,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
               textField="text"
               dataItemKey="value"
               value={selectedDoctor}
+              style={{ visibility: "hidden" }} // per evitare che il dropdown sia visibile
               onChange={(e) => {
                 dispatch(setFilters({ selectedDoctor: e.target.value }));
               }}

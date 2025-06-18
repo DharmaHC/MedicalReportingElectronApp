@@ -22,6 +22,9 @@
 
   "editorZoomDefault": 1.3,
 
+  "rowsPerPage": 30,
+  "highlightPlaceholder": false,
+
   "pkcs11Lib": "C:\\\\Windows\\\\System32\\\\bit4ipki.dll",
   "cspSlotIndex": 0,
   "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
