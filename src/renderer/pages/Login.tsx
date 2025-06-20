@@ -7,6 +7,7 @@ import { SvgIcon } from "@progress/kendo-react-common";
 import { eyeIcon, eyeSlashIcon } from "@progress/kendo-svg-icons";
 import { Notification, NotificationGroup } from "@progress/kendo-react-notification";
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
+import { AutoComplete } from "@progress/kendo-react-dropdowns";
 
 import {
   login,
@@ -51,7 +52,10 @@ const Login = () => {
   /** Carica il nome utente da localStorage (se esiste). 
    *  Se esiste, significa che l'utente aveva spuntato "remember me" in precedenza.
    */
-  const savedUsername = localStorage.getItem("savedUsername") || "";
+  const savedUsernames = getSavedUsernames();
+const [userName, setUserName] = useState(savedUsernames.length > 0 ? savedUsernames[savedUsernames.length - 1] : "");
+const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
+
 
   // Funzione per fetchare informazioni su firma digitale se medico
   const fetchDoctorSignatureInfo = async (doctorCode: string) => {
@@ -147,6 +151,34 @@ const Login = () => {
     }
   };
 
+  function getSavedUsernames(): string[] {
+    try {
+      const saved = localStorage.getItem("savedUsernames");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // fallback: corrotto o non esistente
+    }
+    return [];
+  }
+
+  function addSavedUsername(userName: string) {
+    const trimmed = userName.trim();
+    if (!trimmed) return;
+    const list = getSavedUsernames();
+    if (!list.includes(trimmed)) {
+      list.push(trimmed);
+      localStorage.setItem("savedUsernames", JSON.stringify(list));
+    }
+  }
+
+  function removeSavedUsername(userName: string) {
+    const trimmed = userName.trim();
+    const list = getSavedUsernames().filter(u => u !== trimmed);
+    localStorage.setItem("savedUsernames", JSON.stringify(list));
+  }
+
   /** Invocata da Kendo al submit del form */
   const handleSubmit = async (dataItem: { [name: string]: any }) => {
     /** dataItem conterrà i valori attuali del form: userName, password, rememberMe */
@@ -189,9 +221,11 @@ const Login = () => {
                 //dispatch(setToken(result.token));
         // Aggiorniamo localStorage in base a "rememberMe"
         if (rememberMe) {
-          localStorage.setItem("savedUsername", userName);
+          addSavedUsername(userName);
+          setUsernamesList(getSavedUsernames()); // aggiorna la lista in stato React
         } else {
-          localStorage.removeItem("savedUsername");
+          removeSavedUsername(userName);
+          setUsernamesList(getSavedUsernames());
         }
 
         // Fetch user info
@@ -234,12 +268,11 @@ return (<>
         <Form
           /** Imposta i valori iniziali nel form */
           initialValues={{
-            userName: savedUsername,
+            userName: userName,
             password: "",
-            // rememberMe a true se c'è uno username salvato
-            rememberMe: !!savedUsername
-          }}
-          onSubmit={handleSubmit}
+            rememberMe: !!userName
+      }}
+          onSubmit={(dataItem) => handleSubmit({ ...dataItem, userName })}
           render={(formRenderProps) => (
             <FormElement
               className="login-form"
@@ -249,14 +282,18 @@ return (<>
               <h2>Login</h2>
 
               {/* Campo userName */}
-              <Field
-                name="userName"
-                component={Input}
-                label="UserName"
-                type="text"
-                validator={[requiredValidator]}
-                autoComplete="off"
-              />
+              <div style={{ marginBottom: 16 }}>
+                <label htmlFor="userName" style={{ fontWeight: "bold" }}>UserName</label>
+                <AutoComplete
+                  id="userName"
+                  style={{ width: "100%" }}
+                  data={usernamesList}
+                  value={userName}
+                   onChange={e => setUserName(e.value as string)}
+                  name="userName"
+                  required={true}
+                />
+              </div>
 
               {/* Campo password + toggle visibilità */}
               <div className="password-field">

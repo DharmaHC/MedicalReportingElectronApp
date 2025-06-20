@@ -989,7 +989,7 @@ const renderPinDialog = () =>
     if (window.electron?.ipcRenderer) {
       window.electron.ipcRenderer.send('focus-main-window');
     }
-  }, 500); // delay utile per dare tempo al viewer di aprirsi
+  }, 1500); // delay utile per dare tempo al viewer di aprirsi
 
   }
 
