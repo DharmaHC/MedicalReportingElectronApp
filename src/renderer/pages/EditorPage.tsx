@@ -974,7 +974,7 @@ const renderPinDialog = () =>
       `${BASE}?username=${encodeURIComponent(USER)}` +
       `&password=${encodeURIComponent(PWD)}` +
       `&jnlpArgName0=execViewerActionOnStartup` +
-      `&jnlpArgValue0=genericRemoveAllFromMemory`;
+      `&jnlpArgValue0=closeAllContainerPanels`;
 
     const payload = {
       msgType: "MSG_LAUNCHJNLP_RQ",
