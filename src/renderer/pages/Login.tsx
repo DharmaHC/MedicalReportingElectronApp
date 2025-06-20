@@ -286,7 +286,7 @@ return (<>
                 <label htmlFor="userName" style={{ fontWeight: "bold" }}>UserName</label>
                 <AutoComplete
                   id="userName"
-                  style={{ width: "100%" }}
+                  style={{ width: "60%" }}
                   data={usernamesList}
                   value={userName}
                    onChange={e => setUserName(e.value as string)}

@@ -109,30 +109,30 @@ export function loadGlobalSettings(): Settings {
       }
     }));
 
-    menu.append(new MenuItem({
-      label: '_____________________',
-    }));
+    // menu.append(new MenuItem({
+    //   label: '_____________________',
+    // }));
 
-    menu.append(new MenuItem({
-      label: 'Zoom In',
-      click: () => {
-        event.sender.zoomLevel += 0.5;
-      }
-    }));
+    // menu.append(new MenuItem({
+    //   label: 'Zoom In',
+    //   click: () => {
+    //     event.sender.zoomLevel += 0.5;
+    //   }
+    // }));
 
-    menu.append(new MenuItem({
-      label: 'Zoom Out',
-      click: () => {
-        event.sender.zoomLevel -= 0.5;
-      }
-    }));
+    // menu.append(new MenuItem({
+    //   label: 'Zoom Out',
+    //   click: () => {
+    //     event.sender.zoomLevel -= 0.5;
+    //   }
+    // }));
 
-    menu.append(new MenuItem({
-      label: 'Reset Zoom',
-      click: () => {
-        event.sender.zoomLevel = 0;
-      }
-    }));
+    // menu.append(new MenuItem({
+    //   label: 'Reset Zoom',
+    //   click: () => {
+    //     event.sender.zoomLevel = 0;
+    //   }
+    // }));
 
     // eventualmente altri item
 
