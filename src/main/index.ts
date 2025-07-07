@@ -140,172 +140,97 @@ export function loadGlobalSettings(): Settings {
   });
 
 ipcMain.handle('verify-pin', async (_ev, pin: string) => {
-  console.log('[VERIFY-PIN] Inizio verifica PIN');
-  console.log(`[VERIFY-PIN] PIN ricevuto: ${pin ? `[${pin.length} caratteri]` : 'null/undefined'}`);
-  
   let pkcs11: any = null;
   let sess: any = null;
   let slot: any = null;
   let settings: any = null;
-  
+
   try {
-    // Caricamento impostazioni globali
-    console.log('[VERIFY-PIN] Caricamento impostazioni globali...');
+    // Carica le impostazioni globali
     settings = await loadGlobalSettings();
-    console.log('[VERIFY-PIN] Impostazioni caricate:', {
-      pkcs11Lib: settings.pkcs11Lib,
-      cspSlotIndex: settings.cspSlotIndex,
-      hasSettings: !!settings
-    });
-    
-    // Inizializzazione PKCS11
-    console.log('🔧 [VERIFY-PIN] Inizializzazione PKCS11...');
+
+    // Inizializza PKCS11
     pkcs11 = new pkcs11js.PKCS11();
-    console.log('✅ [VERIFY-PIN] Oggetto PKCS11 creato');
-    
-    // Caricamento libreria PKCS11
-    console.log(`📚 [VERIFY-PIN] Caricamento libreria: ${settings.pkcs11Lib}`);
     pkcs11.load(settings.pkcs11Lib);
-    console.log('✅ [VERIFY-PIN] Libreria PKCS11 caricata');
-    
-    // Inizializzazione PKCS11
-    console.log('🚀 [VERIFY-PIN] Inizializzazione C_Initialize...');
     pkcs11.C_Initialize();
-    console.log('✅ [VERIFY-PIN] C_Initialize completata');
-    
+
     try {
-      // Ottenimento lista slot
-      console.log('🎰 [VERIFY-PIN] Ottenimento lista slot...');
+      // Ottieni lista slot con token presente
       const slotList = pkcs11.C_GetSlotList(true);
-      console.log('✅ [VERIFY-PIN] Lista slot ottenuta:', {
-        totalSlots: slotList.length,
-        slotList: slotList,
-        requestedIndex: settings.cspSlotIndex ?? 0
-      });
-      
-      if (slotList.length === 0) {
+
+      if (!slotList || slotList.length === 0) {
         throw new Error('Nessuno slot disponibile');
       }
-      
+
       const slotIndex = settings.cspSlotIndex ?? 0;
       if (slotIndex >= slotList.length) {
         throw new Error(`Indice slot ${slotIndex} non valido. Slot disponibili: 0-${slotList.length - 1}`);
       }
-      
+
       slot = slotList[slotIndex];
-      console.log(`🎯 [VERIFY-PIN] Slot selezionato: ${slot} (indice: ${slotIndex})`);
-      
-      // Apertura sessione
-      console.log('🔓 [VERIFY-PIN] Apertura sessione...');
+
+      // Apri sessione
       const sessionFlags = pkcs11js.CKF_SERIAL_SESSION | pkcs11js.CKF_RW_SESSION;
-      console.log(`📝 [VERIFY-PIN] Flag sessione: ${sessionFlags}`);
-      
       sess = pkcs11.C_OpenSession(slot, sessionFlags);
-      console.log(`✅ [VERIFY-PIN] Sessione aperta con ID: ${sess}`);
-      
+
       // Login utente
-      console.log('👤 [VERIFY-PIN] Tentativo di login utente...');
-      console.log(`🔑 [VERIFY-PIN] Tipo utente: ${pkcs11js.CKU_USER}`);
-      
       pkcs11.C_Login(sess, pkcs11js.CKU_USER, pin);
-      console.log('✅ [VERIFY-PIN] Login utente riuscito');
-      
-      // Logout
-      console.log('👋 [VERIFY-PIN] Esecuzione logout...');
+
+      // Logout e chiusura sessione
       pkcs11.C_Logout(sess);
-      console.log('✅ [VERIFY-PIN] Logout completato');
-      
-      // Chiusura sessione
-      console.log('🔒 [VERIFY-PIN] Chiusura sessione...');
       pkcs11.C_CloseSession(sess);
-      console.log('✅ [VERIFY-PIN] Sessione chiusa');
-      
-      console.log('🎉 [VERIFY-PIN] Verifica PIN completata con successo');
+
+      // Finalizza PKCS11 (già dentro finally, ma safe qui)
+      try { pkcs11.C_Finalize(); } catch {}
+
+      // Verifica PIN riuscita
       return true;
-      
+
     } catch (err: any) {
-      console.error('❌ [VERIFY-PIN] Errore durante le operazioni PKCS11:', {
-        message: err.message,
-        code: err.code,
-        stack: err.stack,
-        name: err.name
-      });
-      
-      // Cleanup parziale in caso di errore
-      try {
-        if (sess) {
-          console.log('🧹 [VERIFY-PIN] Tentativo di chiusura sessione dopo errore...');
-          pkcs11.C_CloseSession(sess);
-          console.log('✅ [VERIFY-PIN] Sessione chiusa dopo errore');
-        }
-      } catch (cleanupErr) {
-        console.error('⚠️ [VERIFY-PIN] Errore durante cleanup sessione:', cleanupErr);
-      }
-      
-      let msg = 'Errore PIN';
+      // Cleanup in caso di errore durante sessione
+      try { if (sess) pkcs11.C_CloseSession(sess); } catch {}
+
+      // Mappa errori specifici
+      let msg: string;
       let errorCode = err.code;
-      
-      console.log(`🔍 [VERIFY-PIN] Analisi codice errore: ${errorCode}`);
-      
-      if (err.code === 160) {
+
+      if (err.message === 'Nessuno slot disponibile') {
+        msg = 'Nessuno slot disponibile';
+      } else if (errorCode === 160) {
         msg = 'PIN errato';
-        console.log('🚫 [VERIFY-PIN] PIN errato rilevato');
-      } else if (err.code === 164) {
+      } else if (errorCode === 164) {
         msg = 'PIN bloccato';
-        console.log('🔒 [VERIFY-PIN] PIN bloccato rilevato');
+      } else if (err.message && typeof err.message === 'string') {
+        msg = err.message;
       } else {
-        console.log(`❓ [VERIFY-PIN] Codice errore sconosciuto: ${errorCode}`);
+        msg = 'Errore PIN';
       }
-      
-      console.log(`📤 [VERIFY-PIN] Creazione errore personalizzato: "${msg}"`);
+
       const e = new Error(msg);
       (e as any).code = errorCode;
       throw e;
     }
-    
   } catch (err: any) {
-    console.error('💥 [VERIFY-PIN] Errore generale nella funzione:', {
-      message: err.message,
-      code: err.code,
-      stack: err.stack,
-      name: err.name,
-      phase: 'general'
-    });
-    
-    // Se l'errore non è già stato processato, lo rilanciamo
-    if (err.message === 'PIN errato' || err.message === 'PIN bloccato' || err.message === 'Errore PIN') {
-      console.log('🔄 [VERIFY-PIN] Rilancio errore già processato');
+    // Errori gestiti (li rilancia per essere intercettati nel renderer)
+    if (
+      err.message === 'PIN errato' ||
+      err.message === 'PIN bloccato' ||
+      err.message === 'Errore PIN' ||
+      err.message === 'Nessuno slot disponibile'
+    ) {
       throw err;
     }
-    
-    // Errore non gestito, creiamo un errore generico
-    console.log('🆕 [VERIFY-PIN] Creazione errore generico per errore non gestito');
+
+    // Qualsiasi altro errore sconosciuto/fallback
     const genericError = new Error('Errore durante la verifica del PIN');
     (genericError as any).code = err.code || 'UNKNOWN';
     (genericError as any).originalError = err;
     throw genericError;
-    
   } finally {
-    console.log('🧹 [VERIFY-PIN] Inizio cleanup finale...');
-    
-    try {
-      if (pkcs11) {
-        console.log('🔚 [VERIFY-PIN] Finalizzazione PKCS11...');
-        pkcs11.C_Finalize();
-        console.log('✅ [VERIFY-PIN] PKCS11 finalizzato');
-      }
-    } catch (finalizeErr:any) {
-      console.error('⚠️ [VERIFY-PIN] Errore durante finalizzazione PKCS11:', {
-        message: finalizeErr.message,
-        code: finalizeErr.code,
-        stack: finalizeErr.stack
-      });
-    }
-    
-    console.log('🏁 [VERIFY-PIN] Cleanup finale completato');
+    // Cleanup PKCS11
+    try { if (pkcs11) pkcs11.C_Finalize(); } catch {}
   }
 });
-
 
 const logPath = path.join(app.getPath('userData'), 'medreport-editor.log');
 

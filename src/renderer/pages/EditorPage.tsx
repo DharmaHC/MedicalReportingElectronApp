@@ -193,6 +193,8 @@ const logToFile = (msg: string, details?: any) => {
   const showPinDialog = () => setIsPinDialogVisible(true);
   const hidePinDialog = () => setIsPinDialogVisible(false);
   
+  const pinDialogResolver = useRef<((value: string | null) => void) | null>(null);
+
   // Recupera in modo sicuro il PIN dell'utente per la firma digitale.
   async function getSessionPin(): Promise<string | null> {
     // 1) se ho già il PIN in store, lo restituisco subito
@@ -200,19 +202,17 @@ const logToFile = (msg: string, details?: any) => {
     if (existingPin) {
       return existingPin;
     }
-
-    // 2) altrimenti apro la dialog
     showPinDialog();
-
-    // 3) e ritorno una promise che si risolve quando il PIN arriva nello store
+    // 2) ritorna promise che risolvi tu
     return new Promise(resolve => {
+      pinDialogResolver.current = resolve;
       const unsub = reduxStore.subscribe(() => {
         const newPin = reduxStore.getState().auth.pin;
         if (newPin) {
-          // appena lo store cambia e c'è PIN
-          unsub();           // smetto di ascoltare
-          hidePinDialog();   // chiudo la modale
-          resolve(newPin);   // risolvo la promise col PIN
+          unsub();
+          hidePinDialog();
+          pinDialogResolver.current = null;
+          resolve(newPin);
         }
       });
     });
@@ -221,38 +221,75 @@ const logToFile = (msg: string, details?: any) => {
 // funzione per la modale PIN
 const renderPinDialog = () =>
   isPinDialogVisible ? (
-    <Dialog title="Inserisci PIN per firma" onClose={() => { setPinInput(''); setPinError(null); hidePinDialog(); }}>
+    <Dialog
+      title="Inserisci PIN per firma"
+      onClose={() => {
+        setPinInput('');
+        setPinError(null);
+        hidePinDialog();
+        if (pinDialogResolver.current) {
+          pinDialogResolver.current(null);
+          pinDialogResolver.current = null;
+        }
+      }}
+    >
       {pinError && (
         <div className="k-messagebox k-messagebox-error" style={{ marginBottom: '1em' }}>
           <span className="k-icon k-i-warning"></span>
           {pinError}
         </div>
       )}
+
       <Input
         type="password"
         value={pinInput}
         onChange={(e: InputChangeEvent) => setPinInput(e.value)}
         placeholder="PIN smart-card"
       />
+
       <DialogActionsBar>
-        <Button onClick={() => { setPinInput(''); setPinError(null); hidePinDialog(); }}>Annulla</Button>
-        <Button
-          onClick={async () => {
-            try {
-              setPinError(null);
-              await (window as any).nativeSign.verifyPin(pinInput);
-              dispatch(setPin(pinInput));
-              hidePinDialog();
-            } catch (err: any) {
-              setPinError(err.message || 'Errore sconosciuto');
+        <Button onClick={() => {
+          setPinInput('');
+          setPinError(null);
+          hidePinDialog();
+          if (pinDialogResolver.current) {
+            pinDialogResolver.current(null);
+            pinDialogResolver.current = null;
+          }
+        }}>
+          Annulla
+        </Button>
+        <Button onClick={async () => {
+          try {
+            console.log('Verifica Pin');
+            setPinError(null);
+            await (window as any).nativeSign.verifyPin(pinInput);
+            dispatch(setPin(pinInput));
+            hidePinDialog();
+            if (pinDialogResolver.current) {
+              pinDialogResolver.current(pinInput);
+              pinDialogResolver.current = null;
             }
-          }}
-        >
+          } catch (err: any) {
+            let userMessage = err.message || 'Errore sconosciuto';
+            if (userMessage.includes('Nessuno slot disponibile')) {
+              userMessage = 'Nessuno slot disponibile. Verificare di aver inserito la smart card o token USB e riprovare.';
+            } else if (userMessage === 'PIN errato') {
+              userMessage = 'PIN errato: controlla e riprova.';
+            } else if (userMessage === 'PIN bloccato') {
+              userMessage = 'PIN bloccato: la smart card/token va sbloccata dal fornitore.';
+            }
+            setPinError(userMessage);
+          }
+
+        }}>
           OK
         </Button>
       </DialogActionsBar>
     </Dialog>
   ) : null;  
+
+
   // Stati del componente
   const [isDialogVisible, setIsDialogVisible] = useState(false); // Controlla la visibilità del dialogo per la dettatura.
   const [dictationText, setDictationText] = useState(""); // Testo inserito nel dialogo di dettatura.
@@ -942,6 +979,7 @@ const renderPinDialog = () =>
     // Redirige a un URL custom che il client RemotEye dovrebbe intercettare.
     window.location.href =
       "rhjnlp:" + encodeURIComponent(JSON.stringify(payload));
+      console.log("Apertura viewer RemotEye con Payload:", "rhjnlp:" + encodeURIComponent(JSON.stringify(payload)));
   }
 
   /**
@@ -974,7 +1012,7 @@ const renderPinDialog = () =>
       `${BASE}?username=${encodeURIComponent(USER)}` +
       `&password=${encodeURIComponent(PWD)}` +
       `&jnlpArgName0=execViewerActionOnStartup` +
-      `&jnlpArgValue0=closeAllContainerPanels`;
+      `&jnlpArgValue0=closeStudyPanel`;
 
     const payload = {
       msgType: "MSG_LAUNCHJNLP_RQ",
@@ -1461,9 +1499,10 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     setIsProcessing(true); // Mostra indicatore di caricamento.
     setIsDraftOperation(isDraft); // Imposta se l'operazione è una bozza (per il messaggio di caricamento).
 
-    // Genera i dati del report (PDF e RTF).
+    // Salva con parametri che generano i dati del report (PDF e RTF).
     // Il flag `isSigningProcess` è true solo se la firma è abilitata E non è una bozza.
     const reportData = await generateReportData(rtfNeedsToBeStored, (allowMedicalReportDigitalSignature && !isDraft));
+
 
     if (reportData?.pdfContent && reportData?.rtfContent) {
       let finalPdfToSend: string | null = reportData.pdfContent; // PDF da inviare (inizialmente quello generato).
@@ -1471,6 +1510,16 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
       // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
       if (allowMedicalReportDigitalSignature && !isDraft) {
+        // 1. Salvataggio bozza "tecnica" prima della firma
+        await callProcessReportApi(
+        finalPdfToSend, // PDF originale da salvare come bozza prima della firma.
+        p7mFileToSend,
+        reportData.rtfContent,
+        true, // Salva come bozza prima di firmare IMPORTANTE
+        true // Resta qui dopo il salvataggio della bozza IMPORTANTE
+      );
+
+        
         // Recupera il PIN (l'implementazione di getSessionPin è cruciale).
       const pin = await getSessionPin();
       if (!pin) {

@@ -57,6 +57,14 @@ const [userName, setUserName] = useState(savedUsernames.length > 0 ? savedUserna
 const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
 
 
+  // Filtra l'elenco in base al testo digitato (per l'autocomplete)
+  const filteredUsernames = userName
+    ? usernamesList.filter(u =>
+        u.toLowerCase().includes(userName.toLowerCase())
+      )
+    : usernamesList;
+
+
   // Funzione per fetchare informazioni su firma digitale se medico
   const fetchDoctorSignatureInfo = async (doctorCode: string) => {
     try {
@@ -286,11 +294,12 @@ return (<>
                 <label htmlFor="userName" style={{ fontWeight: "bold" }}>UserName</label>
                 <AutoComplete
                   id="userName"
-                  style={{ width: "60%" }}
-                  data={usernamesList}
+                  style={{ width: "100%" }}
+                  data={filteredUsernames}
                   value={userName}
-                   onChange={e => setUserName(e.value as string)}
+                  onChange={e => setUserName(e.value as string)}
                   name="userName"
+                  popupSettings={{ width: 320 }}
                   required={true}
                 />
               </div>
@@ -303,7 +312,7 @@ return (<>
                   label="Password"
                   type={passwordVisible ? "text" : "password"}
                   validator={[requiredValidator]}
-                  autoComplete="new-password"
+                  autoComplete="new-password" 
                 />
                 <span
                   className="toggle-password-icon"
