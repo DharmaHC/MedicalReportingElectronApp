@@ -3,7 +3,7 @@
   "logoWidth":               303,
   "logoHeight":              87.5,
 
-  "yPosFooterImage":           0,
+  "yPosFooterImage":           15,
   "footerImageWidth":        160,
   "footerImageHeight":       32,
   "footerImageXPositionOffset": 0,
@@ -14,6 +14,7 @@
 
   "footerCompanyDataPointFromBottom": 37,
   "footerCompanyDataMultiline": true,
+  "blankFooterHeight": 15,
 
   "printSignedPdfIfAvailable": false,
 

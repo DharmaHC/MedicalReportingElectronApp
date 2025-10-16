@@ -414,7 +414,7 @@ function setupAutoUpdater() {
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('checking-for-update', () => {
-    log.info('Checking for update...');
+    .info('Checking for update...');
   });
 
   autoUpdater.on('update-available', (info) => {

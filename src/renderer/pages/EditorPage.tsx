@@ -121,7 +121,8 @@ function EditorPage() {
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
   const [reportPageWidth, setreportPageWidth] = useState<number>(25);
   const [reportPageHeight, setreportPageHeight] = useState<number>(25);
-  
+  const [blankFooterHeight, setBlankFooterHeight] = useState<number>(30);
+
   const [lastSignedPdfBase64, setLastSignedPdfBase64] = useState<string | null>(null); // si usaper la stampa
 
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(true);
@@ -160,6 +161,7 @@ const logToFile = (msg: string, details?: any) => {
         setUseMRAS(settings.useMRAS ?? false);
         setreportPageWidth(settings.reportPageWidth ?? 25);
         setreportPageHeight(settings.reportPageHeight ?? 1.5);
+        setBlankFooterHeight(settings.blankFooterHeight ?? 30);
       });
     }, []);
 
@@ -373,6 +375,10 @@ const renderPinDialog = () =>
       while (html.includes('<p>')) {
         html = html.replace('<p>', '<p style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;">');
       }
+
+      // Non aggiungere &nbsp; ai paragrafi vuoti - il backend PDF li gestisce correttamente quando sono vuoti
+      // html = html.replace(/<p([^>]*)>\s*<\/p>/gi, '<p$1>&nbsp;</p>');
+
       setIsModified(true); // Segna il documento come modificato.
 
       return html; // L'HTML processato viene inserito nell'editor.
@@ -758,7 +764,26 @@ const renderPinDialog = () =>
       return cachedReportData;
     }
     if (editorRef.current && editorRef.current.view) {
-      const content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
+      let content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
+
+      // Conta tutti i paragrafi vuoti (con o senza &nbsp;)
+      let emptyParaCount = 0;
+
+      // Prima rimuove &nbsp; dai paragrafi che lo contengono
+      content = content.replace(/<p([^>]*)>(&nbsp;|\s)+<\/p>/gi, (_match, attrs) => {
+        return `<p${attrs}></p>`;
+      });
+
+      // Poi sostituisce TUTTI i paragrafi vuoti con contenuto che occupa spazio
+      content = content.replace(/<p([^>]*)><\/p>/gi, (_match, attrs) => {
+        emptyParaCount++;
+        // Usa il carattere spazio in formato HTML entity (&#160;) invece di &nbsp;
+        // Forse il backend riconosce uno ma non l'altro
+        return `<p${attrs}>&#160;</p>`;
+      });
+
+      console.log(`[generateReportData] Paragrafi vuoti convertiti: ${emptyParaCount}`);
+
       const byteArray = new TextEncoder().encode(content); // Converte HTML in Uint8Array.
       // Converte Uint8Array in stringa Base64.
       const byteString = btoa(
@@ -1270,7 +1295,10 @@ if (printSignedPdf && signedPdfBase64) {
     let finalPdfBlob = pdfBlob;
 
     // 2. Manipolazione PDF per aziende specifiche (HEALTHWAY o CIN)
-    if (companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
+    // NOTA: Questo viene applicato SOLO per PDF NON firmati, perché i PDF firmati
+    // hanno già il footer gestito in signPdfService.ts
+    const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
+    if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
       try {
         const pdfBytes = await pdfBlob.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -1282,13 +1310,15 @@ if (printSignedPdf && signedPdfBase64) {
             x: 0,
             y: 0,
             width: width,
-            height: 50,
+            height: blankFooterHeight,
             color: rgb(1, 1, 1)
           });
         });
 
         const modifiedPdfBytes = await pdfDoc.save();
-        finalPdfBlob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
+        // Convert to standard Uint8Array to ensure compatibility
+        const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
+        finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
       } catch (error) {
         console.error("Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
@@ -1373,7 +1403,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
   // 9. Salva e restituisci il nuovo Blob PDF
   const modifiedPdfBytes = await pdfDoc.save();
-  return new Blob([modifiedPdfBytes], { type: "application/pdf" });
+  // Convert to standard Uint8Array to ensure compatibility
+  const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
+  return new Blob([pdfBytesArray], { type: "application/pdf" });
 }
 
 // Gestisce il download del referto PDF (funzionalità attualmente nascosta nell'UI).
@@ -1451,6 +1483,16 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       isSavingDraft: isDraft, // Flag esplicito per il salvataggio bozza.
     };
 
+    // LOG per debug: verifica i valori inviati al backend
+    console.log("📤 ProcessReport API Call:", {
+      examinationId: body.examinationId,
+      isPdfSigned: body.isPdfSigned,
+      isReportFinalized: body.isReportFinalized,
+      isSavingDraft: body.isSavingDraft,
+      hasP7m: p7mBase64 !== null,
+      hasPdf: signedPdfBase64 !== null,
+    });
+
     try {
       const response = await fetch(url_processReport, {
         method: "POST",
@@ -1462,7 +1504,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       });
 
       if (response.ok) {
-        console.log("Referto processato con successo (salvato/inviato).");
+        const responseData = await response.json().catch(() => null);
+        console.log("✅ Referto processato con successo (salvato/inviato).");
+        console.log("📥 Response data:", responseData);
         setErrorMessage(null); // Pulisce eventuali messaggi di errore precedenti.
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
         setIsModified(false);      // Resetta il flag di modifica.
