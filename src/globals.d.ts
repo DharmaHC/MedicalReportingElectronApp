@@ -13,6 +13,7 @@ interface Settings {
   footerTextFontSize: number;
   footerCompanyDataPointFromBottom: number;
   footerCompanyDataMultiline: number,
+  blankFooterHeight: number;
   printSignedPdfIfAvailable: boolean;
   pkcs11Lib: string;
   cspSlotIndex: number;

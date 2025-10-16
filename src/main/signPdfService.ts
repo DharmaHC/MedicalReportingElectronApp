@@ -151,7 +151,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
   if (pages.length === 0) throw new Error("PDF senza pagine effettive!");
 
   // 1. Copertura bianca
-  await coverFooterWithWhite(doc, 30);
+  await coverFooterWithWhite(doc, settings.blankFooterHeight || 30);
 
   // 2. Manipolazioni pagine
   for (const p of pages) {
@@ -193,7 +193,8 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
     });
   }
 
-  return Buffer.from(await doc.save());
+  const savedDoc = await doc.save();
+  return Buffer.from(savedDoc as Uint8Array);
 }
 
 /* ██████ AGGIUNGI DICITURA CN ULTIMA PAGINA ██████ */
@@ -238,7 +239,8 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
     });
     baseY += 10;
   }
-  return Buffer.from(await doc.save());
+  const savedDoc = await doc.save();
+  return Buffer.from(savedDoc as Uint8Array);
 }
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
