@@ -18,15 +18,31 @@ import {
   url_linkedReportTemplatesHTML,
   url_insertPdfAttachment,
   url_GetPatientRTFHtmlResult,
+  url_getPatientReport,
+  url_DeletePatientPdfReport,
+  url_getPrescriptionTemplate,
+  url_getExistingPrescription,
 } from "../utility/urlLib";
-import { url_getPatientReport } from "../utility/urlLib";
-import { url_DeletePatientPdfReport } from "../utility/urlLib";
 
 import {
   setSelectedExamId,
   addExamToSelectedMoreExams,
   addMultipleExamsToSelectedMoreExams,
 } from "../store/examinationSlice";
+
+import {
+  setPrescriptionContent,
+  setCurrentExamResultId,
+  setCurrentExaminationId,
+  setIsEditingPrescription,
+  setHasExistingPrescription,
+  setExistingPrescriptionId,
+  setCreatedBy,
+  setLastModified,
+  setIsReadOnly,
+  setExamDescription,
+  setLinkedExams,
+} from "../store/prescriptionSlice";
 
 // [MODIFICA] Import per il sorting built-in
 import { orderBy, SortDescriptor } from "@progress/kendo-data-query";
@@ -65,6 +81,8 @@ const PrestazioniRisultati = () => {
   const units = useSelector((state: RootState) => state.filters.units);
   const sectors = useSelector((state: RootState) => state.filters.sectors);
   const token = useSelector((state: RootState) => state.auth.token);
+  const isTechnician = useSelector((state: RootState) => state.auth.isTechnician);
+  const technicianCode = useSelector((state: RootState) => state.auth.technicianCode || state.auth.userName);
 
   // Parametri di fetch (null => non usati)
   const includeScheduled = null;
@@ -75,6 +93,9 @@ const PrestazioniRisultati = () => {
 
   // Sorting
   const [sort, setSort] = useState<SortDescriptor[]>([]);
+
+  // Track which exams have existing prescriptions
+  const [examsWithPrescriptions, setExamsWithPrescriptions] = useState<Set<number>>(new Set());
 
   // -------------------------------------------------
   // useEffect: carica esami se selectedExaminationId valido
@@ -97,6 +118,37 @@ const PrestazioniRisultati = () => {
       setResultsData([]);
     }
   }, [selectedExaminationId, selectedDoctorCode, registrations]);
+
+  // -------------------------------------------------
+  // checkExistingPrescriptions
+  // -------------------------------------------------
+  const checkExistingPrescriptions = async (data: any[]) => {
+    const examResultIds = data.map((item: any) => item.examResultId);
+    const prescriptionsSet = new Set<number>();
+
+    // Verifica per ogni esame se esiste una prescrizione
+    const prescriptionChecks = examResultIds.map(async (examResultId: number) => {
+      try {
+        const response = await fetch(
+          `${url_getExistingPrescription}?examResultId=${examResultId}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (response.ok) {
+          prescriptionsSet.add(examResultId);
+        }
+      } catch (error) {
+        // Prescrizione non esistente, ignora l'errore
+      }
+    });
+
+    await Promise.all(prescriptionChecks);
+    setExamsWithPrescriptions(prescriptionsSet);
+  };
 
   // -------------------------------------------------
   // fetchExamResults
@@ -151,6 +203,11 @@ const PrestazioniRisultati = () => {
                 item.linkedResults.trim() === ""))
         }));
 
+        // Filtra i record in stato "refertato" (id=8) per i tecnici
+        if (isTechnician) {
+          data = data.filter((item: any) => item.examResultStateId !== 8);
+        }
+
         setResultsData(data);
 
         // Inizializza la selezione dei RefUnici in base a isLinkedResult
@@ -158,6 +215,9 @@ const PrestazioniRisultati = () => {
           .filter((item: any) => item.isLinkedResult)
           .map((item: any) => item.examId);
         setSelectedUniqueRefs(initiallyLinked);
+
+        // Verifica quali esami hanno prescrizioni esistenti
+        checkExistingPrescriptions(data);
       } else {
         console.error("Failed to fetch exam results");
       }
@@ -401,6 +461,138 @@ const PrestazioniRisultati = () => {
     setPdfOptionsVisible(false);
     setPdfPreviewUrl(pdfUrl);
     setPdfPreviewVisible(true);
+  };
+
+  // -------------------------------------------------
+  // handlePrescriptionClick - Gestione prescrizioni
+  // -------------------------------------------------
+  const handlePrescriptionClick = async (exam: any) => {
+    try {
+      const { examId, examVersion, subExamId, examResultId } = exam;
+      const userCode = technicianCode || doctorCode;
+
+      if (!userCode) {
+        console.error("User code not available");
+        return;
+      }
+
+      // Raccogli tutti gli esami flaggati come "Prescr. Unica" per i tecnici
+      let linkedExamsData: Array<{ examResultId: number; examId: number; examName: string; subExamName: string | null }> = [];
+      if (isTechnician && selectedUniqueRefs.includes(examId)) {
+        // Include l'esame corrente e tutti gli altri flaggati
+        linkedExamsData = resultsData
+          .filter((item: any) => selectedUniqueRefs.includes(item.examId))
+          .map((item: any) => ({
+            examResultId: item.examResultId,
+            examId: item.examId,
+            examName: item.examName,
+            subExamName: item.subExamName
+          }));
+      } else {
+        // Se non è un tecnico o non è flaggato, solo l'esame corrente
+        linkedExamsData = [{
+          examResultId: exam.examResultId,
+          examId: exam.examId,
+          examName: exam.examName,
+          subExamName: exam.subExamName
+        }];
+      }
+
+      // Passa la lista degli esami collegati allo store
+      dispatch(setLinkedExams(linkedExamsData));
+
+      // 1. Verifica se esiste già una prescrizione
+      try {
+        const existingResponse = await fetch(
+          `${url_getExistingPrescription}?examResultId=${examResultId}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (existingResponse.ok) {
+          // Prescrizione esistente trovata
+          const data = await existingResponse.json();
+          const { htmlContent, prescriptionId, createdBy, lastModified } = data;
+
+          dispatch(setPrescriptionContent(htmlContent));
+          dispatch(setCurrentExamResultId(examResultId));
+          dispatch(setCurrentExaminationId(Number(selectedExaminationId)));
+          dispatch(setHasExistingPrescription(true));
+          dispatch(setExistingPrescriptionId(prescriptionId));
+          dispatch(setCreatedBy(createdBy));
+          dispatch(setLastModified(lastModified));
+
+          // Descrizione esame
+          if (linkedExamsData.length > 1) {
+            dispatch(setExamDescription(`Prescrizione Unica per ${linkedExamsData.length} Esami`));
+          } else {
+            dispatch(setExamDescription(exam.examName));
+          }
+
+          // Verifica se il tecnico può modificare (solo se creata da lui)
+          const isReadOnly =
+            createdBy &&
+            createdBy.trim().toUpperCase() !== userCode.trim().toUpperCase();
+          dispatch(setIsReadOnly(isReadOnly));
+
+          // Aggiungi l'esame al set di quelli con prescrizione
+          setExamsWithPrescriptions(prev => new Set(prev).add(examResultId));
+
+          dispatch(setIsEditingPrescription(true));
+          return;
+        }
+      } catch (error) {
+        // Prescrizione non esistente, procedi con il template
+        console.log("No existing prescription, fetching template");
+      }
+
+      // 2. Carica template prescrizione (o documento vuoto)
+      const templateResponse = await fetch(
+        `${url_getPrescriptionTemplate}?` +
+          `technicianCode=${encodeURIComponent(userCode)}&` +
+          `examId=${examId}&` +
+          `examVersion=${examVersion}&` +
+          `subExamId=${subExamId}&` +
+          `examinationId=${selectedExaminationId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (templateResponse.ok) {
+        const data = await templateResponse.json();
+        const { htmlContent } = data;
+
+        dispatch(setPrescriptionContent(htmlContent));
+        dispatch(setCurrentExamResultId(examResultId));
+        dispatch(setCurrentExaminationId(Number(selectedExaminationId)));
+        dispatch(setHasExistingPrescription(false));
+        dispatch(setExistingPrescriptionId(null));
+        dispatch(setCreatedBy(null));
+        dispatch(setLastModified(null));
+        dispatch(setIsReadOnly(false));
+
+        // Descrizione esame
+        if (linkedExamsData.length > 1) {
+          dispatch(setExamDescription(`Prescrizione Unica per ${linkedExamsData.length} Esami`));
+        } else {
+          dispatch(setExamDescription(exam.examName));
+        }
+
+        dispatch(setIsEditingPrescription(true));
+      } else {
+        console.error("Failed to fetch prescription template");
+      }
+    } catch (error) {
+      console.error("Error handling prescription click:", error);
+    }
   };
 
 const handleIconClick = (subExamTypeId: number, exam: any) => {
@@ -679,10 +871,20 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
   // handleUniqueRefChange
   // -------------------------------------------------
   const handleUniqueRefChange = (exam: any) => {
-    if (exam.insertDate != null) {
+    // Bloccato se l'esame è già stato refertato (logica esistente per i referti)
+    if (exam.resultInsertDate != null) {
       return;
     }
 
+    // Per i tecnici: blocca se l'esame ha già una prescrizione associata
+    if (isTechnician && examsWithPrescriptions.has(exam.examResultId)) {
+      // Non permettere di deselezionare se ha già una prescrizione
+      if (selectedUniqueRefs.includes(exam.examId)) {
+        return;
+      }
+    }
+
+    // Toggle della selezione
     if (selectedUniqueRefs.includes(exam.examId)) {
       setSelectedUniqueRefs((prevRefs) =>
         prevRefs.filter((id) => id !== exam.examId)
@@ -699,12 +901,17 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
     const record = props.dataItem;
     const isWorked = record.resultInsertDate != null;
     const checked = selectedUniqueRefs.includes(record.examId);
+
+    // Per i tecnici: disabilita anche se ha una prescrizione e è già checked
+    const hasPrescription = isTechnician && examsWithPrescriptions.has(record.examResultId);
+    const isDisabled = isWorked || (hasPrescription && checked);
+
     return (
       <td style={{ textAlign: "center" }}>
         <input
           type="checkbox"
           checked={checked}
-          disabled={isWorked}
+          disabled={isDisabled}
           onChange={() => handleUniqueRefChange(record)}
         />
       </td>
@@ -715,21 +922,29 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
   // statusCell
   // -------------------------------------------------
   const statusCell = (props: any) => {
-	//console.log("[DEBUG] statusCell dataItem =>", props.dataItem);
-    const { examResultStateId, resultInsertDate, subExamTypeId } = props.dataItem;
+    const { examResultStateId, resultInsertDate, subExamTypeId, examResultId } = props.dataItem;
     const icon = subExamTypeId === 4 ? editToolsIcon : uploadIcon;
 
-    let statusText: string | number = examResultStateId;
+    // Mappa degli stati
+    const stateDescriptions: Record<number, string> = {
+      1: "Da Refertare",
+      2: "In Accettazione",
+      3: "Accettato",
+      4: "In Esecuzione",
+      5: "Da Terminare",
+      6: "Bozza",
+      7: "Da Firmare",
+      8: "Refertato",
+      9: "Annullato",
+    };
+
+    let statusText: string = stateDescriptions[examResultStateId] || `Stato ${examResultStateId}`;
     let cellStyle: React.CSSProperties = {
       textAlign: "center",
       cursor: "pointer",
     };
 
-	//console.log("examResultStateId:", examResultStateId, 
-	//			" resultInsertDate:", resultInsertDate,
-	//			" subExamTypeId:", subExamTypeId);
-
-	if (examResultStateId < 5 && resultInsertDate === null) {
+    if (examResultStateId < 5 && resultInsertDate === null) {
       statusText = "Da Refertare";
       cellStyle.backgroundColor = "lightblue";
     } else if (examResultStateId === 5 && resultInsertDate != null) {
@@ -744,14 +959,102 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       cellStyle.color = "white";
     }
 
+    // Determina se mostrare i pulsanti
+    const showPrescriptionButton = (isTechnician || doctorCode);
+    const showReportButton = !isTechnician && (doctorCode !== null && doctorCode !== undefined);
+
+    // Verifica se esiste una prescrizione
+    const hasPrescription = examsWithPrescriptions.has(examResultId);
+
+    // Per i tecnici, il <td> ha text-align: left
+    if (isTechnician) {
+      return (
+        <td style={{ ...cellStyle, textAlign: "left" }}>
+          <div style={{ display: "inline-flex", gap: "4px", alignItems: "center" }}>
+            {/* Pulsante Prescrizione - visibile a Tecnici */}
+            {showPrescriptionButton && (
+              <span
+                style={{
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 6px",
+                  borderRadius: "3px",
+                  backgroundColor: hasPrescription ? "#e8f5e9" : "#e3f2fd",
+                  border: hasPrescription ? "1px solid #4CAF50" : "1px solid #2196F3"
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrescriptionClick(props.dataItem);
+                }}
+                title="Prescrizione"
+              >
+                <SvgIcon icon={editToolsIcon} style={{ width: "16px", height: "16px", color: hasPrescription ? "#4CAF50" : "#2196F3" }} />
+                <span style={{ fontSize: "12px", color: hasPrescription ? "#4CAF50" : "#2196F3", fontWeight: "500" }}>Prescrizione</span>
+              </span>
+            )}
+          </div>
+        </td>
+      );
+    }
+
+    // Per i medici, mostra solo stato e pulsante referto
     return (
-      <td
-        style={cellStyle}
-        onClick={() => handleIconClick(subExamTypeId, props.dataItem)}
-      >
-        {statusText}
-        <span style={{ marginLeft: "16px" }}>
-          <SvgIcon icon={icon} style={{ width: "16px", height: "16px" }} />
+      <td style={{ ...cellStyle, display: "flex", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
+        <span>{statusText}</span>
+        <div style={{ display: "flex", gap: "4px" }}>
+          {/* Pulsante Referto - solo medici */}
+          {showReportButton && (
+            <span
+              style={{ cursor: "pointer" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleIconClick(subExamTypeId, props.dataItem);
+              }}
+              title="Referto"
+            >
+              <SvgIcon icon={icon} style={{ width: "16px", height: "16px", color: "#4CAF50" }} />
+            </span>
+          )}
+        </div>
+      </td>
+    );
+  };
+
+  // -------------------------------------------------
+  // prescriptionCell - Colonna separata per prescrizioni (solo medici)
+  // -------------------------------------------------
+  const prescriptionCell = (props: any) => {
+    const { examResultId } = props.dataItem;
+    const hasPrescription = examsWithPrescriptions.has(examResultId);
+
+    // Mostra il pulsante solo se esiste una prescrizione
+    if (!hasPrescription) {
+      return <td style={{ textAlign: "center" }}></td>;
+    }
+
+    return (
+      <td style={{ textAlign: "center" }}>
+        <span
+          style={{
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "2px 6px",
+            borderRadius: "3px",
+            backgroundColor: "#e8f5e9",
+            border: "1px solid #4CAF50"
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrescriptionClick(props.dataItem);
+          }}
+          title="Visualizza Prescrizione"
+        >
+          <SvgIcon icon={editToolsIcon} style={{ width: "16px", height: "16px", color: "#4CAF50" }} />
+          <span style={{ fontSize: "12px", color: "#4CAF50", fontWeight: "500" }}>Prescrizione</span>
         </span>
       </td>
     );
@@ -769,7 +1072,7 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       ) : resultsData.length === 0 ? (
         <div className="no-records">Nessun dato disponibile</div>
       ) : (
-        <Grid data={resultsData} style={{ height: "100%" }}>
+        <Grid data={resultsData} dataItemKey="examResultId" style={{ height: "100%" }}>
           <Column
             field="examBriefName"
             title={labels.prestazioniRisultati.codice}
@@ -781,11 +1084,6 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
             width="200px"
           />
           <Column
-            field="subExamName"
-            title={labels.prestazioniRisultati.descParametro}
-            width="200px"
-          />
-          <Column
             field="examinationExamWithdrawalDate"
             title={labels.prestazioniRisultati.dataRitiro}
             width="120px"
@@ -793,12 +1091,30 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
               <td>{dateFormatter(props.dataItem.examinationExamWithdrawalDate)}</td>
             )}
           />
-          <Column
-            field="status"
-            title={labels.prestazioniRisultati.stato}
-            width="120px"
-            cell={statusCell}
-          />
+          {!isTechnician && (
+            <Column
+              field="status"
+              title={labels.prestazioniRisultati.stato}
+              width="120px"
+              cell={statusCell}
+            />
+          )}
+          {isTechnician && (
+            <Column
+              field="prescription"
+              title="Prescrizione"
+              width="200px"
+              cell={statusCell}
+            />
+          )}
+          {!isTechnician && (
+            <Column
+              field="doctorPrescription"
+              title="Prescrizione"
+              width="150px"
+              cell={prescriptionCell}
+            />
+          )}
           <Column
             field="doctorCode"
             title={labels.prestazioniRisultati.medicoEsecutore}
@@ -806,7 +1122,7 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
           />
           <Column
             field="uniqueRef"
-            title={labels.prestazioniRisultati.refUnico}
+            title={isTechnician ? "Prescr. Unica" : labels.prestazioniRisultati.refUnico}
             width="100px"
             cell={refUnicoCell}
           />

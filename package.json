@@ -1,7 +1,7 @@
 {
   "name": "medreportandsign",
   "productName": "MedReportAndSign",
-  "version": "1.0.26",
+  "version": "1.0.31",
   "description": "Applicazione Electron per la refertazione medica con firma digitale",
   "author": "Dharma Healthcare <info@dharmahealthcare.net>",
   "license": "MIT",

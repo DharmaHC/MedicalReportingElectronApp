@@ -40,6 +40,16 @@ export const url_getPatientReport = url_base + "ExamResults/GetPatientPdfResult"
 export const url_getPatientSignedReport = url_base + "ExamResults/GetPatientSignedReport";
 export const url_DeletePatientPdfReport =
   url_base + "ExamResults/DeletePatientPdfReport";
-export const url_changePassword = 
+export const url_changePassword =
   url_base + "Account/changePassword";
 export const url_passwordForgot = url_base + "Account/forgotPasswordForm";
+
+// Technician Authorization
+export const url_isTechnician = url_base + "MedicalPrescriptions/IsTechnician";
+export const url_getUserDetailsId = url_base + "MedicalPrescriptions/GetUserDetailsId";
+
+// Medical Prescriptions
+export const url_getPrescriptionTemplate = url_base + "MedicalPrescriptions/GetPrescriptionTemplate";
+export const url_savePrescription = url_base + "MedicalPrescriptions/SavePrescription";
+export const url_getExistingPrescription = url_base + "MedicalPrescriptions/GetExistingPrescription";
+export const url_getUserDisplayName = url_base + "MedicalPrescriptions/GetUserDisplayName";

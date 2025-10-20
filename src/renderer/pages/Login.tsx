@@ -17,10 +17,12 @@ import {
   setAllowMedicalReportDigitalSignature,
   setprintReportWhenFinished,
   setUserCN,
+  setIsTechnician,
+  setTechnicianCode,
 } from "../store/authSlice";
 import "./Login.css";
 import { useNavigate } from "react-router-dom";
-import { url_info, url_login, url_doctors, url_passwordForgot } from "../utility/urlLib";
+import { url_info, url_login, url_doctors, url_passwordForgot, url_isTechnician } from "../utility/urlLib";
 import { RootState } from "../store";
 import { setFilters } from "../store/filtersSlice";
 
@@ -85,6 +87,55 @@ const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
     }
   };
 
+  // Funzione per verificare se l'utente è un tecnico radiologo
+  const checkTechnicianRole = async (userId: string, userName: string) => {
+    try {
+      console.log(`[TECHNICIAN CHECK] Calling ${url_isTechnician}?userId=${userId}`);
+
+      const response = await fetch(
+        `${url_isTechnician}?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      console.log(`[TECHNICIAN CHECK] Response status: ${response.status}`);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[TECHNICIAN CHECK] API Response:`, result);
+
+        const isTechnician = result.isTechnician || false;
+
+        console.log(`[TECHNICIAN CHECK] User ${userName} (${userId}) - isTechnician: ${isTechnician}`);
+
+        dispatch(setIsTechnician(isTechnician));
+
+        if (isTechnician) {
+          // Usa lo username come technicianCode
+          dispatch(setTechnicianCode(userName));
+          console.log(`[TECHNICIAN CHECK] ✅ User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
+        } else {
+          dispatch(setTechnicianCode(null));
+          console.log(`[TECHNICIAN CHECK] ℹ️ User ${userName} is NOT a technician (is a doctor or other role)`);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error(`[TECHNICIAN CHECK] ❌ Failed to check technician role - Status: ${response.status}`, errorText);
+        dispatch(setIsTechnician(false));
+        dispatch(setTechnicianCode(null));
+      }
+    } catch (error) {
+      console.error("[TECHNICIAN CHECK] ❌ Error checking technician role:", error);
+      dispatch(setIsTechnician(false));
+      dispatch(setTechnicianCode(null));
+    }
+  };
+
 	const handleForgotPasswordSubmit = async () => {
     if (codiceFiscale) {
       const forgotPasswordBody: PasswordForgotBody = { username: codiceFiscale };
@@ -146,11 +197,13 @@ const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
 
         dispatch(setUserId(userId));
         dispatch(setDoctorCode(doctorCode));
-    		dispatch(setprintReportWhenFinished(printReportWhenFinished));
+        dispatch(setprintReportWhenFinished(printReportWhenFinished));
         dispatch(setUserCN(userCN));
-		if (doctorCode) {
+        if (doctorCode) {
           fetchDoctorSignatureInfo(doctorCode.trim());
         }
+        // Verifica se l'utente è un tecnico radiologo
+        await checkTechnicianRole(userId, userName);
       } else {
         console.error("Failed to fetch user info");
       }

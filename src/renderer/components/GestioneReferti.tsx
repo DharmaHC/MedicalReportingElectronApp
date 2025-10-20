@@ -14,7 +14,8 @@ import {
   url_getClinicDepartements,
   url_getClinicDepartementsDefault,
   url_doctors,
-  url_worklist
+  url_worklist,
+  url_getUserDetailsId
 } from "../utility/urlLib";
 
 import { useDispatch, useSelector } from "react-redux";
@@ -75,6 +76,9 @@ const GestioneReferti: React.FC = () => {
 
 const [initialSearchDone, setInitialSearchDone] = useState(false);
 
+  // IMPORTANTE: userId corretto per workareas/departments (UsersDetails.UserId)
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
+
 /* Opzioni periodo */
   const periodOptions = [
     { text: "Tre Giorni",    value: "Tre Giorni" },
@@ -96,8 +100,15 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
   const fetchWorkareas = useCallback(async () => {
     try {
-      const resp = await fetch(`${url_getWorkareas}?userId=${userId}`);
-      if (!resp.ok) return console.error("Failed to fetch workareas");
+      const effectiveId = effectiveUserId || userId;
+      const resp = await fetch(`${url_getWorkareas}?userId=${effectiveId}`);
+      if (!resp.ok) return console.error("Failed to fetch workareas:", resp.status);
+
+      const contentType = resp.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error("Workareas response is not JSON");
+        return;
+      }
 
       // ① leggo i dati
       const data: Workarea[] = await resp.json();
@@ -123,12 +134,13 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     } catch (err) {
       console.error("Error fetching workareas:", err);
     }
-  }, [userId, sectors, dispatch]);
+  }, [effectiveUserId, userId, sectors, dispatch]);
 
 
   const fetchWorkareasDefault = useCallback(async () => {
     try {
-      const resp = await fetch(`${url_getWorkareasDefault}?userId=${userId}`);
+      const effectiveId = effectiveUserId || userId;
+      const resp = await fetch(`${url_getWorkareasDefault}?userId=${effectiveId}`);
       if (resp.ok) {
         const defs: Workarea[] = await resp.json();
         const upd = { ...sectors };
@@ -136,12 +148,19 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         dispatch(setFilters({ sectors: upd }));
       }
     } catch (err) { console.error("Error fetching default workareas:", err); }
-  }, [userId, sectors, dispatch]);
+  }, [effectiveUserId, userId, sectors, dispatch]);
 
   const fetchClinicDepartments = useCallback(async () => {
     try {
-      const resp = await fetch(`${url_getClinicDepartements}?userId=${userId}`);
-      if (!resp.ok) return console.error("Failed to fetch clinic departments");
+      const effectiveId = effectiveUserId || userId;
+      const resp = await fetch(`${url_getClinicDepartements}?userId=${effectiveId}`);
+      if (!resp.ok) return console.error("Failed to fetch clinic departments:", resp.status);
+
+      const contentType = resp.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error("Clinic departments response is not JSON");
+        return;
+      }
 
       const data: ClinicDepartment[] = await resp.json();
 
@@ -164,12 +183,13 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     } catch (err) {
       console.error("Error fetching clinic departments:", err);
     }
-  }, [userId, units, dispatch]);
+  }, [effectiveUserId, userId, units, dispatch]);
 
 
   const fetchClinicDepartmentsDefault = useCallback(async () => {
     try {
-      const resp = await fetch(`${url_getClinicDepartementsDefault}?userId=${userId}`);
+      const effectiveId = effectiveUserId || userId;
+      const resp = await fetch(`${url_getClinicDepartementsDefault}?userId=${effectiveId}`);
       if (!resp.ok) return;
 
       const defaults: ClinicDepartment[] = await resp.json();
@@ -187,7 +207,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     } catch (err) {
       console.error("Error fetching default clinic deps:", err);
     }
-  }, [userId, clinicDepartmentsData, dispatch]);
+  }, [effectiveUserId, userId, clinicDepartmentsData, dispatch]);
 
 
   /* ────────────── SEARCH helpers ────────────── */
@@ -266,6 +286,33 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   }, [token, dispatch]);
 
   /* ────────────── Effetti ────────────── */
+
+  /* Recupero userId corretto da UsersDetails (sia per tecnici che medici) */
+  useEffect(() => {
+    const fetchUserDetailsId = async () => {
+      if (!userId || !token) return;
+
+      try {
+        const response = await fetch(`${url_getUserDetailsId}?userId=${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setEffectiveUserId(data.userDetailsId);
+          console.log(`[EFFECTIVE_USER_ID] Set to: ${data.userDetailsId} (was AspNetUsers.Id: ${userId})`);
+        } else {
+          console.warn(`[EFFECTIVE_USER_ID] Failed to get UserDetailsId, using original: ${userId}`);
+          setEffectiveUserId(userId); // fallback
+        }
+      } catch (err) {
+        console.error("[EFFECTIVE_USER_ID] Error:", err);
+        setEffectiveUserId(userId); // fallback
+      }
+    };
+
+    fetchUserDetailsId();
+  }, [userId, token]);
 
   /* caricamento dati base */
   useEffect(() => {
@@ -788,7 +835,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         </Button>
       </div>
 
-      {/* Sezione Utilities */}
+      {/* Sezione Utilities rimossa
       <div className="utilities bordered-div">
         <h5>{labels.gestioneReferti.utilitaEPreferenze}</h5>
         <Button icon=".k-i-file-txt">{labels.gestioneReferti.prescrizione}</Button>
@@ -796,6 +843,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         <Button icon="k-i-folder">{labels.gestioneReferti.documenti}</Button>
         <Button icon="k-i-pencil">{labels.gestioneReferti.note}</Button>
       </div>
+      */}
     </div>
   );
 };

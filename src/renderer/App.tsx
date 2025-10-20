@@ -7,6 +7,7 @@ import { persistor } from "./store";
 import Login from "./pages/Login";
 import HomePage from "./pages/HomePage";
 import EditorPage from "./pages/EditorPage";
+import PrescriptionEditorModal from "./components/PrescriptionEditorModal";
 
 import "@progress/kendo-theme-fluent/dist/all.css";
 import "@progress/kendo-theme-fluent/dist/all.scss";
@@ -203,6 +204,8 @@ function AppWrapper() {
       )}
       {/* QUI! Notifica aggiornamento visibile sempre */}
       <UpdateNotifier />
+      {/* Modal editor prescrizioni - sempre montato, visibile quando isEditingPrescription è true */}
+      <PrescriptionEditorModal />
     </div>
   );
 }

@@ -63,7 +63,7 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     log('start');
 
     // 1. Decora PDF con logo/footer (senza dicitura CN)
-    let pdfBuf = Buffer.from(req.pdfBase64, 'base64');
+    let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
     pdfBuf = await decoratePdf(pdfBuf, req, currentSettings);
 
     // 2. Firma digitale
@@ -122,7 +122,7 @@ function readFileAsync(path: string): Promise<Buffer> {
   });
 }
 
-async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings) {
+async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings): Promise<Buffer> {
   const doc = await PDFDocument.load(pdf);
 
   // Embedding font
@@ -194,7 +194,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
   }
 
   const savedDoc = await doc.save();
-  return Buffer.from(savedDoc as Uint8Array);
+  return Buffer.from(savedDoc) as Buffer;
 }
 
 /* ██████ AGGIUNGI DICITURA CN ULTIMA PAGINA ██████ */
@@ -240,7 +240,7 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
     baseY += 10;
   }
   const savedDoc = await doc.save();
-  return Buffer.from(savedDoc as Uint8Array);
+  return Buffer.from(savedDoc) as Buffer;
 }
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
