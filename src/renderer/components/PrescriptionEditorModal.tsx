@@ -493,7 +493,7 @@ const PrescriptionEditorModal: React.FC = () => {
                 }}
               >
                 <strong>Attenzione:</strong> Questa prescrizione è stata creata da{' '}
-                <strong>{createdBy}</strong>. Non puoi modificarla.
+                <strong>{creatorDisplayName || createdBy}</strong>. Non puoi modificarla.
               </div>
             )}
           </div>
