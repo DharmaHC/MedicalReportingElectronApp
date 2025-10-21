@@ -1001,19 +1001,20 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
 
     // Per i medici, mostra solo stato e pulsante referto
     return (
-      <td style={{ ...cellStyle, display: "flex", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
+      <td
+        style={{ ...cellStyle, display: "flex", alignItems: "center", gap: "8px", justifyContent: "space-between" }}
+        onClick={() => {
+          if (showReportButton) {
+            handleIconClick(subExamTypeId, props.dataItem);
+          }
+        }}
+        title={showReportButton ? "Apri editor referto" : ""}
+      >
         <span>{statusText}</span>
         <div style={{ display: "flex", gap: "4px" }}>
           {/* Pulsante Referto - solo medici */}
           {showReportButton && (
-            <span
-              style={{ cursor: "pointer" }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleIconClick(subExamTypeId, props.dataItem);
-              }}
-              title="Referto"
-            >
+            <span style={{ pointerEvents: "none" }}>
               <SvgIcon icon={icon} style={{ width: "16px", height: "16px", color: "#4CAF50" }} />
             </span>
           )}
