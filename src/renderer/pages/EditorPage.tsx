@@ -1023,12 +1023,18 @@ const renderPinDialog = () =>
 
   /**
  * Chiude gli studi attualmente aperti nel viewer RemotEye senza chiudere l'app.
+ * Se non ci sono studi aperti (viewerAccNumsRef vuoto), non invia il comando di chiusura.
  */
   function closeViewer() {
+    // Se non ci sono studi aperti, non fare nulla
+    if (viewerAccNumsRef.current.length === 0) {
+      return;
+    }
+
     // Svuota la lista locale degli accNum aperti
     viewerAccNumsRef.current = [];
 
-    // Costruisce l’URL JNLP per inviare il comando "genericRemoveAllFromMemory"
+    // Costruisce l'URL JNLP per inviare il comando "genericRemoveAllFromMemory"
     const BASE = "http://172.16.18.52/LPW/Display";
     const USER = "radiologia";
     const PWD  = "radiologia";
