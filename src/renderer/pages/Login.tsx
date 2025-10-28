@@ -51,12 +51,12 @@ const Login = () => {
   const navigate = useNavigate();
   const token = useSelector((state: RootState) => state.auth.token);
 
-  /** Carica il nome utente da localStorage (se esiste). 
-   *  Se esiste, significa che l'utente aveva spuntato "remember me" in precedenza.
+  /** Carica il nome utente da localStorage per l'autocomplete.
+   *  Il campo username parte sempre vuoto per sicurezza.
    */
   const savedUsernames = getSavedUsernames();
-const [userName, setUserName] = useState(savedUsernames.length > 0 ? savedUsernames[savedUsernames.length - 1] : "");
-const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
+  const [userName, setUserName] = useState("");  // Campo sempre vuoto all'avvio
+  const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
 
 
   // Filtra l'elenco in base al testo digitato (per l'autocomplete)
@@ -329,9 +329,9 @@ return (<>
         <Form
           /** Imposta i valori iniziali nel form */
           initialValues={{
-            userName: userName,
+            userName: "",
             password: "",
-            rememberMe: !!userName
+            rememberMe: false
       }}
           onSubmit={(dataItem) => handleSubmit({ ...dataItem, userName })}
           render={(formRenderProps) => (

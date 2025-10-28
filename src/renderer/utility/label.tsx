@@ -26,6 +26,7 @@ const labels = {
     tutti: "Tutti",
     interrograPerDataRitiro: "Per data Ritiro",
     includiRefertiCompleti: "Referti Completi",
+    includiPrescrizioniComplete: "Prescrizioni Complete",
     ricercaPaziente: "Ricerca Paziente",
     cognome: "Cognome:",
     nome: "Nome:",
