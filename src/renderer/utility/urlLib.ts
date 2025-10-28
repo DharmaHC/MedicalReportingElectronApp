@@ -43,8 +43,13 @@ export const url_DeletePatientPdfReport =
 export const url_changePassword =
   url_base + "Account/changePassword";
 export const url_passwordForgot = url_base + "Account/forgotPasswordForm";
+
+// Technician Authorization
+export const url_isTechnician = url_base + "MedicalPrescriptions/IsTechnician";
+export const url_getUserDetailsId = url_base + "MedicalPrescriptions/GetUserDetailsId";
+
+// Medical Prescriptions
 export const url_getPrescriptionTemplate = url_base + "MedicalPrescriptions/GetPrescriptionTemplate";
 export const url_savePrescription = url_base + "MedicalPrescriptions/SavePrescription";
 export const url_getExistingPrescription = url_base + "MedicalPrescriptions/GetExistingPrescription";
 export const url_getUserDisplayName = url_base + "MedicalPrescriptions/GetUserDisplayName";
-export const url_isTechnician = url_base + "MedicalPrescriptions/IsTechnician";
