@@ -1,5 +1,5 @@
 	// src/renderer/App.tsx
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import { HashRouter as Router, Route, Routes, useLocation } from "react-router-dom";
 import "./App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -7,6 +7,7 @@ import { persistor } from "./store";
 import Login from "./pages/Login";
 import HomePage from "./pages/HomePage";
 import EditorPage from "./pages/EditorPage";
+import PrescriptionEditorModal from "./components/PrescriptionEditorModal";
 
 import "@progress/kendo-theme-fluent/dist/all.css";
 import "@progress/kendo-theme-fluent/dist/all.scss";
@@ -19,10 +20,51 @@ import { RootState } from "./store";
 import { url_token } from "./utility/urlLib";
 import ProtectedRoute from "./utility/ProtectedRoute";
 import UpdateNotifier from './components/UpdateNotifier';
+import { CompanyUISettings } from "../globals";
 const ipcRenderer = window.electron?.ipcRenderer;
 
 function AppWrapper() {
   const dispatch = useDispatch();
+  const [companyUISettings, setCompanyUISettings] = useState<CompanyUISettings | null>(null);
+
+  // --------------------------------------------------
+  // Carica le impostazioni UI dell'azienda
+  // --------------------------------------------------
+  useEffect(() => {
+    const loadUISettings = async () => {
+      try {
+        // Usa IPC diretto come per company-footer-settings (più affidabile)
+        const settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
+        setCompanyUISettings(settings);
+      } catch (error) {
+        console.error("Errore caricamento company-ui-settings:", error);
+        // In caso di errore, usa valori di default
+        setCompanyUISettings({
+          header: {
+            logo: {
+              url: "https://referti.asterdiagnostica.it/images/logo.png",
+              link: "http://www.asterdiagnostica.it/",
+              alt: "Logo Aster"
+            },
+            title: {
+              text: "Refertazione Medica",
+              color: "rgb(34, 154, 97)",
+              fontSize: "30px"
+            }
+          },
+          footer: {
+            copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+            poweredBy: {
+              text: "Powered by",
+              link: "https://www.dharmahealthcare.net",
+              name: "Dharma Healthcare"
+            }
+          }
+        });
+      }
+    };
+    loadUISettings();
+  }, []);
 
   // --------------------------------------------------
   // Forza logout (se l'utente precedente non si è sloggato)
@@ -130,6 +172,11 @@ function AppWrapper() {
   // Se l'URL non è "/login", nascondiamo l'header e il footer
   const hideHeaderFooter = location.pathname !== "/login";
 
+  // Non renderizzare nulla se le impostazioni UI non sono ancora caricate
+  if (!companyUISettings) {
+    return <div className="app-container">Caricamento...</div>;
+  }
+
   return (
     <div className="app-container">
         {!hideHeaderFooter && (
@@ -139,11 +186,11 @@ function AppWrapper() {
               {/* Logo */}
               <div className="col-md-5">
                 <div className="logo">
-                  <a href="http://www.asterdiagnostica.it/">
+                  <a href={companyUISettings.header.logo.link}>
                     <img
                       className="img-responsive"
-                      src="https://referti.asterdiagnostica.it/images/logo.png"
-                      alt="Logo Aster"
+                      src={companyUISettings.header.logo.url}
+                      alt={companyUISettings.header.logo.alt}
                     />
                   </a>
                 </div>
@@ -157,11 +204,11 @@ function AppWrapper() {
                     justifyContent: "center",
                     height: "100%",
                     textAlign: "center",
-                    color: "rgb(34, 154, 97)",
-                    fontSize: "30px",
+                    color: companyUISettings.header.title.color,
+                    fontSize: companyUISettings.header.title.fontSize,
                   }}
                 >
-                  Refertazione Medica
+                  {companyUISettings.header.title.text}
                 </h2>
               </div>
             </div>
@@ -184,9 +231,12 @@ function AppWrapper() {
           <div className="container">
             <div className="row margin-t-20">
               <div className="col-md-12">
-                <p>&copy; 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo</p>
+                <p>{companyUISettings.footer.copyright}</p>
                 <p>
-                  Powered by <a href="https://www.dharmahealthcare.net">Dharma Healthcare</a>
+                  {companyUISettings.footer.poweredBy.text}{" "}
+                  <a href={companyUISettings.footer.poweredBy.link}>
+                    {companyUISettings.footer.poweredBy.name}
+                  </a>
                 </p>
               </div>
             </div>
@@ -203,6 +253,8 @@ function AppWrapper() {
       )}
       {/* QUI! Notifica aggiornamento visibile sempre */}
       <UpdateNotifier />
+      {/* Modal editor prescrizioni - sempre montato, visibile quando isEditingPrescription è true */}
+      <PrescriptionEditorModal />
     </div>
   );
 }

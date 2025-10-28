@@ -47,6 +47,7 @@ const GestioneReferti: React.FC = () => {
   const userId    = useSelector((s: RootState) => s.auth.userId);
   const token     = useSelector((s: RootState) => s.auth.token);
   const doctorCodeCurrentUser = useSelector((s: RootState) => s.auth.doctorCode);
+  const isTechnician = useSelector((s: RootState) => s.auth.isTechnician);
   const isLoading = useSelector((s: RootState) => s.loading.isLoading);
 
   /* Filtri globali */
@@ -54,7 +55,7 @@ const GestioneReferti: React.FC = () => {
     lastName, firstName, selectedDoctor, searchMode,
     fromDate, toDate, units, sectors, selectedPeriod,
     workareasData, clinicDepartmentsData, doctorsData,
-    searchByEacWithdrawalDate, completedExaminations
+    searchByEacWithdrawalDate, completedExaminations, completedPrescriptions
   } = useSelector((s: RootState) => s.filters);
 
   const registrations = useSelector((s: RootState) => s.registrations);
@@ -208,6 +209,16 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     searchByEacWithdrawalDate, completedExaminations
   ]);
 
+  // Filtro lato client per nascondere ai tecnici le accettazioni con prescrizioni
+  const filterPrescriptions = useCallback((data: any[]) => {
+    // Se non è tecnico o se completedPrescriptions è true, non filtrare
+    if (!isTechnician || completedPrescriptions) {
+      return data;
+    }
+    // Filtra gli Examination che hanno MedicalPrescriptionId valorizzato
+    return data.filter(item => !item.medicalPrescriptionId);
+  }, [isTechnician, completedPrescriptions]);
+
   type SearchParams = ReturnType<typeof getSearchParams>;
 
   const handleSearch = useCallback(async (p: SearchParams) => {
@@ -243,7 +254,8 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       });
       if (rsp.ok) {
         const data = await rsp.json();
-        dispatch(setRegistrations(data));
+        const filteredData = filterPrescriptions(data);
+        dispatch(setRegistrations(filteredData));
 
         if (data[0]) {
           const {
@@ -263,7 +275,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       } else { console.error("Failed to fetch worklist"); }
     } catch (err) { console.error("Error fetching worklist:", err); }
     finally       { dispatch(stopLoading()); }
-  }, [token, dispatch]);
+  }, [token, dispatch, filterPrescriptions]);
 
   /* ────────────── Effetti ────────────── */
 
@@ -482,7 +494,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         firstName: params.firstNameParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam),
+        completedExaminations: String(params.completedExaminationsParam)
       });
 
       //dispatch(resetExaminationState());
@@ -494,8 +506,9 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       });
       if (response.ok) {
         const data = await response.json();
+        const filteredData = filterPrescriptions(data);
 
-        const bozzaOnly = data.filter((d: any) => d.isDraft === true);
+        const bozzaOnly = filteredData.filter((d: any) => d.isDraft === true);
         dispatch(setRegistrations(bozzaOnly));
         if (bozzaOnly.length > 0) {
           dispatch(setSelectedExaminationId(bozzaOnly[0].examinationId));
@@ -539,7 +552,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         doctorCodes: params.doctorCodeParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam),
+        completedExaminations: String(params.completedExaminationsParam)
       });
 
       //dispatch(resetExaminationState());
@@ -551,7 +564,8 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       });
       if (response.ok) {
         const data = await response.json();
-        dispatch(setRegistrations(data));
+        const filteredData = filterPrescriptions(data);
+        dispatch(setRegistrations(filteredData));
         if (data && data.length > 0) {
           dispatch(setSelectedExaminationId(data[0].examinationId));
         } else {
@@ -717,13 +731,24 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
               dispatch(setFilters({ searchByEacWithdrawalDate: e.value }))
             }
           />
-          <Checkbox
-            label={labels.gestioneReferti.includiRefertiCompleti}
-            checked={completedExaminations}
-            onChange={(e) =>
-              dispatch(setFilters({ completedExaminations: e.value }))
-            }
-          />
+          {!isTechnician && (
+            <Checkbox
+              label={labels.gestioneReferti.includiRefertiCompleti}
+              checked={completedExaminations}
+              onChange={(e) =>
+                dispatch(setFilters({ completedExaminations: e.value }))
+              }
+            />
+          )}
+          {isTechnician && (
+            <Checkbox
+              label={labels.gestioneReferti.includiPrescrizioniComplete}
+              checked={completedPrescriptions}
+              onChange={(e) =>
+                dispatch(setFilters({ completedPrescriptions: e.value }))
+              }
+            />
+          )}
         </div>
       </div>
 

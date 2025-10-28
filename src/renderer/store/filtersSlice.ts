@@ -30,6 +30,7 @@ interface FiltersState {
   clinicDepartmentsData: ClinicDepartment[];
   doctorsData: Doctor[];
   completedExaminations: boolean;
+  completedPrescriptions: boolean;     // Includi prescrizioni complete (solo tecnici)
   searchByEacStartDate: boolean;       // Interroga per data inizio
   searchByEacWithdrawalDate: boolean;  // Includi referti completi
 }
@@ -48,6 +49,7 @@ const initialState: FiltersState = {
   clinicDepartmentsData: [],
   doctorsData: [],
   completedExaminations: false,
+  completedPrescriptions: false, // Di default mostra solo senza prescrizioni (tecnici)
   searchByEacStartDate: true,    // Di default interroga per data inizio
   searchByEacWithdrawalDate: false, // Di default non includo referti completi
 };

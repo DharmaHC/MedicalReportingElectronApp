@@ -3,16 +3,20 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface AuthState {
   userName: string | null;
-  email: string | null;   
+  email: string | null;
   token: string | null;
   userId: string | null;
   doctorCode: string | null;
   rememberMe: boolean;
   allowMedicalReportDigitalSignature: boolean;
   printReportWhenFinished: boolean;
-    /** ➜ PIN della smart-card, valido solo per la sessione */
+  /** ➜ PIN della smart-card, valido solo per la sessione */
   pin: string | null;
   userCN: string | null;
+  /** ➜ Flag che indica se l'utente è un tecnico radiologo */
+  isTechnician: boolean;
+  /** ➜ Codice identificativo del tecnico (username) */
+  technicianCode: string | null;
 }
 
 const initialState: AuthState = {
@@ -26,6 +30,8 @@ const initialState: AuthState = {
   printReportWhenFinished: false,
   pin: null,
   userCN: null,
+  isTechnician: false,
+  technicianCode: null,
 };
 
 const authSlice = createSlice({
@@ -45,6 +51,8 @@ const authSlice = createSlice({
       state.rememberMe = false;
       state.allowMedicalReportDigitalSignature = false;
       state.printReportWhenFinished = false;
+      state.isTechnician = false;
+      state.technicianCode = null;
     },
     setToken(state, action: PayloadAction<string | null>) {
       state.token = action.payload;
@@ -62,10 +70,18 @@ const authSlice = createSlice({
       state.doctorCode = action.payload;
     },
     setPin(state, action: PayloadAction<string | null>) {
-      state.pin = action.payload;},
+      state.pin = action.payload;
+    },
     setUserCN: (state, action) => {
-      state.userCN = action.payload;},
-   },
+      state.userCN = action.payload;
+    },
+    setIsTechnician(state, action: PayloadAction<boolean>) {
+      state.isTechnician = action.payload;
+    },
+    setTechnicianCode(state, action: PayloadAction<string | null>) {
+      state.technicianCode = action.payload;
+    },
+  },
 });
 
 export const {
@@ -78,6 +94,8 @@ export const {
   setDoctorCode,
   setPin,
   setUserCN,
+  setIsTechnician,
+  setTechnicianCode,
 } = authSlice.actions;
 
 export default authSlice.reducer;

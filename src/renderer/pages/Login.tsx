@@ -17,10 +17,12 @@ import {
   setAllowMedicalReportDigitalSignature,
   setprintReportWhenFinished,
   setUserCN,
+  setIsTechnician,
+  setTechnicianCode,
 } from "../store/authSlice";
 import "./Login.css";
 import { useNavigate } from "react-router-dom";
-import { url_info, url_login, url_doctors, url_passwordForgot } from "../utility/urlLib";
+import { url_info, url_login, url_doctors, url_passwordForgot, url_isTechnician } from "../utility/urlLib";
 import { RootState } from "../store";
 import { setFilters } from "../store/filtersSlice";
 
@@ -49,12 +51,12 @@ const Login = () => {
   const navigate = useNavigate();
   const token = useSelector((state: RootState) => state.auth.token);
 
-  /** Carica il nome utente da localStorage (se esiste). 
-   *  Se esiste, significa che l'utente aveva spuntato "remember me" in precedenza.
+  /** Carica il nome utente da localStorage per l'autocomplete.
+   *  Il campo username parte sempre vuoto per sicurezza.
    */
   const savedUsernames = getSavedUsernames();
-const [userName, setUserName] = useState(savedUsernames.length > 0 ? savedUsernames[savedUsernames.length - 1] : "");
-const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
+  const [userName, setUserName] = useState("");  // Campo sempre vuoto all'avvio
+  const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
 
 
   // Filtra l'elenco in base al testo digitato (per l'autocomplete)
@@ -82,6 +84,55 @@ const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
       }
     } catch (error) {
       console.error("Error fetching doctor signature info:", error);
+    }
+  };
+
+  // Funzione per verificare se l'utente è un tecnico radiologo
+  const checkTechnicianRole = async (userId: string, userName: string) => {
+    try {
+      console.log(`[TECHNICIAN CHECK] Calling ${url_isTechnician}?userId=${userId}`);
+
+      const response = await fetch(
+        `${url_isTechnician}?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      console.log(`[TECHNICIAN CHECK] Response status: ${response.status}`);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[TECHNICIAN CHECK] API Response:`, result);
+
+        const isTechnician = result.isTechnician || false;
+
+        console.log(`[TECHNICIAN CHECK] User ${userName} (${userId}) - isTechnician: ${isTechnician}`);
+
+        dispatch(setIsTechnician(isTechnician));
+
+        if (isTechnician) {
+          // Usa lo username come technicianCode
+          dispatch(setTechnicianCode(userName));
+          console.log(`[TECHNICIAN CHECK] ✅ User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
+        } else {
+          dispatch(setTechnicianCode(null));
+          console.log(`[TECHNICIAN CHECK] ℹ️ User ${userName} is NOT a technician (is a doctor or other role)`);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error(`[TECHNICIAN CHECK] ❌ Failed to check technician role - Status: ${response.status}`, errorText);
+        dispatch(setIsTechnician(false));
+        dispatch(setTechnicianCode(null));
+      }
+    } catch (error) {
+      console.error("[TECHNICIAN CHECK] ❌ Error checking technician role:", error);
+      dispatch(setIsTechnician(false));
+      dispatch(setTechnicianCode(null));
     }
   };
 
@@ -146,11 +197,13 @@ const [usernamesList, setUsernamesList] = useState<string[]>(savedUsernames);
 
         dispatch(setUserId(userId));
         dispatch(setDoctorCode(doctorCode));
-    		dispatch(setprintReportWhenFinished(printReportWhenFinished));
+        dispatch(setprintReportWhenFinished(printReportWhenFinished));
         dispatch(setUserCN(userCN));
-		if (doctorCode) {
+        if (doctorCode) {
           fetchDoctorSignatureInfo(doctorCode.trim());
         }
+        // Verifica se l'utente è un tecnico radiologo
+        await checkTechnicianRole(userId, userName);
       } else {
         console.error("Failed to fetch user info");
       }
@@ -276,9 +329,9 @@ return (<>
         <Form
           /** Imposta i valori iniziali nel form */
           initialValues={{
-            userName: userName,
+            userName: "",
             password: "",
-            rememberMe: !!userName
+            rememberMe: false
       }}
           onSubmit={(dataItem) => handleSubmit({ ...dataItem, userName })}
           render={(formRenderProps) => (
