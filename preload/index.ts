@@ -24,6 +24,7 @@ console.log("PRELOAD PARTITO!");
       on: (channel: string, listener: (...args: any[]) => void) => ipcRenderer.on(channel, listener),
       once: (channel: string, listener: (...args: any[]) => void) => ipcRenderer.once(channel, listener),
       removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
+      invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
     }
   });
 
@@ -31,6 +32,11 @@ console.log("PRELOAD PARTITO!");
   contextBridge.exposeInMainWorld('appSettings', {
     get: () => ipcRenderer.invoke('appSettings:get'),
     reload: () => ipcRenderer.invoke('appSettings:reload'),
+  });
+
+  // Espone API per company UI settings
+  contextBridge.exposeInMainWorld('companyUISettings', {
+    get: () => ipcRenderer.invoke('get-company-ui-settings'),
   });
 
   contextBridge.exposeInMainWorld('electronAPI', {

@@ -8,7 +8,7 @@ import * as pkcs11js from 'pkcs11js'; // smart-card driver
 import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
-import { Settings } from '../globals';
+import { Settings, CompanyFooterSettings } from '../globals';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
@@ -26,6 +26,59 @@ export function loadSettings(): Settings {
   } catch (err) {
     throw new Error(`Errore lettura/parsing sign-settings.json: ${err}`);
   }
+}
+
+/* █████████████████ COMPANY FOOTER SETTINGS █████████████████ */
+function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
+  const baseDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets')
+    : path.join(process.cwd(), 'src/renderer/assets');
+
+  const settingsPath = path.join(baseDir, 'company-footer-settings.json');
+
+  // Fallback a valori di default se il file non esiste
+  if (!fs.existsSync(settingsPath)) {
+    console.warn('company-footer-settings.json non trovato, uso valori default');
+    return {
+      "DEFAULT": {
+        footerImageWidth: 160,
+        footerImageHeight: 32,
+        blankFooterHeight: 15,
+        yPosFooterImage: 15,
+        footerImageXPositionOffset: 0
+      }
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    return JSON.parse(raw) as Record<string, CompanyFooterSettings>;
+  } catch (err) {
+    console.error('Errore caricamento company-footer-settings.json:', err);
+    return {
+      "DEFAULT": {
+        footerImageWidth: 160,
+        footerImageHeight: 32,
+        blankFooterHeight: 15,
+        yPosFooterImage: 15,
+        footerImageXPositionOffset: 0
+      }
+    };
+  }
+}
+
+export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
+  const allSettings = loadCompanyFooterSettings();
+  const key = (companyId ?? '').trim().toUpperCase();
+
+  // Cerca prima la company specifica, poi DEFAULT
+  return allSettings[key] || allSettings["DEFAULT"] || {
+    footerImageWidth: 160,
+    footerImageHeight: 32,
+    blankFooterHeight: 15,
+    yPosFooterImage: 15,
+    footerImageXPositionOffset: 0
+  };
 }
 
 /* █████████████████ LOG █████████████████ */
@@ -63,7 +116,7 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     log('start');
 
     // 1. Decora PDF con logo/footer (senza dicitura CN)
-    let pdfBuf = Buffer.from(req.pdfBase64, 'base64');
+    let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
     pdfBuf = await decoratePdf(pdfBuf, req, currentSettings);
 
     // 2. Firma digitale
@@ -122,7 +175,7 @@ function readFileAsync(path: string): Promise<Buffer> {
   });
 }
 
-async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings) {
+async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings): Promise<Buffer> {
   const doc = await PDFDocument.load(pdf);
 
   // Embedding font
@@ -131,6 +184,9 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
   const {
     logoPath, footerImgPath, footerTextDefault
   } = getCompanyAssets(req.companyId);
+
+  // ⭐ NUOVO: Carica settings specifici per company
+  const companyFooterSettings = getCompanyFooterSettings(req.companyId);
 
   const [logoBytes, footBytes] = await Promise.all([
     readFileAsync(logoPath),
@@ -141,17 +197,18 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
 
   const footerTxt = req.footerText ?? footerTextDefault;
 
+  // Settings generici (logo, testo) - rimangono invariati
   const {
     yPosLogo, logoWidth, logoHeight,
-    yPosFooterImage, footerImageWidth, footerImageHeight, footerImageXPositionOffset,
-    footerTextFontFamily, footerTextPointFromBottom, footerCompanyDataPointFromBottom,   footerCompanyDataMultiline, footerTextFontSize
+    footerTextFontFamily, footerTextPointFromBottom,
+    footerCompanyDataPointFromBottom, footerCompanyDataMultiline, footerTextFontSize
   } = settings;
 
   const pages = doc.getPages();
   if (pages.length === 0) throw new Error("PDF senza pagine effettive!");
 
-  // 1. Copertura bianca
-  await coverFooterWithWhite(doc, settings.blankFooterHeight || 30);
+  // 1. Copertura bianca - ⭐ USA settings company-specific
+  await coverFooterWithWhite(doc, companyFooterSettings.blankFooterHeight);
 
   // 2. Manipolazioni pagine
   for (const p of pages) {
@@ -181,20 +238,21 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
       height: logoHeight
     });
 
-    // Footer image
-    let footerX = (pageWidth - footerImageWidth) / 2.0 + (footerImageXPositionOffset || 0);
-    let footerY = yPosFooterImage;
+    // Footer image - ⭐ USA settings company-specific
+    let footerX = (pageWidth - companyFooterSettings.footerImageWidth) / 2.0 +
+                  (companyFooterSettings.footerImageXPositionOffset || 0);
+    let footerY = companyFooterSettings.yPosFooterImage;
     if (footerY > pageHeight) footerY = 10;
     p.drawImage(footImg, {
       x: footerX,
       y: footerY,
-      width: footerImageWidth,
-      height: footerImageHeight
+      width: companyFooterSettings.footerImageWidth,
+      height: companyFooterSettings.footerImageHeight
     });
   }
 
   const savedDoc = await doc.save();
-  return Buffer.from(savedDoc as Uint8Array);
+  return Buffer.from(savedDoc) as Buffer;
 }
 
 /* ██████ AGGIUNGI DICITURA CN ULTIMA PAGINA ██████ */
@@ -240,7 +298,7 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
     baseY += 10;
   }
   const savedDoc = await doc.save();
-  return Buffer.from(savedDoc as Uint8Array);
+  return Buffer.from(savedDoc) as Buffer;
 }
 
 /* ██████ GESTIONE ASSET E FONT ██████ */

@@ -1023,12 +1023,18 @@ const renderPinDialog = () =>
 
   /**
  * Chiude gli studi attualmente aperti nel viewer RemotEye senza chiudere l'app.
+ * Se non ci sono studi aperti (viewerAccNumsRef vuoto), non invia il comando di chiusura.
  */
   function closeViewer() {
+    // Se non ci sono studi aperti, non fare nulla
+    if (viewerAccNumsRef.current.length === 0) {
+      return;
+    }
+
     // Svuota la lista locale degli accNum aperti
     viewerAccNumsRef.current = [];
 
-    // Costruisce l’URL JNLP per inviare il comando "genericRemoveAllFromMemory"
+    // Costruisce l'URL JNLP per inviare il comando "genericRemoveAllFromMemory"
     const BASE = "http://172.16.18.52/LPW/Display";
     const USER = "radiologia";
     const PWD  = "radiologia";
@@ -1300,6 +1306,12 @@ if (printSignedPdf && signedPdfBase64) {
     const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
     if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
       try {
+        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
+        const companyFooterSettings = await window.electron.ipcRenderer.invoke(
+          'get-company-footer-settings',
+          companyId
+        );
+
         const pdfBytes = await pdfBlob.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
@@ -1310,13 +1322,15 @@ if (printSignedPdf && signedPdfBase64) {
             x: 0,
             y: 0,
             width: width,
-            height: blankFooterHeight,
+            height: companyFooterSettings?.blankFooterHeight || blankFooterHeight, // ⭐ USA settings company-specific
             color: rgb(1, 1, 1)
           });
         });
 
         const modifiedPdfBytes = await pdfDoc.save();
-        finalPdfBlob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
+        // Convert to standard Uint8Array to ensure compatibility
+        const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
+        finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
       } catch (error) {
         console.error("Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
@@ -1401,7 +1415,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
   // 9. Salva e restituisci il nuovo Blob PDF
   const modifiedPdfBytes = await pdfDoc.save();
-  return new Blob([modifiedPdfBytes], { type: "application/pdf" });
+  // Convert to standard Uint8Array to ensure compatibility
+  const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
+  return new Blob([pdfBytesArray], { type: "application/pdf" });
 }
 
 // Gestisce il download del referto PDF (funzionalità attualmente nascosta nell'UI).
@@ -1479,6 +1495,16 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       isSavingDraft: isDraft, // Flag esplicito per il salvataggio bozza.
     };
 
+    // LOG per debug: verifica i valori inviati al backend
+    console.log("📤 ProcessReport API Call:", {
+      examinationId: body.examinationId,
+      isPdfSigned: body.isPdfSigned,
+      isReportFinalized: body.isReportFinalized,
+      isSavingDraft: body.isSavingDraft,
+      hasP7m: p7mBase64 !== null,
+      hasPdf: signedPdfBase64 !== null,
+    });
+
     try {
       const response = await fetch(url_processReport, {
         method: "POST",
@@ -1490,7 +1516,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       });
 
       if (response.ok) {
-        console.log("Referto processato con successo (salvato/inviato).");
+        const responseData = await response.json().catch(() => null);
+        console.log("✅ Referto processato con successo (salvato/inviato).");
+        console.log("📥 Response data:", responseData);
         setErrorMessage(null); // Pulisce eventuali messaggi di errore precedenti.
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
         setIsModified(false);      // Resetta il flag di modifica.
