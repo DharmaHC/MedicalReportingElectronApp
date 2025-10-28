@@ -160,10 +160,15 @@ const dispatch = useDispatch();
         },
       });
       if (response.ok) {
-        const data = await response.json();
-        setDoctorPropeName(data.doctorDescription);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          setDoctorPropeName(data.doctorDescription);
+        } else {
+          console.error("Response is not JSON");
+        }
       } else {
-        console.error("Failed to fetch doctors");
+        console.error("Failed to fetch doctors:", response.status);
       }
     } catch (error) {
       console.error("Error fetching doctors:", error);
