@@ -1306,6 +1306,12 @@ if (printSignedPdf && signedPdfBase64) {
     const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
     if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
       try {
+        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
+        const companyFooterSettings = await window.electron.ipcRenderer.invoke(
+          'get-company-footer-settings',
+          companyId
+        );
+
         const pdfBytes = await pdfBlob.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
@@ -1316,7 +1322,7 @@ if (printSignedPdf && signedPdfBase64) {
             x: 0,
             y: 0,
             width: width,
-            height: blankFooterHeight,
+            height: companyFooterSettings?.blankFooterHeight || blankFooterHeight, // ⭐ USA settings company-specific
             color: rgb(1, 1, 1)
           });
         });

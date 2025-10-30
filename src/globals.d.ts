@@ -28,6 +28,37 @@ interface Settings {
   highlightPlaceholder: boolean;
 }
 
+interface CompanyFooterSettings {
+  footerImageWidth: number;
+  footerImageHeight: number;
+  blankFooterHeight: number;
+  yPosFooterImage: number;
+  footerImageXPositionOffset: number;
+}
+
+interface CompanyUISettings {
+  header: {
+    logo: {
+      url: string;
+      link: string;
+      alt: string;
+    };
+    title: {
+      text: string;
+      color: string;
+      fontSize: string;
+    };
+  };
+  footer: {
+    copyright: string;
+    poweredBy: {
+      text: string;
+      link: string;
+      name: string;
+    };
+  };
+}
+
 declare global {
   interface Window {
     electron: {
@@ -36,13 +67,17 @@ declare global {
         on: (channel: string, listener: (...args: any[]) => void) => void;
         once: (channel: string, listener: (...args: any[]) => void) => void;
         removeAllListeners: (channel: string) => void;
+        invoke: (channel: string, ...args: any[]) => Promise<any>;
       }
     },
     appSettings: {
       get: () => Promise<Settings>;
       reload: () => Promise<Settings>;
+    },
+    companyUISettings: {
+      get: () => Promise<CompanyUISettings>;
     }
   }
 }
 
-export { Settings};
+export { Settings, CompanyFooterSettings, CompanyUISettings };

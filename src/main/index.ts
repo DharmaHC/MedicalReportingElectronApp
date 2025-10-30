@@ -264,6 +264,78 @@ ipcMain.handle('appSettings:reload', async () => {
   return await loadSettingsFileCached();
 });
 
+// ------ COMPANY FOOTER SETTINGS IPC ------
+ipcMain.handle('get-company-footer-settings', async (_event, companyId: string) => {
+  const { getCompanyFooterSettings } = require('./signPdfService');
+  return getCompanyFooterSettings(companyId);
+});
+
+// ------ COMPANY UI SETTINGS IPC ------
+ipcMain.handle('get-company-ui-settings', async () => {
+  const baseDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets')
+    : path.join(process.cwd(), 'src/renderer/assets');
+
+  const settingsPath = path.join(baseDir, 'company-ui-settings.json');
+
+  // Fallback a valori di default se il file non esiste
+  if (!fs.existsSync(settingsPath)) {
+    console.warn('company-ui-settings.json non trovato, uso valori default');
+    return {
+      header: {
+        logo: {
+          url: "https://referti.asterdiagnostica.it/images/logo.png",
+          link: "http://www.asterdiagnostica.it/",
+          alt: "Logo Aster"
+        },
+        title: {
+          text: "Refertazione Medica",
+          color: "rgb(34, 154, 97)",
+          fontSize: "30px"
+        }
+      },
+      footer: {
+        copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+        poweredBy: {
+          text: "Powered by",
+          link: "https://www.dharmahealthcare.net",
+          name: "Dharma Healthcare"
+        }
+      }
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Errore caricamento company-ui-settings.json:', err);
+    // Ritorna valori di default in caso di errore
+    return {
+      header: {
+        logo: {
+          url: "https://referti.asterdiagnostica.it/images/logo.png",
+          link: "http://www.asterdiagnostica.it/",
+          alt: "Logo Aster"
+        },
+        title: {
+          text: "Refertazione Medica",
+          color: "rgb(34, 154, 97)",
+          fontSize: "30px"
+        }
+      },
+      footer: {
+        copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+        poweredBy: {
+          text: "Powered by",
+          link: "https://www.dharmahealthcare.net",
+          name: "Dharma Healthcare"
+        }
+      }
+    };
+  }
+});
+
 // ------ PDF SIGN IPC ------
 ipcMain.handle('sign-pdf', async (_e, req) => {
   return signPdfService(req);
