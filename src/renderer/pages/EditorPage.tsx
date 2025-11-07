@@ -35,6 +35,7 @@ import {
 } from "../utility/urlLib";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { RootState } from "../store";
+import type { EmergencyWorkaround } from "../../globals";
 import PdfPreview from "../components/PdfPreview";
 import {
   TreeView,
@@ -154,6 +155,14 @@ const logToFile = (msg: string, details?: any) => {
 
 
 
+  // Stato per la configurazione del workaround di emergenza
+  const [emergencyWorkaround, setEmergencyWorkaround] = useState<EmergencyWorkaround>({
+    enabled: false,
+    bypassPin: false,
+    bypassSignature: false,
+    overrideDoctorName: null
+  });
+
   useEffect(() => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
@@ -164,6 +173,31 @@ const logToFile = (msg: string, details?: any) => {
         setBlankFooterHeight(settings.blankFooterHeight ?? 30);
       });
     }, []);
+
+  useEffect(() => {
+    // Carica le impostazioni UI della company, incluso il workaround di emergenza
+    window.companyUISettings.get().then(settings => {
+      const workaround = settings.emergencyWorkaround || {
+        enabled: false,
+        bypassPin: false,
+        bypassSignature: false,
+        overrideDoctorName: null
+      };
+      setEmergencyWorkaround(workaround);
+
+      // Log visibile quando il workaround è attivo
+      if (workaround.enabled) {
+        console.warn('â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”');
+        console.warn('âš ï¸  EMERGENCY WORKAROUND ATTIVO  âš ï¸');
+        console.warn(`   Bypass PIN: ${workaround.bypassPin}`);
+        console.warn(`   Bypass Firma: ${workaround.bypassSignature}`);
+        if (workaround.overrideDoctorName) {
+          console.warn(`   Override Medico: ${workaround.overrideDoctorName}`);
+        }
+        console.warn('â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”');
+      }
+    });
+  }, []);
 
 
   useEffect(() => {
@@ -179,12 +213,31 @@ const logToFile = (msg: string, details?: any) => {
 }, []);
 
 
-  /* ────────────────────────────────────────────────────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   /* Lista globale degli studi aperti per questa pagina (RemotEye) */
-  /* ────────────────────────────────────────────────────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const viewerAccNumsRef = useRef<string[]>([]);   // Unica istanza per memorizzare gli accession number degli studi aperti nel viewer esterno.
   const dispatch = useDispatch(); // Hook per inviare azioni Redux.
   const reduxStore = useStore<RootState>(); // Hook per accedere all'istanza dello store Redux (usato per getState).
+
+  // Helper function per rimuovere titoli dal nome del medico
+  const removeTitlesFromName = (name: string | null): string | null => {
+    if (!name) return null;
+    // Rimuove titoli comuni italiani: Dr., Dott., Dott.ssa, Dott.re, Prof., Prof.ssa, etc.
+    return name
+      .replace(/^(Dr\.?|Dott\.?|Dott\.ssa|Dott\.re|Prof\.?|Prof\.ssa)\s+/gi, '')
+      .trim();
+  };
+
+  // Configurazione workaround da company-ui-settings.json
+  const BYPASS_PIN_CHECK = emergencyWorkaround.enabled && emergencyWorkaround.bypassPin;
+  const BYPASS_PIN_VALUE = "12345678"; // PIN fittizio per bypass
+  const BYPASS_SIGNATURE = emergencyWorkaround.enabled && emergencyWorkaround.bypassSignature;
+
+  // Se overrideDoctorName è specificato nel JSON, usalo; altrimenti usa il nome dell'utente corrente
+  const OVERRIDE_USER_CN = emergencyWorkaround.overrideDoctorName
+    ? removeTitlesFromName(emergencyWorkaround.overrideDoctorName)
+    : removeTitlesFromName(userName);
 
   // Gestione Pin della smart-card.
   const [isPinDialogVisible, setIsPinDialogVisible] = useState(false);
@@ -199,6 +252,13 @@ const logToFile = (msg: string, details?: any) => {
 
   // Recupera in modo sicuro il PIN dell'utente per la firma digitale.
   async function getSessionPin(): Promise<string | null> {
+    // âš ï¸ BYPASS TEMPORANEO - Salta il controllo PIN âš ï¸
+    if (BYPASS_PIN_CHECK) {
+      console.warn('âš ï¸ BYPASS PIN ATTIVO - Usando PIN fittizio per recupero referti');
+      dispatch(setPin(BYPASS_PIN_VALUE)); // Salva il PIN fittizio nello store
+      return BYPASS_PIN_VALUE;
+    }
+
     // 1) se ho già il PIN in store, lo restituisco subito
     const existingPin = reduxStore.getState().auth.pin;
     if (existingPin) {
@@ -265,6 +325,19 @@ const renderPinDialog = () =>
           try {
             console.log('Verifica Pin');
             setPinError(null);
+
+            // âš ï¸ BYPASS TEMPORANEO - Salta la verifica del PIN âš ï¸
+            if (BYPASS_PIN_CHECK) {
+              console.warn('âš ï¸ BYPASS PIN ATTIVO - Accettando qualsiasi PIN per recupero referti');
+              dispatch(setPin(BYPASS_PIN_VALUE));
+              hidePinDialog();
+              if (pinDialogResolver.current) {
+                pinDialogResolver.current(BYPASS_PIN_VALUE);
+                pinDialogResolver.current = null;
+              }
+              return;
+            }
+
             await (window as any).nativeSign.verifyPin(pinInput);
             dispatch(setPin(pinInput));
             hidePinDialog();
@@ -464,13 +537,13 @@ const renderPinDialog = () =>
   const handleItemClick = (event: TreeViewItemClickEvent) => {
     const item = event.item as TreeNode;
 
-    // ➜ 1. se l’item ha figli  ⇒  toggle espansione
+    // âžœ 1. se lâ€™item ha figli  â‡’  toggle espansione
     if (item.items && item.items.length) {
       setTreeData(prev => updateExpanded(prev, item));
-      return; // niente “frase” per i nodi padre
+      return; // niente â€œfraseâ€ per i nodi padre
     }
 
-    // ➜ 2. altrimenti (foglia)  ⇒  inserisci la frase
+    // âžœ 2. altrimenti (foglia)  â‡’  inserisci la frase
     handlePhraseClick(item.text);
   };
 
@@ -529,7 +602,7 @@ const renderPinDialog = () =>
 
     try {
       const response = await fetch(
-        `${url_getPatientReportsNoPdf}?patientId=${patientId}&examinationId=${selectedExaminationId}`,
+        `${url_getPatientReportsNoPdf()}?patientId=${patientId}&examinationId=${selectedExaminationId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.ok) {
@@ -672,7 +745,7 @@ const renderPinDialog = () =>
     /* 3. fetch: Esegue la chiamata API per ottenere le frasi. */
     try {
       const rsp = await fetch(
-        `${url_getPredefinedTexts}?${qs.toString()}`, // URL con query string.
+        `${url_getPredefinedTexts()}?${qs.toString()}`, // URL con query string.
         {
           method : "POST", // Metodo POST per inviare `linkedResultsList` nel body.
           headers: {
@@ -836,7 +909,7 @@ const renderPinDialog = () =>
       try {
         // Chiamata API per inviare l'HTML e ricevere PDF/RTF.
         const response = await fetch(
-          `${url_send_singleReportHTML}?${queryParams.toString()}`,
+          `${url_send_singleReportHTML()}?${queryParams.toString()}`,
           {
             method: "POST",
             headers: {
@@ -1064,7 +1137,7 @@ const renderPinDialog = () =>
 
   // Stampa referto PDF o RTF, gestendo la firma digitale se disponibile.
 // Componente Modal per l'anteprima di stampa (con timeout e loader)
-const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
+const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void, onCloseAndSave?: () => void): void => {
   const pdfUrl = URL.createObjectURL(pdfBlob);
 
   // 1. Mostra loader temporaneo subito
@@ -1154,16 +1227,36 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
       transition: background-color 0.2s;
     `;
 
+    const cancelBtn = document.createElement('button');
+    cancelBtn.innerHTML = `
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+      </svg>
+      Annulla
+    `;
+    cancelBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      transition: background-color 0.2s;
+    `;
+
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = `
       <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
-        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+        <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
       </svg>
       Chiudi
     `;
     closeBtn.style.cssText = `
       padding: 10px 20px;
-      background: #6b7280;
+      background: #10b981;
       color: white;
       border: none;
       border-radius: 8px;
@@ -1177,8 +1270,10 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
     // Hover effects
     printBtn.onmouseover = () => printBtn.style.background = '#2563eb';
     printBtn.onmouseout = () => printBtn.style.background = '#3b82f6';
-    closeBtn.onmouseover = () => closeBtn.style.background = '#4b5563';
-    closeBtn.onmouseout = () => closeBtn.style.background = '#6b7280';
+    cancelBtn.onmouseover = () => cancelBtn.style.background = '#dc2626';
+    cancelBtn.onmouseout = () => cancelBtn.style.background = '#ef4444';
+    closeBtn.onmouseover = () => closeBtn.style.background = '#059669';
+    closeBtn.onmouseout = () => closeBtn.style.background = '#10b981';
 
     // Contenitore per l'iframe
     const iframeContainer = document.createElement('div');
@@ -1200,7 +1295,10 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
 
     // Assembla il modal
     buttonContainer.appendChild(printBtn);
-    buttonContainer.appendChild(closeBtn);
+    buttonContainer.appendChild(cancelBtn);
+    if (onCloseAndSave) {
+      buttonContainer.appendChild(closeBtn);
+    }
     header.appendChild(title);
     header.appendChild(buttonContainer);
     iframeContainer.appendChild(iframe);
@@ -1220,7 +1318,14 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
       URL.revokeObjectURL(pdfUrl);
     };
 
-    closeBtn.onclick = closeModal;
+    cancelBtn.onclick = closeModal;
+
+    if (onCloseAndSave) {
+      closeBtn.onclick = (): void => {
+        onCloseAndSave(); // Salva e chiudi l'editor
+        closeModal();
+      };
+    }
 
     // Chiudi cliccando fuori dal modal
     modal.onclick = (e): void => {
@@ -1304,46 +1409,82 @@ if (printSignedPdf && signedPdfBase64) {
     // NOTA: Questo viene applicato SOLO per PDF NON firmati, perché i PDF firmati
     // hanno già il footer gestito in signPdfService.ts
     const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
+
+    // ðŸ” DEBUG LOG
+    console.log('[FOOTER DEBUG] printSignedPdf:', printSignedPdf);
+    console.log('[FOOTER DEBUG] signedPdfBase64:', signedPdfBase64 ? 'present' : 'null');
+    console.log('[FOOTER DEBUG] lastSignedPdfBase64:', lastSignedPdfBase64 ? 'present' : 'null');
+    console.log('[FOOTER DEBUG] isPdfSigned:', isPdfSigned);
+    console.log('[FOOTER DEBUG] companyId:', companyId);
+    console.log('[FOOTER DEBUG] companyId.trim():', companyId?.trim());
+    console.log('[FOOTER DEBUG] Condition check:', !isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN"));
+
     if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
+      console.log('[FOOTER DEBUG] âœ… Entrato nel blocco di copertura footer!');
       try {
-        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
+        // â­ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
         const companyFooterSettings = await window.electron.ipcRenderer.invoke(
           'get-company-footer-settings',
           companyId
         );
 
+        console.log('[FOOTER DEBUG] companyFooterSettings:', companyFooterSettings);
+
         const pdfBytes = await pdfBlob.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
-        pages.forEach(page => {
-          const { width } = page.getSize();
+        console.log('[FOOTER DEBUG] Numero pagine:', pages.length);
+
+        const finalHeight = companyFooterSettings?.blankFooterHeight || blankFooterHeight;
+        console.log('[FOOTER DEBUG] blankFooterHeight usato:', finalHeight);
+        console.log('[FOOTER DEBUG] blankFooterHeight da settings:', companyFooterSettings?.blankFooterHeight);
+        console.log('[FOOTER DEBUG] blankFooterHeight fallback:', blankFooterHeight);
+
+        pages.forEach((page, index) => {
+          const { width, height } = page.getSize();
+          console.log(`[FOOTER DEBUG] Pagina ${index + 1}: width=${width}, height=${height}`);
           page.drawRectangle({
             x: 0,
             y: 0,
             width: width,
-            height: companyFooterSettings?.blankFooterHeight || blankFooterHeight, // ⭐ USA settings company-specific
+            height: finalHeight, // â­ USA settings company-specific
             color: rgb(1, 1, 1)
           });
+          console.log(`[FOOTER DEBUG] Rettangolo bianco disegnato: x=0, y=0, width=${width}, height=${finalHeight}`);
         });
 
         const modifiedPdfBytes = await pdfDoc.save();
         // Convert to standard Uint8Array to ensure compatibility
         const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
         finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
+        console.log('[FOOTER DEBUG] âœ… PDF modificato con successo!');
       } catch (error) {
-        console.error("Errore durante la manipolazione del PDF:", error);
+        console.error("[FOOTER DEBUG] âŒ Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
       }
+    } else {
+      console.log('[FOOTER DEBUG] âŒ NON entrato nel blocco di copertura footer');
     }
 
     const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
     //const newPdfBlob = finalPdfBlob; // Usa il PDF finale senza margini aggiuntivi
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
-      showPrintPreviewModal(newPdfBlob, () => {
-        executePrint(newPdfBlob);
-      });
+      showPrintPreviewModal(
+        newPdfBlob,
+        () => {
+          executePrint(newPdfBlob);
+        },
+        () => {
+          // Chiudi senza stampare: naviga indietro come fa executePrint ma senza stampare
+          dispatch(clearSelectedMoreExams());
+          dispatch(resetExaminationState());
+          dispatch(clearRegistrations());
+          closeViewer();
+          navigate("/", { state: { reload: true } });
+        }
+      );
     } else {
       executePrint(newPdfBlob);
     }
@@ -1496,7 +1637,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     };
 
     // LOG per debug: verifica i valori inviati al backend
-    console.log("📤 ProcessReport API Call:", {
+    console.log("ðŸ“¤ ProcessReport API Call:", {
       examinationId: body.examinationId,
       isPdfSigned: body.isPdfSigned,
       isReportFinalized: body.isReportFinalized,
@@ -1506,7 +1647,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     });
 
     try {
-      const response = await fetch(url_processReport, {
+      const response = await fetch(url_processReport(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1517,8 +1658,8 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
       if (response.ok) {
         const responseData = await response.json().catch(() => null);
-        console.log("✅ Referto processato con successo (salvato/inviato).");
-        console.log("📥 Response data:", responseData);
+        console.log("âœ… Referto processato con successo (salvato/inviato).");
+        console.log("ðŸ“¥ Response data:", responseData);
         setErrorMessage(null); // Pulisce eventuali messaggi di errore precedenti.
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
         setIsModified(false);      // Resetta il flag di modifica.
@@ -1564,8 +1705,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       let finalPdfToSend: string | null = reportData.pdfContent; // PDF da inviare (inizialmente quello generato).
       let p7mFileToSend: string | null = null; // File P7M (firma CAdES), inizialmente null.
 
+      // âš ï¸ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
       // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
-      if (allowMedicalReportDigitalSignature && !isDraft) {
+      if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
         // 1. Salvataggio bozza "tecnica" prima della firma
         await callProcessReportApi(
         finalPdfToSend, // PDF originale da salvare come bozza prima della firma.
@@ -1588,15 +1730,26 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
           // Logica di firma (MRAS o endpoint locale).
           if (useMRAS) { // Utilizza il servizio MRAS (Electron native).
             const pin = reduxStore.getState().auth.pin;
-            const userCN = reduxStore.getState().auth.userCN;
+
+            // âš ï¸ BYPASS FIRMA DIGITALE - Solo header/footer per recupero referti âš ï¸
+            let footerText = null;
+            if (BYPASS_SIGNATURE) {
+              console.warn(`âš ï¸ BYPASS FIRMA DIGITALE ATTIVO - Solo header/footer, NO firma reale`);
+              console.warn(`âš ï¸ Footer personalizzato: "Referto firmato digitalmente da ${OVERRIDE_USER_CN}"`);
+
+              // Specifica il footer text manualmente con il nome del medico desiderato
+              footerText = `Referto firmato digitalmente da ${OVERRIDE_USER_CN}`;
+            }
+
             const signResponse = await (window as any).nativeSign.signPdf({
               pdfBase64 : reportData.pdfContent,
               companyId : companyId,
-              footerText: null,
+              footerText: footerText,
               useRemote : null,
               otpCode   : null,
               pin       : pin,
-              userCN    : userCN,
+              userCN    : reduxStore.getState().auth.userCN,
+              bypassSignature: BYPASS_SIGNATURE, // âš ï¸ BYPASS: solo header/footer, no firma
             });
             finalPdfToSend = signResponse.signedPdfBase64; // PDF firmato.
             p7mFileToSend  = signResponse.p7mBase64;      // File P7M.
@@ -1729,7 +1882,7 @@ const handleResultClick = async (result: any) => {
 
   try {
     const response = await fetch(
-      `${url_getPatientSignedReport}?${params.toString()}`,
+      `${url_getPatientSignedReport()}?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -2116,7 +2269,7 @@ const handleResultClick = async (result: any) => {
                 if (exitReason === "app") {
                   window.electron.ipcRenderer.send('proceed-close');
                 } else {
-                  // Naviga fuori dall’editor
+                  // Naviga fuori dallâ€™editor
                   navigate("/", { state: { reload: false } });
                 }
               }}
@@ -2167,7 +2320,7 @@ const handleResultClick = async (result: any) => {
       {/* Dialogo di Caricamento durante il Salvataggio/Firma */}
       {isProcessing && (
         <Dialog               /*  tolto modal / closeButton  */
-          title="Elaborazione in corso…"
+          title="Elaborazione in corsoâ€¦"
           onClose={() => {}}   /*  disabilita la chiusura manuale  */
         >
           <div style={{ padding: "30px 20px", textAlign: "center" }}>
@@ -2176,8 +2329,8 @@ const handleResultClick = async (result: any) => {
             />
             <p>
               {allowMedicalReportDigitalSignature && !isDraftOperation
-                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto…"
-                : "Attendere, stiamo completando il salvataggio del referto…"}
+                ? "Attendere, stiamo completando il salvataggio e la firma digitale del refertoâ€¦"
+                : "Attendere, stiamo completando il salvataggio del refertoâ€¦"}
             </p>
           </div>
         </Dialog>

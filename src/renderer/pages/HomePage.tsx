@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   Splitter,
   SplitterPaneProps,
@@ -81,7 +81,7 @@ const dispatch = useDispatch();
     }
 
     try {
-      const response = await fetch(url_changePassword, {
+      const response = await fetch(url_changePassword(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,7 +107,7 @@ const dispatch = useDispatch();
       setConfirmPassword("");
       setChangePasswordVisible(false);
     } catch (error) {
-      alert("Errore durante il cambio password, riprova più tardi.");
+      alert("Errore durante il cambio password, riprova piÃ¹ tardi.");
       console.error(error);
     }
   };
@@ -150,11 +150,11 @@ const dispatch = useDispatch();
   }
 };
 
-  // FetchDoctorInfo”
+  // FetchDoctorInfoâ€
   const fetchDoctorInfo = async () => {
     if (!userName || !token) return;
     try {
-      const response = await fetch(`${url_doctors_id}?userName=${userName}`, {
+      const response = await fetch(`${url_doctors_id()}?userName=${userName}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -261,7 +261,7 @@ const dispatch = useDispatch();
                 )}
               </div>
 
-              {/* ---- (3) DropDownButton “Profilo” con gearIcon */}
+              {/* ---- (3) DropDownButton â€œProfiloâ€ con gearIcon */}
               <div className="header-right">
         				<ProfileDropDown onLogout={handleLogout} onChangePassword={handleChangePasswordSubmit} onLogoutAndExit={handleLogoutAndExit}/>
               </div>

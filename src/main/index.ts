@@ -9,6 +9,8 @@ import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
+import { loadConfigJson, initializeAllConfigs } from './configManager';
+import type { CompanyUISettings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -272,68 +274,37 @@ ipcMain.handle('get-company-footer-settings', async (_event, companyId: string) 
 
 // ------ COMPANY UI SETTINGS IPC ------
 ipcMain.handle('get-company-ui-settings', async () => {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
-
-  const settingsPath = path.join(baseDir, 'company-ui-settings.json');
-
-  // Fallback a valori di default se il file non esiste
-  if (!fs.existsSync(settingsPath)) {
-    console.warn('company-ui-settings.json non trovato, uso valori default');
-    return {
-      header: {
-        logo: {
-          url: "https://referti.asterdiagnostica.it/images/logo.png",
-          link: "http://www.asterdiagnostica.it/",
-          alt: "Logo Aster"
-        },
-        title: {
-          text: "Refertazione Medica",
-          color: "rgb(34, 154, 97)",
-          fontSize: "30px"
-        }
+  // Valori di default se il file non esiste
+  const defaultSettings: CompanyUISettings = {
+    header: {
+      logo: {
+        url: "https://referti.asterdiagnostica.it/images/logo.png",
+        link: "http://www.asterdiagnostica.it/",
+        alt: "Logo Aster"
       },
-      footer: {
-        copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
-        poweredBy: {
-          text: "Powered by",
-          link: "https://www.dharmahealthcare.net",
-          name: "Dharma Healthcare"
-        }
+      title: {
+        text: "Refertazione Medica",
+        color: "rgb(34, 154, 97)",
+        fontSize: "30px"
       }
-    };
-  }
+    },
+    footer: {
+      copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+      poweredBy: {
+        text: "Powered by",
+        link: "https://www.dharmahealthcare.net",
+        name: "Dharma Healthcare"
+      }
+    },
+    emergencyWorkaround: {
+      enabled: false,
+      bypassPin: false,
+      bypassSignature: false,
+      overrideDoctorName: null
+    }
+  };
 
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Errore caricamento company-ui-settings.json:', err);
-    // Ritorna valori di default in caso di errore
-    return {
-      header: {
-        logo: {
-          url: "https://referti.asterdiagnostica.it/images/logo.png",
-          link: "http://www.asterdiagnostica.it/",
-          alt: "Logo Aster"
-        },
-        title: {
-          text: "Refertazione Medica",
-          color: "rgb(34, 154, 97)",
-          fontSize: "30px"
-        }
-      },
-      footer: {
-        copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
-        poweredBy: {
-          text: "Powered by",
-          link: "https://www.dharmahealthcare.net",
-          name: "Dharma Healthcare"
-        }
-      }
-    };
-  }
+  return loadConfigJson<CompanyUISettings>('company-ui-settings.json', defaultSettings);
 });
 
 // ------ PDF SIGN IPC ------
@@ -535,6 +506,9 @@ function setupAutoUpdater() {
 
 // ---------------- APP READY ----------------
 app.whenReady().then(() => {
+  // Inizializza i file di configurazione personalizzati al primo avvio
+  initializeAllConfigs();
+
   createWindow();
   setupAutoUpdater();
 });

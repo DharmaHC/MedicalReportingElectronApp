@@ -119,7 +119,7 @@ const PrescriptionEditorModal: React.FC = () => {
       if (isOpen && createdBy && isReadOnly) {
         try {
           const response = await fetch(
-            `${url_getUserDisplayName}?taxCode=${encodeURIComponent(createdBy)}`,
+            `${url_getUserDisplayName()}?taxCode=${encodeURIComponent(createdBy)}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -219,7 +219,7 @@ const PrescriptionEditorModal: React.FC = () => {
       console.log('Request body (linkedResultsList array):', JSON.stringify(linkedResultsList));
 
       const response = await fetch(
-        `${url_getPredefinedTexts}?${qs.toString()}`,
+        `${url_getPredefinedTexts()}?${qs.toString()}`,
         {
           method: 'POST',
           headers: {
@@ -356,7 +356,7 @@ const PrescriptionEditorModal: React.FC = () => {
       console.log('ExamResultIds:', examResultIds);
       console.log('TechnicianCode:', technicianCode);
 
-      const response = await fetch(url_savePrescription, {
+      const response = await fetch(url_savePrescription(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

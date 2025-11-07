@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { DatePicker } from "@progress/kendo-react-dateinputs";
-import { DropDownList } from "@progress/kendo-react-dropdowns";
+import { DropDownList, MultiSelect } from "@progress/kendo-react-dropdowns";
 import { Checkbox, Input } from "@progress/kendo-react-inputs";
 import { Button } from "@progress/kendo-react-buttons";
 import { TabStrip, TabStripTab } from "@progress/kendo-react-layout";
@@ -15,7 +15,8 @@ import {
   url_getClinicDepartementsDefault,
   url_doctors,
   url_worklist,
-  url_getUserDetailsId
+  url_getUserDetailsId,
+  url_getDistinctExamNames
 } from "../utility/urlLib";
 
 import { useDispatch, useSelector } from "react-redux";
@@ -33,14 +34,14 @@ import {
 import { setFilters } from "../store/filtersSlice";
 import { useLocation } from "react-router-dom";
 
-/* ────────────── Tipi ────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Tipi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface Workarea         { workareaId: string;  workareaDescription: string; }
 interface ClinicDepartment { clinicDepartmentId: string; clinicDepartmentDescription: string; }
 interface Doctor           { doctorCode: string; doctorDescription: string; }
 type Sectors = Record<string, boolean>;
 type Units   = Record<string, boolean>;
 
-/* ═════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const GestioneReferti: React.FC = () => {
   /* Redux / Router */
   const dispatch  = useDispatch();
@@ -56,7 +57,8 @@ const GestioneReferti: React.FC = () => {
     lastName, firstName, selectedDoctor, searchMode,
     fromDate, toDate, units, sectors, selectedPeriod,
     workareasData, clinicDepartmentsData, doctorsData,
-    searchByEacWithdrawalDate, completedExaminations, completedPrescriptions
+    searchByEacWithdrawalDate, completedExaminations, completedPrescriptions,
+    availableExamNames, selectedExamNames
   } = useSelector((s: RootState) => s.filters);
 
   const registrations = useSelector((s: RootState) => s.registrations);
@@ -71,6 +73,9 @@ const GestioneReferti: React.FC = () => {
   const [countAssegnati, setCountAssegnati] = useState(0);
   const [countBozze,     setCountBozze]     = useState(0);
   const [isFirstTimeCruscotto, setIsFirstTimeCruscotto] = useState(true);
+
+  // State per il filtro degli esami
+  const [examFilter, setExamFilter] = useState("");
 
   const lastNameRef  = React.useRef<HTMLInputElement>(null);
   const firstNameRef = React.useRef<HTMLInputElement>(null);
@@ -88,10 +93,10 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   ];
   const defaultPeriodItem = { text: "Seleziona Periodo", value: "" };
 
-  /* ────────────── FETCH helpers ────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ FETCH helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const fetchDoctors = useCallback(async () => {
     try {
-      const resp = await fetch(url_doctors, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await fetch(url_doctors(), { headers: { Authorization: `Bearer ${token}` } });
       if (resp.ok) {
         const data: Doctor[] = await resp.json();
         dispatch(setFilters({ doctorsData: data }));
@@ -102,7 +107,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchWorkareas = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getWorkareas}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getWorkareas()}?userId=${effectiveId}`);
       if (!resp.ok) return console.error("Failed to fetch workareas:", resp.status);
 
       const contentType = resp.headers.get('content-type');
@@ -111,22 +116,22 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         return;
       }
 
-      // ① leggo i dati
+      // â‘  leggo i dati
       const data: Workarea[] = await resp.json();
 
-      // ② li clono e li ordino in base alla descrizione
+      // â‘¡ li clono e li ordino in base alla descrizione
       const ordered = [...data].sort((a, b) =>
         a.workareaDescription.localeCompare(
           b.workareaDescription,                // campo su cui ordinare
           "it",                                 // locale: italiano
-          { sensitivity: "base" }               // aa == Åå == áÁ ecc.
+          { sensitivity: "base" }               // aa == Ã…Ã¥ == Ã¡Ã ecc.
         )
       );
 
-      // ③ salvo la versione ordinata nello store
+      // â‘¢ salvo la versione ordinata nello store
       dispatch(setFilters({ workareasData: ordered }));
 
-      // … il resto invariato …
+      // â€¦ il resto invariato â€¦
       if (Object.keys(sectors).length === 0) {
         const init: Sectors = {};
         ordered.forEach(w => (init[w.workareaId.trim()] = false));
@@ -141,7 +146,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchWorkareasDefault = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getWorkareasDefault}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getWorkareasDefault()}?userId=${effectiveId}`);
       if (resp.ok) {
         const defs: Workarea[] = await resp.json();
         const upd = { ...sectors };
@@ -154,7 +159,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchClinicDepartments = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getClinicDepartements}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getClinicDepartements()}?userId=${effectiveId}`);
       if (!resp.ok) return console.error("Failed to fetch clinic departments:", resp.status);
 
       const contentType = resp.headers.get('content-type');
@@ -190,7 +195,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchClinicDepartmentsDefault = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getClinicDepartementsDefault}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getClinicDepartementsDefault()}?userId=${effectiveId}`);
       if (!resp.ok) return;
 
       const defaults: ClinicDepartment[] = await resp.json();
@@ -210,8 +215,52 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     }
   }, [effectiveUserId, userId, clinicDepartmentsData, dispatch]);
 
+  const fetchAvailableExamNames = useCallback(async () => {
+    try {
+      // Usa gli stessi parametri dei filtri correnti
+      const clinicDepartmentIds = Object.keys(units).filter(k => units[k]).join(",");
+      const workareaIds = Object.keys(sectors).filter(k => sectors[k]).join(",");
 
-  /* ────────────── SEARCH helpers ────────────── */
+      if (!clinicDepartmentIds || !workareaIds) {
+        // Se non ci sono settori/UO selezionati, non possiamo fare la query
+        return;
+      }
+
+      const qs = new URLSearchParams({
+        fromDate: localFromDate || "",
+        toDate: localToDate || "",
+        searchByEacStartDate: String(!searchByEacWithdrawalDate),
+        searchByEacWithdrawalDate: String(searchByEacWithdrawalDate),
+        searchModeStartsWith: String(searchMode === "startwith"),
+        searchModeContains: String(searchMode === "contain"),
+        lastName: lastName,
+        firstName: firstName,
+        doctorCodes: selectedDoctor?.value.trim() || "",
+        clinicDepartmentIds,
+        workareaIds,
+        completedExaminations: String(completedExaminations)
+      });
+
+      const resp = await fetch(`${url_getDistinctExamNames()}?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (resp.ok) {
+        const data: string[] = await resp.json();
+        dispatch(setFilters({ availableExamNames: data }));
+      } else {
+        console.error("Failed to fetch exam names");
+      }
+    } catch (err) {
+      console.error("Error fetching exam names:", err);
+    }
+  }, [
+    localFromDate, localToDate, lastName, firstName,
+    searchMode, selectedDoctor, sectors, units,
+    searchByEacWithdrawalDate, completedExaminations, token, dispatch
+  ]);
+
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SEARCH helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const getSearchParams = useCallback(() => ({
     fromDateParam : localFromDate || "",
     toDateParam   : localToDate  || "",
@@ -222,11 +271,12 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     sectorsParam: sectors,
     unitsParam:   units,
     searchByEacWithdrawalDateParam: searchByEacWithdrawalDate,
-    completedExaminationsParam:     completedExaminations
+    completedExaminationsParam:     completedExaminations,
+    examNamesParam: selectedExamNames
   }), [
     localFromDate, localToDate, lastName, firstName,
     searchMode, selectedDoctor, sectors, units,
-    searchByEacWithdrawalDate, completedExaminations
+    searchByEacWithdrawalDate, completedExaminations, selectedExamNames
   ]);
 
   // Filtro lato client per nascondere ai tecnici le accettazioni con prescrizioni
@@ -252,6 +302,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
     const clinicDepartmentIds = Object.keys(p.unitsParam).filter(k => p.unitsParam[k]).join(",");
     const workareaIds         = Object.keys(p.sectorsParam).filter(k => p.sectorsParam[k]).join(",");
+    const examNames = (p.examNamesParam || []).join(",");
 
     const qs = new URLSearchParams({
       fromDate: p.fromDateParam,
@@ -265,11 +316,22 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       doctorCodes: p.doctorCodeParam,
       clinicDepartmentIds,
       workareaIds,
-      completedExaminations: String(p.completedExaminationsParam)
+      completedExaminations: String(p.completedExaminationsParam),
+      examNames: examNames
     });
 
+    // Fix per caratteri "+" nei nomi degli esami: URLSearchParams non li codifica correttamente
+    // Il "+" viene interpretato come spazio dal server, causando errori 500
+    // Soluzione: sostituiamo manualmente "+" con "%2B" nella query string finale
+    let queryString = qs.toString();
+    if (examNames && examNames.includes('+')) {
+      // Decodifichiamo examNames dalla query string e lo ri-codifichiamo correttamente
+      const examNamesEncoded = encodeURIComponent(examNames);
+      queryString = queryString.replace(/examNames=[^&]*/, `examNames=${examNamesEncoded}`);
+    }
+
     try {
-      const rsp = await fetch(`${url_worklist}?${qs.toString()}`, {
+      const rsp = await fetch(`${url_worklist()}?${queryString}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (rsp.ok) {
@@ -297,7 +359,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     finally       { dispatch(stopLoading()); }
   }, [token, dispatch, filterPrescriptions]);
 
-  /* ────────────── Effetti ────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Effetti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   /* Recupero userId corretto da UsersDetails (sia per tecnici che medici) */
   useEffect(() => {
@@ -305,7 +367,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       if (!userId || !token) return;
 
       try {
-        const response = await fetch(`${url_getUserDetailsId}?userId=${userId}`, {
+        const response = await fetch(`${url_getUserDetailsId()}?userId=${userId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -359,7 +421,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     dispatch
   ]);
 
-  /* Gestione prima ricerca, reload dall’editor o ricerca da pulsante */
+  /* Gestione prima ricerca, reload dall'editor o ricerca da pulsante */
   useEffect(() => {
     if (initialSearchDone) return;           // già fatta
     if (!readyToSearch)  return;             // aspetto i dati base
@@ -368,20 +430,38 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     const hasUnit   = Object.values(units).some(Boolean);
     if (!hasSector || !hasUnit) return;      // aspetto i default true
 
-    // ► da qui parte una sola volta
+    // â–º da qui parte una sola volta
     setInitialSearchDone(true);              // blocca futuri re-trigger
 
-    if (location.state?.reload === false) return; // rientro dall’editor
+    if (location.state?.reload === false) return; // rientro dall'editor
     handleSearch(getSearchParams());
   }, [
     readyToSearch,           // diventa true dopo i fetch iniziali
     sectors, units,          // cambiano quando arrivano i default
-    location.state,          // gestisce il caso di reload dall’editor
+    location.state,          // gestisce il caso di reload dall'editor
     initialSearchDone,       // blocco
     handleSearch, getSearchParams
   ]);
 
-/* ────────────── Contatori cruscotto ────────────── */
+  /* Carica lista esami disponibili quando cambiano i filtri */
+  useEffect(() => {
+    if (!readyToSearch) return; // aspetto che i dati base siano pronti
+
+    const hasSector = Object.values(sectors).some(Boolean);
+    const hasUnit = Object.values(units).some(Boolean);
+    if (!hasSector || !hasUnit) return; // serve almeno un settore e una UO
+
+    fetchAvailableExamNames();
+  }, [
+    readyToSearch,
+    localFromDate, localToDate,
+    sectors, units,
+    searchByEacWithdrawalDate,
+    completedExaminations,
+    fetchAvailableExamNames
+  ]);
+
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Contatori cruscotto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   useEffect(() => {
     let assegn = 0, bozze = 0;
     registrations.forEach(r => {
@@ -421,7 +501,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   };
 
   // ---------------------------------------------------------
-  // handlePeriodChange => Gestione dropdown “Periodo”
+  // handlePeriodChange => Gestione dropdown â€œPeriodoâ€
   // ---------------------------------------------------------
   const handlePeriodChange = (e: any) => {
     const selectedValue = e.value;
@@ -504,7 +584,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   // ---------------------------------------------------------
   const handleCruscottoTutti = async () => {
     const params = getSearchParams();
-    params.completedExaminationsParam = false; // forzo “incompleti”
+    params.completedExaminationsParam = false; // forzo â€œincompletiâ€
     await handleCruscottoSearch(params);
   };
 
@@ -529,6 +609,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         .join(",");
 
       const actualSearchByEacStartDate = !params.searchByEacWithdrawalDateParam;
+      const examNames = (params.examNamesParam || []).join(",");
 
       const queryParams = new URLSearchParams({
         fromDate: params.fromDateParam,
@@ -541,13 +622,14 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         firstName: params.firstNameParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam)
+        completedExaminations: String(params.completedExaminationsParam),
+        examNames: examNames
       });
 
       //dispatch(resetExaminationState());
       dispatch(setRegistrations([]));
 
-      const response = await fetch(`${url_worklist}?${queryParams.toString()}`, {
+      const response = await fetch(`${url_worklist()}?${queryParams.toString()}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -572,7 +654,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     }
   };
 
-  // Ricerca generica usata da “Tutti” / “Assegnati”
+  // Ricerca generica usata da â€œTuttiâ€ / â€œAssegnatiâ€
   const handleCruscottoSearch = async (params: any) => {
     dispatch(startLoading());
     try {
@@ -586,6 +668,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         .join(",");
 
       const actualSearchByEacStartDate = !params.searchByEacWithdrawalDateParam;
+      const examNames = (params.examNamesParam || []).join(",");
 
       const qParams = new URLSearchParams({
         fromDate: params.fromDateParam,
@@ -599,13 +682,14 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         doctorCodes: params.doctorCodeParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam)
+        completedExaminations: String(params.completedExaminationsParam),
+        examNames: examNames
       });
 
       //dispatch(resetExaminationState());
       dispatch(setRegistrations([]));
 
-      const response = await fetch(`${url_worklist}?${qParams.toString()}`, {
+      const response = await fetch(`${url_worklist()}?${qParams.toString()}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -633,7 +717,19 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     dispatch(resetExaminationState());
     handleSearch(getSearchParams());
   };
-  
+
+  // ---------------------------------------------------------
+  // Filtraggio esami per ricerca
+  // ---------------------------------------------------------
+  const filteredExamNames = React.useMemo(() => {
+    if (!examFilter) {
+      return availableExamNames || [];
+    }
+    return (availableExamNames || []).filter((exam: string) =>
+      exam.toLowerCase().includes(examFilter.toLowerCase())
+    );
+  }, [availableExamNames, examFilter]);
+
   // ---------------------------------------------------------
   // Render
   // ---------------------------------------------------------
@@ -702,6 +798,62 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
           </div>
         </div>
 
+        {/* Filtro per Esami */}
+        <div className="filter-group-row" style={{ marginTop: "1rem" }}>
+          <div className="filter-group" style={{ width: "100%" }}>
+            <label>Filtra per Esami</label>
+            <MultiSelect
+              data={filteredExamNames}
+              value={selectedExamNames || []}
+              onChange={(e) => {
+                dispatch(setFilters({ selectedExamNames: e.value }));
+              }}
+              onFilterChange={(e) => {
+                setExamFilter(e.filter.value);
+              }}
+              placeholder="Cerca esami..."
+              filterable={true}
+              autoClose={false}
+              allowCustom={false}
+              header={() => {
+                const selected = selectedExamNames || [];
+                const filtered = filteredExamNames;
+                const allFilteredSelected = filtered.length > 0 &&
+                  filtered.every((exam: string) => selected.includes(exam));
+
+                return (
+                  <div style={{
+                    padding: "8px 12px",
+                    borderBottom: "1px solid #e0e0e0",
+                    backgroundColor: "#f5f5f5",
+                    cursor: "pointer"
+                  }}
+                  onClick={() => {
+                    if (allFilteredSelected) {
+                      // Deseleziona solo quelli filtrati
+                      const remaining = selected.filter(
+                        (s: string) => !filtered.includes(s)
+                      );
+                      dispatch(setFilters({ selectedExamNames: remaining }));
+                    } else {
+                      // Seleziona tutti quelli filtrati (mantenendo quelli già selezionati)
+                      const combined = [...new Set([...selected, ...filtered])];
+                      dispatch(setFilters({ selectedExamNames: combined }));
+                    }
+                  }}>
+                    <Checkbox
+                      label={allFilteredSelected ? "Deseleziona Tutti" : "Seleziona Tutti"}
+                      checked={allFilteredSelected}
+                      disabled={filtered.length === 0}
+                      onChange={() => {}} // Gestito dal div onClick
+                    />
+                  </div>
+                );
+              }}
+            />
+          </div>
+        </div>
+
         {/* TabStrip: Settori, Unita, Cruscotto */}
         <TabStrip selected={selectedTab} onSelect={handleSelectTab}>
           <TabStripTab title={labels.gestioneReferti.settori}>
@@ -742,7 +894,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
                     <Checkbox
                       key={id}
                       label={text}
-                      checked={!!units[id]}            /* undefined ⇒ false */
+                      checked={!!units[id]}            /* undefined â‡’ false */
                       onChange={() =>
                         dispatch(setFilters({ units: { ...units, [id]: !units[id] } }))
                       }
