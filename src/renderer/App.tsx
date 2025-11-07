@@ -17,7 +17,7 @@ import { setToken, logout } from "./store/authSlice";
 import { clearRegistrations } from "./store/registrationSlice";
 import { resetExaminationState, clearSelectedMoreExams } from "./store/examinationSlice";
 import { RootState } from "./store";
-import { url_token } from "./utility/urlLib";
+import { url_token, setApiBaseUrl } from "./utility/urlLib";
 import ProtectedRoute from "./utility/ProtectedRoute";
 import UpdateNotifier from './components/UpdateNotifier';
 import { CompanyUISettings } from "../globals";
@@ -26,6 +26,7 @@ const ipcRenderer = window.electron?.ipcRenderer;
 function AppWrapper() {
   const dispatch = useDispatch();
   const [companyUISettings, setCompanyUISettings] = useState<CompanyUISettings | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   // --------------------------------------------------
   // Carica le impostazioni UI dell'azienda
@@ -36,31 +37,41 @@ function AppWrapper() {
         // Usa IPC diretto come per company-footer-settings (più affidabile)
         const settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
         setCompanyUISettings(settings);
+
+        // ⚠️ IMPORTANTE: Verifica che apiBaseUrl sia configurato
+        if (!settings.apiBaseUrl || settings.apiBaseUrl.trim() === '') {
+          const errorMsg =
+            "⚠️ ERRORE DI CONFIGURAZIONE\n\n" +
+            "Il campo 'apiBaseUrl' non è configurato in company-ui-settings.json\n\n" +
+            "Percorso file configurazione:\n" +
+            "C:\\ProgramData\\MedReportAndSign\\config\\company-ui-settings.json\n\n" +
+            "Aggiungi il campo:\n" +
+            '  "apiBaseUrl": "https://tuo-server.it/api/"';
+
+          console.error(errorMsg);
+          setConfigError(errorMsg);
+          return;
+        }
+
+        // Inizializza l'URL base delle API
+        setApiBaseUrl(settings.apiBaseUrl);
+        console.log("✓ API Base URL caricato da configurazione:", settings.apiBaseUrl);
+        setConfigError(null);
+
       } catch (error) {
         console.error("Errore caricamento company-ui-settings:", error);
-        // In caso di errore, usa valori di default
-        setCompanyUISettings({
-          header: {
-            logo: {
-              url: "https://referti.asterdiagnostica.it/images/logo.png",
-              link: "http://www.asterdiagnostica.it/",
-              alt: "Logo Aster"
-            },
-            title: {
-              text: "Refertazione Medica",
-              color: "rgb(34, 154, 97)",
-              fontSize: "30px"
-            }
-          },
-          footer: {
-            copyright: "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
-            poweredBy: {
-              text: "Powered by",
-              link: "https://www.dharmahealthcare.net",
-              name: "Dharma Healthcare"
-            }
-          }
-        });
+
+        const errorMsg =
+          "⚠️ ERRORE CARICAMENTO CONFIGURAZIONE\n\n" +
+          `Impossibile caricare company-ui-settings.json\n\n` +
+          `Errore: ${error}\n\n` +
+          "Verifica che il file esista in:\n" +
+          "C:\\ProgramData\\MedReportAndSign\\config\\company-ui-settings.json\n\n" +
+          "oppure in:\n" +
+          "C:\\Program Files\\MedReportAndSign\\resources\\assets\\company-ui-settings.json";
+
+        console.error(errorMsg);
+        setConfigError(errorMsg);
       }
     };
     loadUISettings();
@@ -117,7 +128,7 @@ function AppWrapper() {
   useEffect(() => {
     const fetchToken = async () => {
       try {
-        const response = await fetch(url_token, {
+        const response = await fetch(url_token(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ clientId: "client", clientSecret: "secret" }),
@@ -175,6 +186,15 @@ function AppWrapper() {
   // Non renderizzare nulla se le impostazioni UI non sono ancora caricate
   if (!companyUISettings) {
     return <div className="app-container">Caricamento...</div>;
+  }
+
+  // Mostra errore di configurazione se presente
+  if (configError) {
+    return (
+      <div className="app-container" style={{ padding: '2rem', fontFamily: 'monospace' }}>
+        <pre style={{ whiteSpace: 'pre-wrap', color: 'red' }}>{configError}</pre>
+      </div>
+    );
   }
 
   return (

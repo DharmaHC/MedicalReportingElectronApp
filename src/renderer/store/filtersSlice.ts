@@ -33,6 +33,8 @@ interface FiltersState {
   completedPrescriptions: boolean;     // Includi prescrizioni complete (solo tecnici)
   searchByEacStartDate: boolean;       // Interroga per data inizio
   searchByEacWithdrawalDate: boolean;  // Includi referti completi
+  availableExamNames: string[];        // Lista distinct esami disponibili
+  selectedExamNames: string[];         // Esami selezionati per il filtro
 }
 
 const initialState: FiltersState = {
@@ -52,6 +54,8 @@ const initialState: FiltersState = {
   completedPrescriptions: false, // Di default mostra solo senza prescrizioni (tecnici)
   searchByEacStartDate: true,    // Di default interroga per data inizio
   searchByEacWithdrawalDate: false, // Di default non includo referti completi
+  availableExamNames: [],        // Inizialmente vuoto
+  selectedExamNames: [],         // Inizialmente vuoto
 };
 
 const filtersSlice = createSlice({

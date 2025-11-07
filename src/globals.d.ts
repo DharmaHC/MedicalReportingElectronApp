@@ -36,7 +36,16 @@ interface CompanyFooterSettings {
   footerImageXPositionOffset: number;
 }
 
+interface EmergencyWorkaround {
+  enabled: boolean;
+  bypassPin: boolean;
+  bypassSignature: boolean;
+  overrideDoctorName: string | null;
+  notes?: string;
+}
+
 interface CompanyUISettings {
+  apiBaseUrl?: string; // URL base per le API (opzionale per retrocompatibilità)
   header: {
     logo: {
       url: string;
@@ -57,6 +66,7 @@ interface CompanyUISettings {
       name: string;
     };
   };
+  emergencyWorkaround?: EmergencyWorkaround; // Configurazione workaround per emergenze
 }
 
 declare global {
@@ -80,4 +90,4 @@ declare global {
   }
 }
 
-export { Settings, CompanyFooterSettings, CompanyUISettings };
+export { Settings, CompanyFooterSettings, CompanyUISettings, EmergencyWorkaround };

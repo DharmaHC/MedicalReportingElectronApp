@@ -1,7 +1,8 @@
 {
+  "apiBaseUrl": "https://medicalreportingapi.asterdiagnostica.it/api/",
   "header": {
     "logo": {
-      "url": "https://referti.asterdiagnostica.it/images/logo.png",
+      "url": "https://www.asterdiagnostica.it/images/logo.png",
       "link": "http://www.asterdiagnostica.it/",
       "alt": "Logo Aster"
     },
@@ -16,7 +17,14 @@
     "poweredBy": {
       "text": "Powered by",
       "link": "https://www.dharmahealthcare.net",
-      "name": "Dharma Healthcares"
+      "name": "Dharma Healthcare"
     }
+  },
+  "emergencyWorkaround": {
+    "enabled": false,
+    "bypassPin": false,
+    "bypassSignature": false,
+    "overrideDoctorName": null,
+    "notes": "⚠️ WORKAROUND EMERGENZA - Attivare SOLO per recupero referti corrotti. DISATTIVARE immediatamente dopo l'uso!"
   }
 }
