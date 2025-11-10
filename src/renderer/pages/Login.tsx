@@ -118,7 +118,7 @@ const Login = () => {
         if (isTechnician) {
           // Usa lo username come technicianCode
           dispatch(setTechnicianCode(userName));
-          console.log(`[TECHNICIAN CHECK] âœ… User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
+          console.log(`[TECHNICIAN CHECK] ✅ User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
         } else {
           dispatch(setTechnicianCode(null));
           console.log(`[TECHNICIAN CHECK] â„¹ï¸ User ${userName} is NOT a technician (is a doctor or other role)`);
@@ -375,7 +375,7 @@ return (<>
                 </span>
               </div>
 
-              {/* Checkbox â€œRicorda Usernameâ€ gestito da Kendo */}
+              {/* Checkbox "Ricorda Username" gestito da Kendo */}
               <Field
                 name="rememberMe"
                 type="checkbox"

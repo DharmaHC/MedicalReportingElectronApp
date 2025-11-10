@@ -164,7 +164,7 @@ const dispatch = useDispatch();
   }
 };
 
-  // FetchDoctorInfoâ€
+  // FetchDoctorInfo"
   const fetchDoctorInfo = async () => {
     if (!userName || !token) return;
     try {
@@ -275,7 +275,7 @@ const dispatch = useDispatch();
                 )}
               </div>
 
-              {/* ---- (3) DropDownButton â€œProfiloâ€ con gearIcon */}
+              {/* ---- (3) DropDownButton "Profilo" con gearIcon */}
               <div className="header-right">
         				<ProfileDropDown
                   onLogout={handleLogout}

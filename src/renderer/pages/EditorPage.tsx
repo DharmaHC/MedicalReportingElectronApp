@@ -558,13 +558,13 @@ const renderPinDialog = () =>
   const handleItemClick = (event: TreeViewItemClickEvent) => {
     const item = event.item as TreeNode;
 
-    // âžœ 1. se lâ€™item ha figli  â‡’  toggle espansione
+    // ➜ 1. se l'item ha figli  â‡’  toggle espansione
     if (item.items && item.items.length) {
       setTreeData(prev => updateExpanded(prev, item));
-      return; // niente â€œfraseâ€ per i nodi padre
+      return; // niente "frase" per i nodi padre
     }
 
-    // âžœ 2. altrimenti (foglia)  â‡’  inserisci la frase
+    // ➜ 2. altrimenti (foglia)  â‡’  inserisci la frase
     handlePhraseClick(item.text);
   };
 
@@ -1450,9 +1450,9 @@ if (printSignedPdf && signedPdfBase64) {
     console.log('[FOOTER DEBUG] Condition check:', !isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN"));
 
     if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
-      console.log('[FOOTER DEBUG] âœ… Entrato nel blocco di copertura footer!');
+      console.log('[FOOTER DEBUG] ✅ Entrato nel blocco di copertura footer!');
       try {
-        // â­ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
+        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
         const companyFooterSettings = await window.electron.ipcRenderer.invoke(
           'get-company-footer-settings',
           companyId
@@ -1478,7 +1478,7 @@ if (printSignedPdf && signedPdfBase64) {
             x: 0,
             y: 0,
             width: width,
-            height: finalHeight, // â­ USA settings company-specific
+            height: finalHeight, // ⭐ USA settings company-specific
             color: rgb(1, 1, 1)
           });
           console.log(`[FOOTER DEBUG] Rettangolo bianco disegnato: x=0, y=0, width=${width}, height=${finalHeight}`);
@@ -1488,7 +1488,7 @@ if (printSignedPdf && signedPdfBase64) {
         // Convert to standard Uint8Array to ensure compatibility
         const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
         finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
-        console.log('[FOOTER DEBUG] âœ… PDF modificato con successo!');
+        console.log('[FOOTER DEBUG] ✅ PDF modificato con successo!');
       } catch (error) {
         console.error("[FOOTER DEBUG] âŒ Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
@@ -1688,7 +1688,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
       if (response.ok) {
         const responseData = await response.json().catch(() => null);
-        console.log("âœ… Referto processato con successo (salvato/inviato).");
+        console.log("✅ Referto processato con successo (salvato/inviato).");
         console.log("ðŸ“¥ Response data:", responseData);
         setErrorMessage(null); // Pulisce eventuali messaggi di errore precedenti.
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
@@ -2299,7 +2299,7 @@ const handleResultClick = async (result: any) => {
                 if (exitReason === "app") {
                   window.electron.ipcRenderer.send('proceed-close');
                 } else {
-                  // Naviga fuori dallâ€™editor
+                  // Naviga fuori dall'editor
                   navigate("/", { state: { reload: false } });
                 }
               }}
@@ -2350,7 +2350,7 @@ const handleResultClick = async (result: any) => {
       {/* Dialogo di Caricamento durante il Salvataggio/Firma */}
       {isProcessing && (
         <Dialog               /*  tolto modal / closeButton  */
-          title="Elaborazione in corsoâ€¦"
+          title="Elaborazione in corso"¦"
           onClose={() => {}}   /*  disabilita la chiusura manuale  */
         >
           <div style={{ padding: "30px 20px", textAlign: "center" }}>
@@ -2359,8 +2359,8 @@ const handleResultClick = async (result: any) => {
             />
             <p>
               {allowMedicalReportDigitalSignature && !isDraftOperation
-                ? "Attendere, stiamo completando il salvataggio e la firma digitale del refertoâ€¦"
-                : "Attendere, stiamo completando il salvataggio del refertoâ€¦"}
+                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto"¦"
+                : "Attendere, stiamo completando il salvataggio del referto"¦"}
             </p>
           </div>
         </Dialog>

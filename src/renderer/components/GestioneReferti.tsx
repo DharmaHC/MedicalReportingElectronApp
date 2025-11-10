@@ -41,7 +41,7 @@ interface Doctor           { doctorCode: string; doctorDescription: string; }
 type Sectors = Record<string, boolean>;
 type Units   = Record<string, boolean>;
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ═════════════════════════════════════════════════════════════ */
 const GestioneReferti: React.FC = () => {
   /* Redux / Router */
   const dispatch  = useDispatch();
@@ -132,7 +132,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       // â‘¢ salvo la versione ordinata nello store
       dispatch(setFilters({ workareasData: ordered }));
 
-      // â€¦ il resto invariato â€¦
+      // "¦ il resto invariato "¦
       if (Object.keys(sectors).length === 0) {
         const init: Sectors = {};
         ordered.forEach(w => (init[w.workareaId.trim()] = false));
@@ -502,7 +502,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   };
 
   // ---------------------------------------------------------
-  // handlePeriodChange => Gestione dropdown â€œPeriodoâ€
+  // handlePeriodChange => Gestione dropdown "Periodo"
   // ---------------------------------------------------------
   const handlePeriodChange = (e: any) => {
     const selectedValue = e.value;
@@ -588,7 +588,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   // ---------------------------------------------------------
   const handleCruscottoTutti = async () => {
     const params = getSearchParams();
-    params.completedExaminationsParam = false; // forzo â€œincompletiâ€
+    params.completedExaminationsParam = false; // forzo "incompleti"
     await handleCruscottoSearch(params);
   };
 
@@ -658,7 +658,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     }
   };
 
-  // Ricerca generica usata da â€œTuttiâ€ / â€œAssegnatiâ€
+  // Ricerca generica usata da "Tutti" / "Assegnati"
   const handleCruscottoSearch = async (params: any) => {
     dispatch(startLoading());
     try {
