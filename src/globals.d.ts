@@ -67,6 +67,12 @@ interface CompanyUISettings {
     };
   };
   emergencyWorkaround?: EmergencyWorkaround; // Configurazione workaround per emergenze
+  logipacsServer?: {
+    baseUrl: string;     // URL base del servizio RemotEye/Logipacs
+    username: string;    // Username per l'autenticazione
+    password: string;    // Password per l'autenticazione
+  };
+  useExternalIdSystem?: boolean; // Se true, usa ExternalPatientId e ExternalAccessionNumber per RemotEye
 }
 
 declare global {

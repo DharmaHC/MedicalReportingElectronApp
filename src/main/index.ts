@@ -276,7 +276,6 @@ ipcMain.handle('get-company-footer-settings', async (_event, companyId: string) 
 ipcMain.handle('get-company-ui-settings', async () => {
   // Valori di default se il file non esiste
   const defaultSettings: CompanyUISettings = {
-    apiBaseUrl: "https://medicalreportingapi.asterdiagnostica.it/api/",
     header: {
       logo: {
         url: "https://referti.asterdiagnostica.it/images/logo.png",
@@ -302,7 +301,13 @@ ipcMain.handle('get-company-ui-settings', async () => {
       bypassPin: false,
       bypassSignature: false,
       overrideDoctorName: null
-    }
+    },
+    logipacsServer: {
+      baseUrl: "http://172.16.18.52/LPW/Display",
+      username: "radiologia",
+      password: "radiologia"
+    },
+    useExternalIdSystem: false
   };
 
   return loadConfigJson<CompanyUISettings>('company-ui-settings.json', defaultSettings);

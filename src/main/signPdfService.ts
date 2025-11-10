@@ -9,62 +9,66 @@ import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
 import { Settings, CompanyFooterSettings } from '../globals';
+import { loadConfigJson, getImagePath } from './configManager';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
+  // Valori di default se il file non esiste o è corrotto
+  const defaultSettings: Settings = {
+    yPosLogo: 0,
+    logoWidth: 0,
+    logoHeight: 0,
+    yPosFooterImage: 0,
+    footerImageWidth: 0,
+    footerImageHeight: 0,
+    footerImageXPositionOffset: 0,
+    footerTextFontFamily: 'Helvetica',
+    footerTextPointFromBottom: 0,
+    footerTextFontSize: 0,
+    footerCompanyDataPointFromBottom: 0,
+    footerCompanyDataMultiline: 0,
+    blankFooterHeight: 0,
+    printSignedPdfIfAvailable: false,
+    pkcs11Lib: '',
+    cspSlotIndex: 0,
+    remoteSignUrl: '',
+    tsaUrl: '',
+    useMRAS: false,
+    showAppMenu: false,
+    reportPageWidth: 0,
+    reportPageHeight: 0,
+    editorZoomDefault: 0,
+    rowsPerPage: 0,
+    highlightPlaceholder: false
+  };
 
-  const settingsPath = path.join(baseDir, 'sign-settings.json');
-  if (!fs.existsSync(settingsPath)) {
-    throw new Error(`sign-settings.json non trovato in ${settingsPath}`);
+  const settings = loadConfigJson<Settings>('sign-settings.json', defaultSettings);
+
+  // Verifica che i campi critici siano presenti
+  if (!settings.pkcs11Lib) {
+    throw new Error('sign-settings.json non contiene pkcs11Lib configurato');
   }
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Settings;
-  } catch (err) {
-    throw new Error(`Errore lettura/parsing sign-settings.json: ${err}`);
-  }
+
+  return settings;
 }
 
 /* █████████████████ COMPANY FOOTER SETTINGS █████████████████ */
 function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
-
-  const settingsPath = path.join(baseDir, 'company-footer-settings.json');
-
   // Fallback a valori di default se il file non esiste
-  if (!fs.existsSync(settingsPath)) {
-    console.warn('company-footer-settings.json non trovato, uso valori default');
-    return {
-      "DEFAULT": {
-        footerImageWidth: 160,
-        footerImageHeight: 32,
-        blankFooterHeight: 15,
-        yPosFooterImage: 15,
-        footerImageXPositionOffset: 0
-      }
-    };
-  }
+  const defaultSettings: Record<string, CompanyFooterSettings> = {
+    "DEFAULT": {
+      footerImageWidth: 160,
+      footerImageHeight: 32,
+      blankFooterHeight: 15,
+      yPosFooterImage: 15,
+      footerImageXPositionOffset: 0
+    }
+  };
 
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Record<string, CompanyFooterSettings>;
-  } catch (err) {
-    console.error('Errore caricamento company-footer-settings.json:', err);
-    return {
-      "DEFAULT": {
-        footerImageWidth: 160,
-        footerImageHeight: 32,
-        blankFooterHeight: 15,
-        yPosFooterImage: 15,
-        footerImageXPositionOffset: 0
-      }
-    };
-  }
+  return loadConfigJson<Record<string, CompanyFooterSettings>>(
+    'company-footer-settings.json',
+    defaultSettings
+  );
 }
 
 export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
@@ -102,6 +106,7 @@ export interface SignPdfRequest {
   useRemote?: boolean;
   otpCode?: string;         // se firma remota
   userCN?: string; // opzionale, per filtrare per CN
+  bypassSignature?: boolean; // ⚠️ BYPASS per recupero: solo header/footer, no firma digitale
 }
 export interface SignPdfResponse {
   signedPdfBase64: string; // PDF estetico (non firmato)
@@ -119,7 +124,22 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
     pdfBuf = await decoratePdf(pdfBuf, req, currentSettings);
 
-    // 2. Firma digitale
+    // ⚠️ BYPASS SIGNATURE - Solo per recupero referti
+    if (req.bypassSignature) {
+      console.log('⚠️ BYPASS SIGNATURE ATTIVO - Nessuna firma digitale, solo header/footer');
+
+      // Aggiungi dicitura personalizzata se fornita nel footerText
+      const signedBy = req.footerText || "Documento con header/footer applicati";
+      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
+
+      log('success (bypass mode)');
+      return {
+        signedPdfBase64: pdfBuf.toString('base64'),
+        p7mBase64: '' // Nessun p7m in modalità bypass
+      };
+    }
+
+    // 2. Firma digitale (solo se non in bypass)
     let signedBy = "";
     let cmsBuf: Buffer;
     if (req.useRemote) {
@@ -176,24 +196,41 @@ function readFileAsync(path: string): Promise<Buffer> {
 }
 
 async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings): Promise<Buffer> {
+  console.log('🎨 decoratePdf: Inizio decorazione PDF');
   const doc = await PDFDocument.load(pdf);
 
   // Embedding font
   const font = await embedFont(doc, settings.footerTextFontFamily);
+  console.log('✓ Font embedded');
 
   const {
     logoPath, footerImgPath, footerTextDefault
   } = getCompanyAssets(req.companyId);
 
+  console.log(`🖼️ Logo path: ${logoPath}`);
+  console.log(`🖼️ Footer image path: ${footerImgPath}`);
+
   // ⭐ NUOVO: Carica settings specifici per company
   const companyFooterSettings = getCompanyFooterSettings(req.companyId);
+  console.log(`⚙️ Company footer settings loaded`);
 
-  const [logoBytes, footBytes] = await Promise.all([
-    readFileAsync(logoPath),
-    readFileAsync(footerImgPath)
-  ]);
-  const logoImg = await doc.embedPng(logoBytes);
-  const footImg = await doc.embedPng(footBytes);
+  let logoImg, footImg;
+  try {
+    const [logoBytes, footBytes] = await Promise.all([
+      readFileAsync(logoPath),
+      readFileAsync(footerImgPath)
+    ]);
+    console.log(`✓ Logo bytes: ${logoBytes.length}, Footer bytes: ${footBytes.length}`);
+
+    logoImg = await doc.embedPng(logoBytes);
+    console.log('✓ Logo image embedded');
+
+    footImg = await doc.embedPng(footBytes);
+    console.log('✓ Footer image embedded');
+  } catch (err: any) {
+    console.error('❌ Errore nel caricamento delle immagini:', err.message);
+    throw err;
+  }
 
   const footerTxt = req.footerText ?? footerTextDefault;
 
@@ -303,38 +340,36 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
 function getCompanyAssets(companyId?: string) {
-    const base = app.isPackaged
-      ? path.join(process.resourcesPath, 'assets', 'Images')
-      : path.join(process.cwd(), 'src/renderer/assets/Images');
+    // Usa getImagePath per caricare immagini da ProgramData se disponibili
     switch ((companyId ?? '').trim().toUpperCase()) {
     case 'ASTER':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
         footerTextDefault: 'Aster Diagnostica Srl - P.I. e C.F. 06191121000'
       };
     case 'RAD':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
         footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
       };
     case 'HEALTHWAY':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterHW.png'),
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterHW.png'),
         footerTextDefault: 'Aster Diagnostica Mezzocammino Srl - P. I. e C.F. 12622721004'
       };
     case 'CIN':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterCin.png'),
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterCin.png'),
         footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
       };
     default:
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
         footerTextDefault: 'Aster Diagnostica Srl - P.I. 06191121000'
       };
   }
@@ -414,9 +449,18 @@ export async function signViaPkcs11WithCN(
           const cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
           const certCN = getCNfromPkijsCertificate(cert);
 
-          // Confronta col CN richiesto
-          if (userCN && certCN && !certCN.toLowerCase().includes(userCN.toLowerCase())) {
+          // ⚠️ BYPASS TEMPORANEO - Se userCN è null/undefined/vuoto, usa il primo certificato trovato
+          // Confronta col CN richiesto solo se userCN è specificato
+          if (userCN && userCN.trim() !== '' && certCN && !certCN.toLowerCase().includes(userCN.toLowerCase())) {
+            console.log(`⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
             continue;
+          }
+
+          // Se arriviamo qui, il certificato è valido (o userCN è null/vuoto)
+          if (!userCN || userCN.trim() === '') {
+            console.log(`⚠️ BYPASS ATTIVO - Usando primo certificato trovato: CN="${certCN}"`);
+          } else {
+            console.log(`✓ Certificato trovato: CN="${certCN}" matcha userCN="${userCN}"`);
           }
 
           // Attributi firmati

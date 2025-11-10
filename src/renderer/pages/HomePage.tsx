@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   Splitter,
   SplitterPaneProps,
@@ -8,7 +8,7 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 
 import ProfileDropDown from "../components/ProfileDropDown";
 
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
 import "./HomePage.css";
 
@@ -34,10 +34,14 @@ const HomePage = () => {
 
 const dispatch = useDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Autenticazione
   const token = useSelector((state: RootState) => state.auth.token);
   const userName = useSelector((state: RootState) => state.auth.userName);
+
+  // Verifica se l'utente è amministratore
+  const isAdmin = userName === "FRSRFL72R25H282U";
 
   // Stato per cambio password (Dialog)
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
@@ -69,6 +73,11 @@ const dispatch = useDispatch();
   };
 
   // ---- FUNZIONI CAMBIO PASSWORD ---------------------------------
+  // Apre il dialog di cambio password
+  const handleOpenChangePassword = () => {
+    setChangePasswordVisible(true);
+  };
+
   const handleChangePasswordSubmit = async () => {
     // Validazione base
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -81,7 +90,7 @@ const dispatch = useDispatch();
     }
 
     try {
-      const response = await fetch(url_changePassword, {
+      const response = await fetch(url_changePassword(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,7 +116,7 @@ const dispatch = useDispatch();
       setConfirmPassword("");
       setChangePasswordVisible(false);
     } catch (error) {
-      alert("Errore durante il cambio password, riprova più tardi.");
+      alert("Errore durante il cambio password, riprova piÃ¹ tardi.");
       console.error(error);
     }
   };
@@ -135,6 +144,11 @@ const dispatch = useDispatch();
   };
 
 
+  // Naviga alla pagina di registrazione utente (solo per admin)
+  const handleRegisterUser = () => {
+    navigate("/register-user");
+  };
+
   const handleLogoutAndExit = () => {
 
   if (window.electron && window.electron.ipcRenderer) {
@@ -150,11 +164,11 @@ const dispatch = useDispatch();
   }
 };
 
-  // FetchDoctorInfo”
+  // FetchDoctorInfoâ€
   const fetchDoctorInfo = async () => {
     if (!userName || !token) return;
     try {
-      const response = await fetch(`${url_doctors_id}?userName=${userName}`, {
+      const response = await fetch(`${url_doctors_id()}?userName=${userName}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -261,9 +275,15 @@ const dispatch = useDispatch();
                 )}
               </div>
 
-              {/* ---- (3) DropDownButton “Profilo” con gearIcon */}
+              {/* ---- (3) DropDownButton â€œProfiloâ€ con gearIcon */}
               <div className="header-right">
-        				<ProfileDropDown onLogout={handleLogout} onChangePassword={handleChangePasswordSubmit} onLogoutAndExit={handleLogoutAndExit}/>
+        				<ProfileDropDown
+                  onLogout={handleLogout}
+                  onChangePassword={handleOpenChangePassword}
+                  onLogoutAndExit={handleLogoutAndExit}
+                  isAdmin={isAdmin}
+                  onRegisterUser={isAdmin ? handleRegisterUser : undefined}
+                />
               </div>
             </div>
 

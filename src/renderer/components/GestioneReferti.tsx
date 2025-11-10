@@ -34,14 +34,14 @@ import {
 import { setFilters } from "../store/filtersSlice";
 import { useLocation } from "react-router-dom";
 
-/* ────────────── Tipi ────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Tipi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface Workarea         { workareaId: string;  workareaDescription: string; }
 interface ClinicDepartment { clinicDepartmentId: string; clinicDepartmentDescription: string; }
 interface Doctor           { doctorCode: string; doctorDescription: string; }
 type Sectors = Record<string, boolean>;
 type Units   = Record<string, boolean>;
 
-/* ═════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const GestioneReferti: React.FC = () => {
   /* Redux / Router */
   const dispatch  = useDispatch();
@@ -74,6 +74,9 @@ const GestioneReferti: React.FC = () => {
   const [countBozze,     setCountBozze]     = useState(0);
   const [isFirstTimeCruscotto, setIsFirstTimeCruscotto] = useState(true);
 
+  // State per il filtro degli esami
+  const [examFilter, setExamFilter] = useState("");
+
   const lastNameRef  = React.useRef<HTMLInputElement>(null);
   const firstNameRef = React.useRef<HTMLInputElement>(null);
 
@@ -84,16 +87,17 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
 /* Opzioni periodo */
   const periodOptions = [
+    { text: "Oggi",          value: "Oggi" },
     { text: "Tre Giorni",    value: "Tre Giorni" },
     { text: "Una Settimana", value: "Una Settimana" },
     { text: "Un Mese",       value: "Un Mese" }
   ];
   const defaultPeriodItem = { text: "Seleziona Periodo", value: "" };
 
-  /* ────────────── FETCH helpers ────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ FETCH helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const fetchDoctors = useCallback(async () => {
     try {
-      const resp = await fetch(url_doctors, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await fetch(url_doctors(), { headers: { Authorization: `Bearer ${token}` } });
       if (resp.ok) {
         const data: Doctor[] = await resp.json();
         dispatch(setFilters({ doctorsData: data }));
@@ -104,7 +108,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchWorkareas = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getWorkareas}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getWorkareas()}?userId=${effectiveId}`);
       if (!resp.ok) return console.error("Failed to fetch workareas:", resp.status);
 
       const contentType = resp.headers.get('content-type');
@@ -113,22 +117,22 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         return;
       }
 
-      // ① leggo i dati
+      // â‘  leggo i dati
       const data: Workarea[] = await resp.json();
 
-      // ② li clono e li ordino in base alla descrizione
+      // â‘¡ li clono e li ordino in base alla descrizione
       const ordered = [...data].sort((a, b) =>
         a.workareaDescription.localeCompare(
           b.workareaDescription,                // campo su cui ordinare
           "it",                                 // locale: italiano
-          { sensitivity: "base" }               // aa == Åå == áÁ ecc.
+          { sensitivity: "base" }               // aa == Ã…Ã¥ == Ã¡Ã ecc.
         )
       );
 
-      // ③ salvo la versione ordinata nello store
+      // â‘¢ salvo la versione ordinata nello store
       dispatch(setFilters({ workareasData: ordered }));
 
-      // … il resto invariato …
+      // â€¦ il resto invariato â€¦
       if (Object.keys(sectors).length === 0) {
         const init: Sectors = {};
         ordered.forEach(w => (init[w.workareaId.trim()] = false));
@@ -143,7 +147,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchWorkareasDefault = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getWorkareasDefault}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getWorkareasDefault()}?userId=${effectiveId}`);
       if (resp.ok) {
         const defs: Workarea[] = await resp.json();
         const upd = { ...sectors };
@@ -156,7 +160,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchClinicDepartments = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getClinicDepartements}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getClinicDepartements()}?userId=${effectiveId}`);
       if (!resp.ok) return console.error("Failed to fetch clinic departments:", resp.status);
 
       const contentType = resp.headers.get('content-type');
@@ -192,7 +196,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   const fetchClinicDepartmentsDefault = useCallback(async () => {
     try {
       const effectiveId = effectiveUserId || userId;
-      const resp = await fetch(`${url_getClinicDepartementsDefault}?userId=${effectiveId}`);
+      const resp = await fetch(`${url_getClinicDepartementsDefault()}?userId=${effectiveId}`);
       if (!resp.ok) return;
 
       const defaults: ClinicDepartment[] = await resp.json();
@@ -238,7 +242,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         completedExaminations: String(completedExaminations)
       });
 
-      const resp = await fetch(`${url_getDistinctExamNames}?${qs.toString()}`, {
+      const resp = await fetch(`${url_getDistinctExamNames()}?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -257,7 +261,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     searchByEacWithdrawalDate, completedExaminations, token, dispatch
   ]);
 
-  /* ────────────── SEARCH helpers ────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SEARCH helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const getSearchParams = useCallback(() => ({
     fromDateParam : localFromDate || "",
     toDateParam   : localToDate  || "",
@@ -317,8 +321,18 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       examNames: examNames
     });
 
+    // Fix per caratteri "+" nei nomi degli esami: URLSearchParams non li codifica correttamente
+    // Il "+" viene interpretato come spazio dal server, causando errori 500
+    // Soluzione: sostituiamo manualmente "+" con "%2B" nella query string finale
+    let queryString = qs.toString();
+    if (examNames && examNames.includes('+')) {
+      // Decodifichiamo examNames dalla query string e lo ri-codifichiamo correttamente
+      const examNamesEncoded = encodeURIComponent(examNames);
+      queryString = queryString.replace(/examNames=[^&]*/, `examNames=${examNamesEncoded}`);
+    }
+
     try {
-      const rsp = await fetch(`${url_worklist}?${qs.toString()}`, {
+      const rsp = await fetch(`${url_worklist()}?${queryString}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (rsp.ok) {
@@ -346,7 +360,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     finally       { dispatch(stopLoading()); }
   }, [token, dispatch, filterPrescriptions]);
 
-  /* ────────────── Effetti ────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Effetti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   /* Recupero userId corretto da UsersDetails (sia per tecnici che medici) */
   useEffect(() => {
@@ -354,7 +368,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       if (!userId || !token) return;
 
       try {
-        const response = await fetch(`${url_getUserDetailsId}?userId=${userId}`, {
+        const response = await fetch(`${url_getUserDetailsId()}?userId=${userId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -417,7 +431,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     const hasUnit   = Object.values(units).some(Boolean);
     if (!hasSector || !hasUnit) return;      // aspetto i default true
 
-    // ► da qui parte una sola volta
+    // â–º da qui parte una sola volta
     setInitialSearchDone(true);              // blocca futuri re-trigger
 
     if (location.state?.reload === false) return; // rientro dall'editor
@@ -448,7 +462,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     fetchAvailableExamNames
   ]);
 
-/* ────────────── Contatori cruscotto ────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Contatori cruscotto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   useEffect(() => {
     let assegn = 0, bozze = 0;
     registrations.forEach(r => {
@@ -488,7 +502,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   };
 
   // ---------------------------------------------------------
-  // handlePeriodChange => Gestione dropdown “Periodo”
+  // handlePeriodChange => Gestione dropdown â€œPeriodoâ€
   // ---------------------------------------------------------
   const handlePeriodChange = (e: any) => {
     const selectedValue = e.value;
@@ -498,7 +512,10 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     let newFrom = fromDate ? moment(fromDate, "YYYY-MM-DD") : null;
     let newTo = toDate ? moment(toDate, "YYYY-MM-DD") : null;
 
-    if (selectedValue.value === "Tre Giorni") {
+    if (selectedValue.value === "Oggi") {
+      newFrom = moment().startOf("day");
+      newTo = moment();
+    } else if (selectedValue.value === "Tre Giorni") {
       newFrom = moment().subtract(2, "days").startOf("day");
       newTo = moment();
     } else if (selectedValue.value === "Una Settimana") {
@@ -571,7 +588,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   // ---------------------------------------------------------
   const handleCruscottoTutti = async () => {
     const params = getSearchParams();
-    params.completedExaminationsParam = false; // forzo “incompleti”
+    params.completedExaminationsParam = false; // forzo â€œincompletiâ€
     await handleCruscottoSearch(params);
   };
 
@@ -616,7 +633,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       //dispatch(resetExaminationState());
       dispatch(setRegistrations([]));
 
-      const response = await fetch(`${url_worklist}?${queryParams.toString()}`, {
+      const response = await fetch(`${url_worklist()}?${queryParams.toString()}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -641,7 +658,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     }
   };
 
-  // Ricerca generica usata da “Tutti” / “Assegnati”
+  // Ricerca generica usata da â€œTuttiâ€ / â€œAssegnatiâ€
   const handleCruscottoSearch = async (params: any) => {
     dispatch(startLoading());
     try {
@@ -676,7 +693,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       //dispatch(resetExaminationState());
       dispatch(setRegistrations([]));
 
-      const response = await fetch(`${url_worklist}?${qParams.toString()}`, {
+      const response = await fetch(`${url_worklist()}?${qParams.toString()}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -716,7 +733,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       exam.toLowerCase().includes(examFilter.toLowerCase())
     );
   }, [availableExamNames, examFilter]);
-  
+
   // ---------------------------------------------------------
   // Render
   // ---------------------------------------------------------
@@ -881,7 +898,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
                     <Checkbox
                       key={id}
                       label={text}
-                      checked={!!units[id]}            /* undefined ⇒ false */
+                      checked={!!units[id]}            /* undefined â‡’ false */
                       onChange={() =>
                         dispatch(setFilters({ units: { ...units, [id]: !units[id] } }))
                       }

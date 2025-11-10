@@ -7,6 +7,7 @@ import { persistor } from "./store";
 import Login from "./pages/Login";
 import HomePage from "./pages/HomePage";
 import EditorPage from "./pages/EditorPage";
+import RegisterUser from "./pages/RegisterUser";
 import PrescriptionEditorModal from "./components/PrescriptionEditorModal";
 
 import "@progress/kendo-theme-fluent/dist/all.css";
@@ -124,8 +125,14 @@ function AppWrapper() {
 
   // --------------------------------------------------
   // 1. useEffect per montaggio iniziale: fetch token
+  // ⚠️ IMPORTANTE: Dipende da companyUISettings per aspettare che la configurazione sia caricata
   // --------------------------------------------------
   useEffect(() => {
+    // Non eseguire se la configurazione non è ancora caricata
+    if (!companyUISettings) {
+      return;
+    }
+
     const fetchToken = async () => {
       try {
         const response = await fetch(url_token(), {
@@ -136,7 +143,7 @@ function AppWrapper() {
 
         if (response.ok) {
           const { accessToken } = await response.json();
-										   
+
           dispatch(setToken(accessToken));
         } else {
           console.error("Failed to fetch token");
@@ -146,9 +153,9 @@ function AppWrapper() {
       }
     };
 
-										
+
     fetchToken();
-  }, [dispatch]);
+  }, [dispatch, companyUISettings]);
 
   // --------------------------------------------------
   // 2. useEffect per onBeforeUnload / rememberMe
@@ -183,18 +190,59 @@ function AppWrapper() {
   // Se l'URL non è "/login", nascondiamo l'header e il footer
   const hideHeaderFooter = location.pathname !== "/login";
 
-  // Non renderizzare nulla se le impostazioni UI non sono ancora caricate
-  if (!companyUISettings) {
-    return <div className="app-container">Caricamento...</div>;
-  }
-
   // Mostra errore di configurazione se presente
   if (configError) {
     return (
-      <div className="app-container" style={{ padding: '2rem', fontFamily: 'monospace' }}>
-        <pre style={{ whiteSpace: 'pre-wrap', color: 'red' }}>{configError}</pre>
+      <div className="app-container" style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#f8d7da',
+        padding: '20px'
+      }}>
+        <div style={{
+          maxWidth: '800px',
+          backgroundColor: 'white',
+          border: '3px solid #dc3545',
+          borderRadius: '10px',
+          padding: '30px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <h2 style={{
+            color: '#dc3545',
+            marginBottom: '20px',
+            fontSize: '24px',
+            fontWeight: 'bold'
+          }}>
+            ⚠️ Errore di Configurazione
+          </h2>
+          <pre style={{
+            backgroundColor: '#f8f9fa',
+            padding: '20px',
+            borderRadius: '5px',
+            fontSize: '14px',
+            fontFamily: 'Consolas, Monaco, monospace',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            color: '#212529',
+            lineHeight: '1.6'
+          }}>
+            {configError}
+          </pre>
+          <div style={{ marginTop: '20px', fontSize: '14px', color: '#6c757d' }}>
+            <p>
+              <strong>Nota:</strong> Riavvia l'applicazione dopo aver corretto il file di configurazione.
+            </p>
+          </div>
+        </div>
       </div>
     );
+  }
+
+  // Non renderizzare nulla se le impostazioni UI non sono ancora caricate
+  if (!companyUISettings) {
+    return <div className="app-container">Caricamento...</div>;
   }
 
   return (
@@ -242,6 +290,7 @@ function AppWrapper() {
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/editor" element={<EditorPage />} />
+            <Route path="/register-user" element={<RegisterUser />} />
           </Route>
         </Routes>
       </main>
