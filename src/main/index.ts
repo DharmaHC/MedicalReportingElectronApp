@@ -301,7 +301,13 @@ ipcMain.handle('get-company-ui-settings', async () => {
       bypassPin: false,
       bypassSignature: false,
       overrideDoctorName: null
-    }
+    },
+    logipacsServer: {
+      baseUrl: "http://172.16.18.52/LPW/Display",
+      username: "radiologia",
+      password: "radiologia"
+    },
+    useExternalIdSystem: false
   };
 
   return loadConfigJson<CompanyUISettings>('company-ui-settings.json', defaultSettings);

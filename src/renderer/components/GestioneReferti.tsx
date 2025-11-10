@@ -87,6 +87,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
 /* Opzioni periodo */
   const periodOptions = [
+    { text: "Oggi",          value: "Oggi" },
     { text: "Tre Giorni",    value: "Tre Giorni" },
     { text: "Una Settimana", value: "Una Settimana" },
     { text: "Un Mese",       value: "Un Mese" }
@@ -511,7 +512,10 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     let newFrom = fromDate ? moment(fromDate, "YYYY-MM-DD") : null;
     let newTo = toDate ? moment(toDate, "YYYY-MM-DD") : null;
 
-    if (selectedValue.value === "Tre Giorni") {
+    if (selectedValue.value === "Oggi") {
+      newFrom = moment().startOf("day");
+      newTo = moment();
+    } else if (selectedValue.value === "Tre Giorni") {
       newFrom = moment().subtract(2, "days").startOf("day");
       newTo = moment();
     } else if (selectedValue.value === "Una Settimana") {

@@ -163,6 +163,16 @@ const logToFile = (msg: string, details?: any) => {
     overrideDoctorName: null
   });
 
+  // Stato per la configurazione del server logipacs
+  const [logipacsServer, setLogipacsServer] = useState({
+    baseUrl: "http://172.16.18.52/LPW/Display",
+    username: "radiologia",
+    password: "radiologia"
+  });
+
+  // Stato per abilitare l'uso degli ID esterni per il PACS
+  const [useExternalIdSystem, setUseExternalIdSystem] = useState(false);
+
   useEffect(() => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
@@ -184,6 +194,17 @@ const logToFile = (msg: string, details?: any) => {
         overrideDoctorName: null
       };
       setEmergencyWorkaround(workaround);
+
+      // Carica configurazione server logipacs
+      const logipacs = settings.logipacsServer || {
+        baseUrl: "http://172.16.18.52/LPW/Display",
+        username: "radiologia",
+        password: "radiologia"
+      };
+      setLogipacsServer(logipacs);
+
+      // Carica configurazione uso ID esterni
+      setUseExternalIdSystem(settings.useExternalIdSystem ?? false);
 
       // Log visibile quando il workaround è attivo
       if (workaround.enabled) {
@@ -1030,9 +1051,10 @@ const renderPinDialog = () =>
     }
 
     /* 2. Costruisce l'URL JNLP per RemotEye. */
-    const BASE = "http://172.16.18.52/LPW/Display"; // URL base del servizio RemotEye.
-    const USER = "radiologia"; // Username per RemotEye.
-    const PWD  = "radiologia"; // Password per RemotEye.
+    // Carica i parametri di connessione dalla configurazione
+    const BASE = logipacsServer.baseUrl; // URL base del servizio RemotEye.
+    const USER = logipacsServer.username; // Username per RemotEye.
+    const PWD  = logipacsServer.password; // Password per RemotEye.
 
     let jnlpURL =
       `${BASE}?username=${encodeURIComponent(USER)}` +
@@ -1084,9 +1106,17 @@ const renderPinDialog = () =>
    * Apre lo studio corrente nel viewer RemotEye.
    * - Se il viewer non contiene niente (lista locale vuota) -> "clearAndLoad".
    * - Altrimenti -> "add" (aggiunge lo studio a quelli esistenti).
+   * - Se useExternalIdSystem è true, usa ExternalAccessionNumber, altrimenti usa examinationMnemonicCodeFull
    */
   function openCurrentStudy() {
-    const acc = selectedRegistrationFullCode.trim(); // Accession Number dell'esame corrente.
+    // Determina quale Accession Number usare
+    let acc: string;
+    if (useExternalIdSystem && selectedRegistration?.externalAccessionNumber) {
+      acc = selectedRegistration.externalAccessionNumber.trim();
+    } else {
+      acc = selectedRegistrationFullCode.trim();
+    }
+
     if (!acc) return; // Non fare nulla se non c'è un accNum.
 
     const mode: "clearAndLoad" | "add" =

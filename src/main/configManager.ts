@@ -27,14 +27,38 @@ export function getDefaultConfigDir(): string {
 /**
  * Ottiene la cartella per i file PERSONALIZZATI (persistenti tra update)
  *
- * Windows: C:\ProgramData\MedReportAndSign\config
+ * Windows: C:\ProgramData\MedReportAndSign\assets
  * Questa cartella NON viene toccata dagli aggiornamenti
+ *
+ * NOTA: Stessa struttura di resources/assets in Program Files
  */
 export function getCustomConfigDir(): string {
   // ProgramData è la cartella standard per dati condivisi tra tutti gli utenti
   // su Windows è C:\ProgramData
   const programData = process.env.ProgramData || 'C:\\ProgramData';
-  return path.join(programData, 'MedReportAndSign', 'config');
+  return path.join(programData, 'MedReportAndSign', 'assets');
+}
+
+/**
+ * Ottiene la cartella per le IMMAGINI PERSONALIZZATE (persistenti tra update)
+ *
+ * Windows: C:\ProgramData\MedReportAndSign\assets\Images
+ * Questa cartella NON viene toccata dagli aggiornamenti
+ *
+ * NOTA: Stessa struttura di resources/assets/Images in Program Files
+ */
+export function getCustomImagesDir(): string {
+  const programData = process.env.ProgramData || 'C:\\ProgramData';
+  return path.join(programData, 'MedReportAndSign', 'assets', 'Images');
+}
+
+/**
+ * Ottiene la cartella base per le immagini DEFAULT (dentro l'installazione)
+ */
+export function getDefaultImagesDir(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'Images')
+    : path.join(process.cwd(), 'src/renderer/assets/Images');
 }
 
 /**
@@ -45,6 +69,17 @@ export function ensureCustomConfigDir(): void {
   if (!fs.existsSync(customDir)) {
     fs.mkdirSync(customDir, { recursive: true });
     console.log(`✓ Creata cartella configurazione personalizzata: ${customDir}`);
+  }
+}
+
+/**
+ * Assicura che la cartella immagini personalizzate esista
+ */
+export function ensureCustomImagesDir(): void {
+  const customDir = getCustomImagesDir();
+  if (!fs.existsSync(customDir)) {
+    fs.mkdirSync(customDir, { recursive: true });
+    console.log(`✓ Creata cartella immagini personalizzate: ${customDir}`);
   }
 }
 
@@ -112,32 +147,56 @@ export function initializeCustomConfig(filename: string): boolean {
 }
 
 /**
- * Inizializza tutti i file di configurazione personalizzati al primo avvio
+ * Inizializza tutti i file di configurazione e immagini personalizzati al primo avvio
  * Questa funzione va chiamata all'avvio dell'app (nel main)
  */
 export function initializeAllConfigs(): void {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('📋 Inizializzazione file di configurazione');
+  console.log('📋 Inizializzazione file di configurazione e immagini');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
+  // Inizializza file di configurazione JSON
   const configFiles = [
     'sign-settings.json',
     'company-ui-settings.json',
     'company-footer-settings.json'
   ];
 
-  let copiedFiles = 0;
+  let copiedConfigs = 0;
   configFiles.forEach(filename => {
     if (initializeCustomConfig(filename)) {
-      copiedFiles++;
+      copiedConfigs++;
     }
   });
 
-  if (copiedFiles > 0) {
-    console.log(`\n✓ ${copiedFiles} file copiati nella cartella personalizzata`);
-    console.log(`📂 Cartella configurazione: ${getCustomConfigDir()}`);
-    console.log('\n💡 IMPORTANTE: Per personalizzare la configurazione, modifica i file in:');
+  // Inizializza immagini
+  const imageFiles = [
+    'LogoAster.png',
+    'FooterAster.png',
+    'FooterHW.png',
+    'FooterCin.png'
+  ];
+
+  let copiedImages = 0;
+  imageFiles.forEach(filename => {
+    if (initializeCustomImage(filename)) {
+      copiedImages++;
+    }
+  });
+
+  // Report risultati
+  if (copiedConfigs > 0 || copiedImages > 0) {
+    if (copiedConfigs > 0) {
+      console.log(`\n✓ ${copiedConfigs} file di configurazione copiati`);
+      console.log(`📂 Cartella: ${getCustomConfigDir()}`);
+    }
+    if (copiedImages > 0) {
+      console.log(`\n✓ ${copiedImages} immagini copiate`);
+      console.log(`🖼️ Cartella: ${getCustomImagesDir()}`);
+    }
+    console.log('\n💡 IMPORTANTE: Per personalizzare, modifica i file in:');
     console.log(`   ${getCustomConfigDir()}`);
+    console.log('   (stessa struttura di resources/assets in Program Files)');
     console.log('   Questi file NON verranno sovrascritti durante gli aggiornamenti!\n');
   } else {
     console.log('\n✓ Tutti i file personalizzati già presenti');
@@ -190,6 +249,67 @@ export function saveConfigJson<T>(filename: string, data: T): boolean {
     return true;
   } catch (err) {
     console.error(`✗ Errore salvataggio ${filename}:`, err);
+    return false;
+  }
+}
+
+/* ██████ GESTIONE IMMAGINI ██████ */
+
+/**
+ * Ottiene il path completo di un'immagine
+ *
+ * LOGICA (identica a getConfigPath):
+ * 1. Se esiste l'immagine personalizzata in ProgramData, usa quella
+ * 2. Altrimenti usa l'immagine default dall'installazione
+ *
+ * @param filename Nome del file immagine (es. "FooterHW.png")
+ * @returns Path completo dell'immagine da usare
+ */
+export function getImagePath(filename: string): string {
+  const customPath = path.join(getCustomImagesDir(), filename);
+  const defaultPath = path.join(getDefaultImagesDir(), filename);
+
+  // Se esiste l'immagine personalizzata, usala
+  if (fs.existsSync(customPath)) {
+    console.log(`🖼️ Caricamento ${filename} personalizzato da: ${customPath}`);
+    return customPath;
+  }
+
+  // Altrimenti usa il default
+  console.log(`🖼️ Caricamento ${filename} default da: ${defaultPath}`);
+  return defaultPath;
+}
+
+/**
+ * Copia un'immagine default nella cartella personalizzata se non esiste già
+ *
+ * @param filename Nome del file immagine (es. "FooterHW.png")
+ * @returns true se l'immagine è stata copiata, false se esisteva già
+ */
+export function initializeCustomImage(filename: string): boolean {
+  ensureCustomImagesDir();
+
+  const customPath = path.join(getCustomImagesDir(), filename);
+  const defaultPath = path.join(getDefaultImagesDir(), filename);
+
+  // Se l'immagine personalizzata esiste già, non fare nulla
+  if (fs.existsSync(customPath)) {
+    return false;
+  }
+
+  // Se l'immagine default non esiste, non possiamo copiarla
+  if (!fs.existsSync(defaultPath)) {
+    console.warn(`⚠️ Immagine default non trovata: ${defaultPath}`);
+    return false;
+  }
+
+  // Copia l'immagine default nella cartella personalizzata
+  try {
+    fs.copyFileSync(defaultPath, customPath);
+    console.log(`✓ Copiata immagine ${filename} in cartella personalizzata`);
+    return true;
+  } catch (err) {
+    console.error(`✗ Errore copia immagine ${filename}:`, err);
     return false;
   }
 }
