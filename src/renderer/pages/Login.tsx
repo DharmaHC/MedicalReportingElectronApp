@@ -70,7 +70,7 @@ const Login = () => {
   // Funzione per fetchare informazioni su firma digitale se medico
   const fetchDoctorSignatureInfo = async (doctorCode: string) => {
     try {
-      const response = await fetch(`${url_doctors}${doctorCode}`, {
+      const response = await fetch(`${url_doctors()}${doctorCode}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`
@@ -90,10 +90,10 @@ const Login = () => {
   // Funzione per verificare se l'utente è un tecnico radiologo
   const checkTechnicianRole = async (userId: string, userName: string) => {
     try {
-      console.log(`[TECHNICIAN CHECK] Calling ${url_isTechnician}?userId=${userId}`);
+      console.log(`[TECHNICIAN CHECK] Calling ${url_isTechnician()}?userId=${userId}`);
 
       const response = await fetch(
-        `${url_isTechnician}?userId=${encodeURIComponent(userId)}`,
+        `${url_isTechnician()}?userId=${encodeURIComponent(userId)}`,
         {
           method: "GET",
           headers: {
@@ -118,19 +118,19 @@ const Login = () => {
         if (isTechnician) {
           // Usa lo username come technicianCode
           dispatch(setTechnicianCode(userName));
-          console.log(`[TECHNICIAN CHECK] ✅ User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
+          console.log(`[TECHNICIAN CHECK] âœ… User ${userName} IS A TECHNICIAN - technicianCode set to: ${userName}`);
         } else {
           dispatch(setTechnicianCode(null));
-          console.log(`[TECHNICIAN CHECK] ℹ️ User ${userName} is NOT a technician (is a doctor or other role)`);
+          console.log(`[TECHNICIAN CHECK] â„¹ï¸ User ${userName} is NOT a technician (is a doctor or other role)`);
         }
       } else {
         const errorText = await response.text();
-        console.error(`[TECHNICIAN CHECK] ❌ Failed to check technician role - Status: ${response.status}`, errorText);
+        console.error(`[TECHNICIAN CHECK] âŒ Failed to check technician role - Status: ${response.status}`, errorText);
         dispatch(setIsTechnician(false));
         dispatch(setTechnicianCode(null));
       }
     } catch (error) {
-      console.error("[TECHNICIAN CHECK] ❌ Error checking technician role:", error);
+      console.error("[TECHNICIAN CHECK] âŒ Error checking technician role:", error);
       dispatch(setIsTechnician(false));
       dispatch(setTechnicianCode(null));
     }
@@ -148,7 +148,7 @@ const Login = () => {
 
   const postForgotPassword = async (body: PasswordForgotBody) => {
     try {
-      const response = await fetch(url_passwordForgot, {
+      const response = await fetch(url_passwordForgot(), {
         method: "POST",
         body: JSON.stringify(body),
         headers: {
@@ -175,7 +175,7 @@ const Login = () => {
   const fetchUserInfo = async (userName: string) => {
     try {
       const response = await fetch(
-        `${url_info}?userName=${encodeURIComponent(userName)}`,
+        `${url_info()}?userName=${encodeURIComponent(userName)}`,
         {
           method: "GET",
           headers: {
@@ -250,7 +250,7 @@ const Login = () => {
     };
 
     try {
-      const response = await fetch(url_login, {
+      const response = await fetch(url_login(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -269,7 +269,7 @@ const Login = () => {
         // Salva lo state di login (redux)
         dispatch(login({ userName, rememberMe }));
 
-        // ► Svuota i dati legati al medico precedente
+        // â–º Svuota i dati legati al medico precedente
         dispatch(
           setFilters({
             workareasData: [],          // lista settori
@@ -331,7 +331,7 @@ return (<>
           initialValues={{
             userName: "",
             password: "",
-            rememberMe: false
+            rememberMe: true
       }}
           onSubmit={(dataItem) => handleSubmit({ ...dataItem, userName })}
           render={(formRenderProps) => (
@@ -375,7 +375,7 @@ return (<>
                 </span>
               </div>
 
-              {/* Checkbox “Ricorda Username” gestito da Kendo */}
+              {/* Checkbox â€œRicorda Usernameâ€ gestito da Kendo */}
               <Field
                 name="rememberMe"
                 type="checkbox"
