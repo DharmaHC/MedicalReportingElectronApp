@@ -146,36 +146,44 @@ WHERE ExternalAccessionNumber IN ('ACC123456', 'ACC789456', 'ACC111222')
 ORDER BY SignedDate DESC;
 GO
 
--- Query di test per verificare le ricerche
+-- Query di test per verificare le ricerche (con JOIN corretti)
+-- NOTA: Le query usano JOIN con Patients e ExaminationsAndConsultations
+--       come richiesto dalla struttura reale del database
 PRINT '';
-PRINT '=== TEST QUERY ===';
+PRINT '=== TEST QUERY (con JOIN) ===';
 PRINT '';
 PRINT '1. Ricerca per ACC123456 e PAT789012:';
 SELECT
-    ExamResultGUID as id,
-    PatientName as patientName,
-    ExternalAccessionNumber as externalAccessionNumber,
-    ExternalPatientID as externalPatientId,
-    SignedDate as signedDate,
-    DATALENGTH(SignedPdfData) as pdfSize
-FROM DigitalSignedReports
-WHERE ExternalAccessionNumber = 'ACC123456'
-  AND ExternalPatientID = 'PAT789012'
-  AND SignedPdfData IS NOT NULL;
+    dsr.ExamResultGUID as id,
+    p.Name + ' ' + p.Surname as patientName,
+    eac.ExternalAccessionNumber as externalAccessionNumber,
+    p.ExternalPatientID as externalPatientId,
+    dsr.SignedDate as signedDate,
+    DATALENGTH(dsr.SignedPdfData) as pdfSize
+FROM DigitalSignedReports dsr
+INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+WHERE eac.ExternalAccessionNumber = 'ACC123456'
+  AND p.ExternalPatientID = 'PAT789012'
+  AND dsr.SignedPdfData IS NOT NULL;
 
 PRINT '';
 PRINT '2. Ricerca multipla per ACC111222 e PAT333444:';
 SELECT
-    ExamResultGUID as id,
-    PatientName as patientName,
-    ExternalAccessionNumber as externalAccessionNumber,
-    ExternalPatientID as externalPatientId,
-    SignedDate as signedDate,
-    DATALENGTH(SignedPdfData) as pdfSize
-FROM DigitalSignedReports
-WHERE ExternalAccessionNumber = 'ACC111222'
-  AND ExternalPatientID = 'PAT333444'
-ORDER BY SignedDate DESC;
+    dsr.ExamResultGUID as id,
+    p.Name + ' ' + p.Surname as patientName,
+    eac.ExternalAccessionNumber as externalAccessionNumber,
+    p.ExternalPatientID as externalPatientId,
+    dsr.SignedDate as signedDate,
+    DATALENGTH(dsr.SignedPdfData) as pdfSize
+FROM DigitalSignedReports dsr
+INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+WHERE eac.ExternalAccessionNumber = 'ACC111222'
+  AND p.ExternalPatientID = 'PAT333444'
+ORDER BY dsr.SignedDate DESC;
 GO
 
 -- Script per caricare un PDF di test (OPZIONALE)

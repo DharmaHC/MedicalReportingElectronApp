@@ -71,24 +71,27 @@ router.get('/api/reports/search', async (req, res) => {
             });
         }
 
-        // Query database
+        // Query database with joins
         const pool = await sql.connect(dbConfig);
         const result = await pool.request()
             .input('externalAccessionNumber', sql.NVarChar, externalAccessionNumber)
             .input('externalPatientId', sql.NVarChar, externalPatientId)
             .query(`
                 SELECT
-                    ExamResultGUID as id,
-                    PatientName as patientName,
-                    ExternalAccessionNumber as externalAccessionNumber,
-                    ExternalPatientID as externalPatientId,
-                    SignedDate as signedDate,
-                    DATALENGTH(SignedPdfData) as pdfSize
-                FROM DigitalSignedReports
-                WHERE ExternalAccessionNumber = @externalAccessionNumber
-                  AND ExternalPatientID = @externalPatientId
-                  AND SignedPdfData IS NOT NULL
-                ORDER BY SignedDate DESC
+                    dsr.ExamResultGUID as id,
+                    p.Name + ' ' + p.Surname as patientName,
+                    eac.ExternalAccessionNumber as externalAccessionNumber,
+                    p.ExternalPatientID as externalPatientId,
+                    dsr.SignedDate as signedDate,
+                    DATALENGTH(dsr.SignedPdfData) as pdfSize
+                FROM DigitalSignedReports dsr
+                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                WHERE eac.ExternalAccessionNumber = @externalAccessionNumber
+                  AND p.ExternalPatientID = @externalPatientId
+                  AND dsr.SignedPdfData IS NOT NULL
+                ORDER BY dsr.SignedDate DESC
             `);
 
         if (result.recordset.length === 0) {
@@ -108,17 +111,20 @@ router.get('/api/reports/:id/pdf', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Query database
+        // Query database with joins
         const pool = await sql.connect(dbConfig);
         const result = await pool.request()
             .input('id', sql.UniqueIdentifier, id)
             .query(`
                 SELECT
-                    SignedPdfData as pdfData,
-                    PatientName as patientName,
-                    ExternalAccessionNumber as accessionNumber
-                FROM DigitalSignedReports
-                WHERE ExamResultGUID = @id
+                    dsr.SignedPdfData as pdfData,
+                    p.Name + ' ' + p.Surname as patientName,
+                    eac.ExternalAccessionNumber as accessionNumber
+                FROM DigitalSignedReports dsr
+                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                WHERE dsr.ExamResultGUID = @id
             `);
 
         if (result.recordset.length === 0) {
@@ -191,17 +197,20 @@ public class ReportsController : ControllerBase
 
             var query = @"
                 SELECT
-                    ExamResultGUID as Id,
-                    PatientName as PatientName,
-                    ExternalAccessionNumber,
-                    ExternalPatientID,
-                    SignedDate,
-                    DATALENGTH(SignedPdfData) as PdfSize
-                FROM DigitalSignedReports
-                WHERE ExternalAccessionNumber = @ExternalAccessionNumber
-                  AND ExternalPatientID = @ExternalPatientId
-                  AND SignedPdfData IS NOT NULL
-                ORDER BY SignedDate DESC";
+                    dsr.ExamResultGUID as Id,
+                    p.Name + ' ' + p.Surname as PatientName,
+                    eac.ExternalAccessionNumber,
+                    p.ExternalPatientID,
+                    dsr.SignedDate,
+                    DATALENGTH(dsr.SignedPdfData) as PdfSize
+                FROM DigitalSignedReports dsr
+                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                WHERE eac.ExternalAccessionNumber = @ExternalAccessionNumber
+                  AND p.ExternalPatientID = @ExternalPatientId
+                  AND dsr.SignedPdfData IS NOT NULL
+                ORDER BY dsr.SignedDate DESC";
 
             using (var command = new SqlCommand(query, connection))
             {
@@ -244,11 +253,14 @@ public class ReportsController : ControllerBase
 
             var query = @"
                 SELECT
-                    SignedPdfData,
-                    PatientName,
-                    ExternalAccessionNumber
-                FROM DigitalSignedReports
-                WHERE ExamResultGUID = @Id";
+                    dsr.SignedPdfData,
+                    p.Name + ' ' + p.Surname as PatientName,
+                    eac.ExternalAccessionNumber
+                FROM DigitalSignedReports dsr
+                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
+                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
+                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                WHERE dsr.ExamResultGUID = @Id";
 
             using (var command = new SqlCommand(query, connection))
             {
