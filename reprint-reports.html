@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ristampa Referti - Dharma Healthcare</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+        }
+
+        .search-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .search-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+            font-size: 12px;
+            padding: 8px 16px;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+            font-size: 12px;
+            padding: 8px 16px;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .results-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+
+        .results-card.show {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .results-header h2 {
+            color: #333;
+        }
+
+        .results-count {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+        }
+
+        .results-table thead {
+            background: #f7fafc;
+        }
+
+        .results-table th {
+            padding: 15px;
+            text-align: left;
+            color: #4a5568;
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .results-table td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .results-table tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            display: none;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #c53030;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #48bb78;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border-left: 4px solid #4299e1;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-results-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 768px) {
+            .search-form {
+                grid-template-columns: 1fr;
+            }
+
+            .results-table {
+                font-size: 12px;
+            }
+
+            .results-table th,
+            .results-table td {
+                padding: 10px 8px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+
+        .config-section {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .config-section label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4a5568;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .config-section input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            padding: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Ristampa Referti Firmati</h1>
+            <p>Sistema di recupero e ristampa referti medici digitalmente firmati</p>
+        </div>
+
+        <!-- Configuration Section -->
+        <div class="search-card">
+            <div class="config-section">
+                <label for="apiUrl">URL API Server:</label>
+                <input type="text" id="apiUrl" placeholder="es: http://localhost:5000 o https://api.example.com" value="http://localhost:5000">
+            </div>
+        </div>
+
+        <!-- Alert Messages -->
+        <div id="alertBox" class="alert"></div>
+
+        <!-- Search Form -->
+        <div class="search-card">
+            <h2 style="margin-bottom: 20px; color: #333;">🔍 Ricerca Referto</h2>
+            <form id="searchForm" class="search-form">
+                <div class="form-group">
+                    <label for="externalAccessionNumber">Numero Accesso Esterno</label>
+                    <input
+                        type="text"
+                        id="externalAccessionNumber"
+                        placeholder="es: ACC123456"
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="externalPatientId">ID Paziente Esterno</label>
+                    <input
+                        type="text"
+                        id="externalPatientId"
+                        placeholder="es: PAT789012"
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Cerca Referto</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Ricerca in corso...</p>
+        </div>
+
+        <!-- Results Table -->
+        <div id="resultsCard" class="results-card">
+            <div class="results-header">
+                <h2>Risultati della Ricerca</h2>
+                <span class="results-count" id="resultsCount">0 risultati</span>
+            </div>
+            <div id="resultsContent"></div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 Dharma Healthcare - Sistema di Gestione Referti Medici</p>
+        </div>
+    </div>
+
+    <script>
+        // Get API URL from config
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
+        }
+
+        // Show alert message
+        function showAlert(message, type = 'info') {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = `alert alert-${type} show`;
+            alertBox.textContent = message;
+
+            setTimeout(() => {
+                alertBox.classList.remove('show');
+            }, 5000);
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('it-IT', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Search for reports
+        async function searchReports(externalAccessionNumber, externalPatientId) {
+            const apiUrl = getApiUrl();
+
+            if (!apiUrl) {
+                showAlert('Errore: Inserisci l\'URL del server API', 'error');
+                return null;
+            }
+
+            const loading = document.getElementById('loading');
+            const resultsCard = document.getElementById('resultsCard');
+
+            loading.classList.add('show');
+            resultsCard.classList.remove('show');
+
+            try {
+                const url = `${apiUrl}/api/reports/search?externalAccessionNumber=${encodeURIComponent(externalAccessionNumber)}&externalPatientId=${encodeURIComponent(externalPatientId)}`;
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Errore HTTP: ${response.status} - ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data;
+
+            } catch (error) {
+                console.error('Errore durante la ricerca:', error);
+                showAlert(`Errore durante la ricerca: ${error.message}`, 'error');
+                return null;
+            } finally {
+                loading.classList.remove('show');
+            }
+        }
+
+        // Download PDF
+        async function downloadPdf(reportId, patientName, accessionNumber) {
+            const apiUrl = getApiUrl();
+
+            try {
+                showAlert('Download in corso...', 'info');
+
+                const url = `${apiUrl}/api/reports/${reportId}/pdf`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`Errore HTTP: ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Referto_${patientName}_${accessionNumber}_${new Date().getTime()}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                document.body.removeChild(a);
+
+                showAlert('PDF scaricato con successo!', 'success');
+
+            } catch (error) {
+                console.error('Errore durante il download:', error);
+                showAlert(`Errore durante il download: ${error.message}`, 'error');
+            }
+        }
+
+        // View PDF in new tab
+        async function viewPdf(reportId) {
+            const apiUrl = getApiUrl();
+            const url = `${apiUrl}/api/reports/${reportId}/pdf`;
+            window.open(url, '_blank');
+        }
+
+        // Display results
+        function displayResults(results) {
+            const resultsCard = document.getElementById('resultsCard');
+            const resultsContent = document.getElementById('resultsContent');
+            const resultsCount = document.getElementById('resultsCount');
+
+            if (!results || results.length === 0) {
+                resultsContent.innerHTML = `
+                    <div class="no-results">
+                        <div class="no-results-icon">📋</div>
+                        <h3>Nessun referto trovato</h3>
+                        <p>Non sono stati trovati referti con i criteri di ricerca specificati.</p>
+                    </div>
+                `;
+                resultsCount.textContent = '0 risultati';
+                resultsCard.classList.add('show');
+                return;
+            }
+
+            resultsCount.textContent = `${results.length} risultat${results.length === 1 ? 'o' : 'i'}`;
+
+            const tableHtml = `
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Paziente</th>
+                            <th>N° Accesso</th>
+                            <th>ID Paziente</th>
+                            <th>Data Firma</th>
+                            <th>Dimensione</th>
+                            <th>Stato</th>
+                            <th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${results.map(report => `
+                            <tr>
+                                <td><strong>${report.patientName || 'N/A'}</strong></td>
+                                <td>${report.externalAccessionNumber || 'N/A'}</td>
+                                <td>${report.externalPatientId || 'N/A'}</td>
+                                <td>${formatDate(report.signedDate)}</td>
+                                <td>${formatFileSize(report.pdfSize)}</td>
+                                <td>
+                                    <span class="badge badge-success">✓ Firmato</span>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button
+                                            class="btn btn-secondary"
+                                            onclick="viewPdf('${report.id}')"
+                                            title="Visualizza PDF"
+                                        >
+                                            👁️ Visualizza
+                                        </button>
+                                        <button
+                                            class="btn btn-primary"
+                                            onclick="downloadPdf('${report.id}', '${report.patientName}', '${report.externalAccessionNumber}')"
+                                            title="Scarica PDF"
+                                        >
+                                            ⬇️ Scarica
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            resultsContent.innerHTML = tableHtml;
+            resultsCard.classList.add('show');
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (!bytes) return 'N/A';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Form submit handler
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const externalAccessionNumber = document.getElementById('externalAccessionNumber').value.trim();
+            const externalPatientId = document.getElementById('externalPatientId').value.trim();
+
+            if (!externalAccessionNumber || !externalPatientId) {
+                showAlert('Inserisci sia il numero di accesso che l\'ID paziente', 'error');
+                return;
+            }
+
+            const results = await searchReports(externalAccessionNumber, externalPatientId);
+
+            if (results) {
+                displayResults(results);
+                if (results.length > 0) {
+                    showAlert(`Trovati ${results.length} referti`, 'success');
+                }
+            }
+        });
+
+        // Save API URL to localStorage
+        document.getElementById('apiUrl').addEventListener('change', (e) => {
+            localStorage.setItem('apiUrl', e.target.value);
+        });
+
+        // Load API URL from localStorage on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedApiUrl = localStorage.getItem('apiUrl');
+            if (savedApiUrl) {
+                document.getElementById('apiUrl').value = savedApiUrl;
+            }
+        });
+    </script>
+</body>
+</html>
