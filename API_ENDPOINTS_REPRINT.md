@@ -78,20 +78,19 @@ router.get('/api/reports/search', async (req, res) => {
             .input('externalPatientId', sql.NVarChar, externalPatientId)
             .query(`
                 SELECT
-                    dsr.ExamResultGUID as id,
-                    p.Name + ' ' + p.Surname as patientName,
+                    dsr.Id as id,
+                    p.FirstName + ' ' + p.LastName as patientName,
                     eac.ExternalAccessionNumber as externalAccessionNumber,
-                    p.ExternalPatientID as externalPatientId,
-                    dsr.SignedDate as signedDate,
-                    DATALENGTH(dsr.SignedPdfData) as pdfSize
+                    p.ExternalPatientId as externalPatientId,
+                    dsr.PrintDate as signedDate,
+                    DATALENGTH(dsr.Pdf) as pdfSize
                 FROM DigitalSignedReports dsr
-                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
-                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
-                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                INNER JOIN ExaminationsAndConsultations eac ON dsr.ExaminationId = eac.ExaminationId
+                INNER JOIN Patients p ON eac.PatientId = p.PatientId
                 WHERE eac.ExternalAccessionNumber = @externalAccessionNumber
-                  AND p.ExternalPatientID = @externalPatientId
-                  AND dsr.SignedPdfData IS NOT NULL
-                ORDER BY dsr.SignedDate DESC
+                  AND p.ExternalPatientId = @externalPatientId
+                  AND dsr.Pdf IS NOT NULL
+                ORDER BY dsr.PrintDate DESC
             `);
 
         if (result.recordset.length === 0) {
@@ -117,14 +116,13 @@ router.get('/api/reports/:id/pdf', async (req, res) => {
             .input('id', sql.UniqueIdentifier, id)
             .query(`
                 SELECT
-                    dsr.SignedPdfData as pdfData,
-                    p.Name + ' ' + p.Surname as patientName,
+                    dsr.Pdf as pdfData,
+                    p.FirstName + ' ' + p.LastName as patientName,
                     eac.ExternalAccessionNumber as accessionNumber
                 FROM DigitalSignedReports dsr
-                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
-                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
-                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
-                WHERE dsr.ExamResultGUID = @id
+                INNER JOIN ExaminationsAndConsultations eac ON dsr.ExaminationId = eac.ExaminationId
+                INNER JOIN Patients p ON eac.PatientId = p.PatientId
+                WHERE dsr.Id = @id
             `);
 
         if (result.recordset.length === 0) {
@@ -197,20 +195,19 @@ public class ReportsController : ControllerBase
 
             var query = @"
                 SELECT
-                    dsr.ExamResultGUID as Id,
-                    p.Name + ' ' + p.Surname as PatientName,
+                    dsr.Id,
+                    p.FirstName + ' ' + p.LastName as PatientName,
                     eac.ExternalAccessionNumber,
-                    p.ExternalPatientID,
-                    dsr.SignedDate,
-                    DATALENGTH(dsr.SignedPdfData) as PdfSize
+                    p.ExternalPatientId,
+                    dsr.PrintDate as SignedDate,
+                    DATALENGTH(dsr.Pdf) as PdfSize
                 FROM DigitalSignedReports dsr
-                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
-                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
-                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
+                INNER JOIN ExaminationsAndConsultations eac ON dsr.ExaminationId = eac.ExaminationId
+                INNER JOIN Patients p ON eac.PatientId = p.PatientId
                 WHERE eac.ExternalAccessionNumber = @ExternalAccessionNumber
-                  AND p.ExternalPatientID = @ExternalPatientId
-                  AND dsr.SignedPdfData IS NOT NULL
-                ORDER BY dsr.SignedDate DESC";
+                  AND p.ExternalPatientId = @ExternalPatientId
+                  AND dsr.Pdf IS NOT NULL
+                ORDER BY dsr.PrintDate DESC";
 
             using (var command = new SqlCommand(query, connection))
             {
@@ -253,14 +250,13 @@ public class ReportsController : ControllerBase
 
             var query = @"
                 SELECT
-                    dsr.SignedPdfData,
-                    p.Name + ' ' + p.Surname as PatientName,
+                    dsr.Pdf,
+                    p.FirstName + ' ' + p.LastName as PatientName,
                     eac.ExternalAccessionNumber
                 FROM DigitalSignedReports dsr
-                INNER JOIN ExamResults er ON dsr.ExamResultGUID = er.ExamResultGUID
-                INNER JOIN ExaminationsAndConsultations eac ON er.ExaminationGUID = eac.ExaminationGUID
-                INNER JOIN Patients p ON eac.PatientGUID = p.PatientGUID
-                WHERE dsr.ExamResultGUID = @Id";
+                INNER JOIN ExaminationsAndConsultations eac ON dsr.ExaminationId = eac.ExaminationId
+                INNER JOIN Patients p ON eac.PatientId = p.PatientId
+                WHERE dsr.Id = @Id";
 
             using (var command = new SqlCommand(query, connection))
             {
@@ -270,12 +266,12 @@ public class ReportsController : ControllerBase
                 {
                     if (await reader.ReadAsync())
                     {
-                        if (reader["SignedPdfData"] == DBNull.Value)
+                        if (reader["Pdf"] == DBNull.Value)
                         {
                             return NotFound(new { error = "PDF data not found" });
                         }
 
-                        var pdfData = (byte[])reader["SignedPdfData"];
+                        var pdfData = (byte[])reader["Pdf"];
                         var patientName = reader["PatientName"].ToString();
                         var accessionNumber = reader["ExternalAccessionNumber"].ToString();
 
