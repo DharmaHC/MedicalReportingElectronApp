@@ -73,6 +73,7 @@ interface CompanyUISettings {
     password: string;    // Password per l'autenticazione
   };
   useExternalIdSystem?: boolean; // Se true, usa ExternalPatientId e ExternalAccessionNumber per RemotEye
+  dicomImageSystemName?: "RemoteEye" | "RemoteEyeLite" | "Other"; // Sistema di visualizzazione immagini DICOM da utilizzare
 }
 
 declare global {

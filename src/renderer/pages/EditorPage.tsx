@@ -173,6 +173,9 @@ const logToFile = (msg: string, details?: any) => {
   // Stato per abilitare l'uso degli ID esterni per il PACS
   const [useExternalIdSystem, setUseExternalIdSystem] = useState(false);
 
+  // Stato per il sistema di visualizzazione immagini DICOM da utilizzare
+  const [dicomImageSystemName, setDicomImageSystemName] = useState<"RemoteEye" | "RemoteEyeLite" | "Other">("RemoteEye");
+
   useEffect(() => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
@@ -205,6 +208,9 @@ const logToFile = (msg: string, details?: any) => {
 
       // Carica configurazione uso ID esterni
       setUseExternalIdSystem(settings.useExternalIdSystem ?? false);
+
+      // Carica configurazione sistema visualizzazione immagini DICOM
+      setDicomImageSystemName(settings.dicomImageSystemName ?? "RemoteEye");
 
       // Log visibile quando il workaround è attivo
       if (workaround.enabled) {
@@ -1029,7 +1035,7 @@ const renderPinDialog = () =>
   }
 
   /**
-   * Mantiene la lista locale degli studi aperti nel viewer e costruisce l'URL JNLP per RemotEye.
+   * Mantiene la lista locale degli studi aperti nel viewer e costruisce l'URL per il sistema configurato.
    * @param accNum Accession Number dello studio da aprire/gestire.
    * @param mode Modalità di interazione con il viewer.
    */
@@ -1050,12 +1056,32 @@ const renderPinDialog = () =>
         break;
     }
 
-    /* 2. Costruisce l'URL JNLP per RemotEye. */
     // Carica i parametri di connessione dalla configurazione
-    const BASE = logipacsServer.baseUrl; // URL base del servizio RemotEye.
-    const USER = logipacsServer.username; // Username per RemotEye.
-    const PWD  = logipacsServer.password; // Password per RemotEye.
+    const BASE = logipacsServer.baseUrl; // URL base del servizio.
+    const USER = logipacsServer.username; // Username.
+    const PWD  = logipacsServer.password; // Password.
 
+    /* 2. Gestione differenziata in base al sistema di visualizzazione configurato */
+    switch (dicomImageSystemName) {
+      case "RemoteEye":
+        openViewerRemoteEye(accNum, mode, BASE, USER, PWD);
+        break;
+      case "RemoteEyeLite":
+        openViewerRemoteEyeLite(accNum, mode, BASE, USER, PWD);
+        break;
+      case "Other":
+        console.warn("⚠️ Sistema DICOM 'Other' non implementato. Configura un sistema supportato.");
+        break;
+      default:
+        console.error("❌ Sistema DICOM non riconosciuto:", dicomImageSystemName);
+    }
+  }
+
+  /**
+   * Apre il viewer con RemoteEye (JNLP protocol handler).
+   */
+  function openViewerRemoteEye(accNum: string, mode: ViewerMode, BASE: string, USER: string, PWD: string) {
+    /* Costruisce l'URL JNLP per RemotEye. */
     let jnlpURL =
       `${BASE}?username=${encodeURIComponent(USER)}` +
       `&password=${encodeURIComponent(PWD)}`;
@@ -1065,7 +1091,7 @@ const renderPinDialog = () =>
       jnlpURL += `&accNumsList=${joinedAccNums}`; // Aggiunge la lista degli accNum.
     }
 
-    /* 2b. Parametri JNLP aggiuntivi in base alla modalità. */
+    /* Parametri JNLP aggiuntivi in base alla modalità. */
     switch (mode) {
       case "openOnly":
         jnlpURL +=
@@ -1091,7 +1117,7 @@ const renderPinDialog = () =>
         break;
     }
 
-    /* 3. Avvia RemotEye tramite il protocol-handler `rhjnlp:`. */
+    /* Avvia RemotEye tramite il protocol-handler `rhjnlp:`. */
     const payload = {
       msgType: "MSG_LAUNCHJNLP_RQ", // Tipo di messaggio per il protocol-handler.
       dataMap: { jnlpURL }          // URL JNLP da lanciare.
@@ -1099,11 +1125,33 @@ const renderPinDialog = () =>
     // Redirige a un URL custom che il client RemotEye dovrebbe intercettare.
     window.location.href =
       "rhjnlp:" + encodeURIComponent(JSON.stringify(payload));
-      console.log("Apertura viewer RemotEye con Payload:", "rhjnlp:" + encodeURIComponent(JSON.stringify(payload)));
+    console.log("📋 Apertura viewer RemotEye con Payload:", "rhjnlp:" + encodeURIComponent(JSON.stringify(payload)));
   }
 
   /**
-   * Apre lo studio corrente nel viewer RemotEye.
+   * Apre il viewer con RemoteEyeLite (URL diretto HTTP).
+   */
+  function openViewerRemoteEyeLite(accNum: string, mode: ViewerMode, BASE: string, USER: string, PWD: string) {
+    // RemoteEyeLite supporta solo apertura diretta, non comandi "exit" o "openOnly"
+    if (mode === "exit" || mode === "openOnly") {
+      console.log("ℹ️ RemoteEyeLite non supporta modalità 'exit' o 'openOnly'");
+      return;
+    }
+
+    // Estrae IP e porta dal baseUrl (es. "http://192.9.200.102:81/LPW/Display" -> "http://192.9.200.102:81")
+    const baseUrlObj = new URL(BASE);
+    const serverBase = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
+
+    // Costruisce l'URL per RemoteEyeLite
+    let viewerURL = `${serverBase}/viewer/DisplayStudy.html?accNumsList=${encodeURIComponent(accNum.trim())}&username=${encodeURIComponent(USER)}&password=${encodeURIComponent(PWD)}`;
+
+    // Apre in una nuova finestra/tab del browser
+    window.open(viewerURL, '_blank');
+    console.log("📋 Apertura viewer RemoteEyeLite:", viewerURL);
+  }
+
+  /**
+   * Apre lo studio corrente nel viewer DICOM configurato (RemoteEye, RemoteEyeLite, etc.).
    * - Se il viewer non contiene niente (lista locale vuota) -> "clearAndLoad".
    * - Altrimenti -> "add" (aggiunge lo studio a quelli esistenti).
    * - Se useExternalIdSystem è true, usa ExternalAccessionNumber, altrimenti usa examinationMnemonicCodeFull
@@ -1125,8 +1173,9 @@ const renderPinDialog = () =>
   }
 
   /**
- * Chiude gli studi attualmente aperti nel viewer RemotEye senza chiudere l'app.
+ * Chiude gli studi attualmente aperti nel viewer DICOM configurato senza chiudere l'app.
  * Se non ci sono studi aperti (viewerAccNumsRef vuoto), non invia il comando di chiusura.
+ * Supportato solo per RemoteEye (JNLP), non per RemoteEyeLite.
  */
   function closeViewer() {
     // Se non ci sono studi aperti, non fare nulla
@@ -1137,10 +1186,16 @@ const renderPinDialog = () =>
     // Svuota la lista locale degli accNum aperti
     viewerAccNumsRef.current = [];
 
-    // Costruisce l'URL JNLP per inviare il comando "genericRemoveAllFromMemory"
-    const BASE = "http://172.16.18.52/LPW/Display";
-    const USER = "radiologia";
-    const PWD  = "radiologia";
+    // Solo RemoteEye supporta il comando di chiusura tramite JNLP
+    if (dicomImageSystemName !== "RemoteEye") {
+      console.log("ℹ️ Il sistema", dicomImageSystemName, "non supporta il comando di chiusura automatica");
+      return;
+    }
+
+    // Carica i parametri di connessione dalla configurazione
+    const BASE = logipacsServer.baseUrl;
+    const USER = logipacsServer.username;
+    const PWD  = logipacsServer.password;
 
     let jnlpURL =
       `${BASE}?username=${encodeURIComponent(USER)}` +
@@ -2350,7 +2405,7 @@ const handleResultClick = async (result: any) => {
       {/* Dialogo di Caricamento durante il Salvataggio/Firma */}
       {isProcessing && (
         <Dialog               /*  tolto modal / closeButton  */
-          title="Elaborazione in corso"¦"
+          title="Elaborazione in corso..."
           onClose={() => {}}   /*  disabilita la chiusura manuale  */
         >
           <div style={{ padding: "30px 20px", textAlign: "center" }}>
@@ -2359,8 +2414,8 @@ const handleResultClick = async (result: any) => {
             />
             <p>
               {allowMedicalReportDigitalSignature && !isDraftOperation
-                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto"¦"
-                : "Attendere, stiamo completando il salvataggio del referto"¦"}
+                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto..."
+                : "Attendere, stiamo completando il salvataggio del referto..."}
             </p>
           </div>
         </Dialog>
