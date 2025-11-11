@@ -132,7 +132,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       // â‘¢ salvo la versione ordinata nello store
       dispatch(setFilters({ workareasData: ordered }));
 
-      // "¦ il resto invariato "¦
+      // "... il resto invariato "...
       if (Object.keys(sectors).length === 0) {
         const init: Sectors = {};
         ordered.forEach(w => (init[w.workareaId.trim()] = false));

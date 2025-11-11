@@ -32,5 +32,6 @@
     "username": "radiologo",
     "password": "radiologo"
   },
-  "useExternalIdSystem": false
+  "useExternalIdSystem": false,
+  "dicomImageSystemName": "RemoteEye"
 }
