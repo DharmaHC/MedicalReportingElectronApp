@@ -39,8 +39,7 @@ jobs:
         if: ${{ !inputs.sign_app }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          PUBLISH: never
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --publish never
 
       - name: Build macOS app (with signing)
         if: ${{ inputs.sign_app }}
@@ -48,8 +47,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          PUBLISH: never
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
