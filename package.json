@@ -90,10 +90,18 @@
           "arch": [
             "universal"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "category": "public.app-category.utilities",
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "type": "distribution"
     },
     "dmg": {
       "format": "UDZO",
