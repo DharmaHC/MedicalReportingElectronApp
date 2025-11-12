@@ -460,6 +460,13 @@ function setupAutoUpdater() {
   // Avvia subito la ricerca aggiornamenti (solo se non in dev!)
   if (isDev) return;
 
+  // Su macOS, disabilita l'autoUpdater se l'app non è firmata
+  // Altrimenti causerebbe errori 404 cercando latest-mac.yml
+  if (process.platform === 'darwin') {
+    log.info('AutoUpdater disabilitato su macOS (app non firmata)');
+    return;
+  }
+
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('checking-for-update', () => {
@@ -478,10 +485,9 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
+    // Log l'errore ma non mostrare dialog all'utente
+    // (errori comuni: 404 su latest.yml se non ci sono release)
     log.error('Error in auto-updater:', err);
-    if (mainWindow) {
-      dialog.showErrorBox('Errore aggiornamento', `${err == null ? "unknown" : (err.stack || err).toString()}`);
-    }
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
