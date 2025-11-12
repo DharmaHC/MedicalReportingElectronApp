@@ -85,10 +85,19 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
       "category": "public.app-category.utilities",
       "hardenedRuntime": false
+    },
+    "dmg": {
+      "format": "UDZO",
+      "writeUpdateInfo": false
     },
     "linux": {
       "target": [
