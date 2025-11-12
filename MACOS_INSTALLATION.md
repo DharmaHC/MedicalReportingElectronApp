@@ -2,7 +2,38 @@
 
 Questa guida spiega come installare MedReportAndSign su macOS quando l'app non è firmata digitalmente.
 
-## Metodo 1: Installazione da ZIP (CONSIGLIATO)
+## ⚠️ IMPORTANTE: Problema Noto
+
+**Se l'applicazione non si apre dal Finder ma funziona dal Terminale**, è un problema di sicurezza macOS.
+
+**Soluzione Rapida:**
+```bash
+# Rimuovi gli attributi di quarantena
+sudo xattr -cr /Applications/MedReportAndSign.app
+
+# Lancia dal Terminale
+/Applications/MedReportAndSign.app/Contents/MacOS/MedReportAndSign
+```
+
+Oppure usa lo script helper `launch-macos.sh` incluso negli artefatti.
+
+---
+
+## Metodo 1: Script Helper Automatico (CONSIGLIATO)
+
+1. Scarica e installa l'app (da ZIP o DMG)
+2. Scarica lo script `launch-macos.sh` dagli artefatti
+3. Rendi lo script eseguibile e lancialo:
+
+```bash
+cd ~/Downloads
+chmod +x launch-macos.sh
+./launch-macos.sh
+```
+
+Lo script rimuoverà automaticamente gli attributi di quarantena e lancerà l'app.
+
+## Metodo 2: Installazione da ZIP
 
 1. Scarica il file `MedReportAndSign-1.0.37-mac-universal.zip` dagli artefatti
 2. Estrai il file ZIP facendo doppio click

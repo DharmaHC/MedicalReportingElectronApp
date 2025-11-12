@@ -520,14 +520,20 @@ app.whenReady().then(() => {
 });
 
 // ---------------- CLOSE BEHAVIOR ---------------
-// app.on('window-all-closed', () => {
-//   if (process.platform !== 'darwin') {
-//     app.quit();
-//   }
-// });
+app.on('window-all-closed', () => {
+  // Su macOS le app rimangono attive anche quando tutte le finestre sono chiuse
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
 
-// app.on('activate', () => {
-//   if (mainWindow === null) {
-//     createWindow();
-//   }
-// });
+app.on('activate', () => {
+  // Su macOS, quando si clicca l'icona nel Dock, ricrea la finestra se non esiste
+  if (mainWindow === null || BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  } else {
+    // Se la finestra esiste ma è nascosta, mostrala
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
