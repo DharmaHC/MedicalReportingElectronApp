@@ -305,8 +305,8 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
   const now = new Date();
 
   // Esempio: settings.footerCompanyDataMultiline è booleano (true = multilinea, false = una riga)
-  if (signedBy.includes('NZDMHL80H26H501J')) {
-    signedBy = "Dr. Anzidei Michele";
+  if (signedBy.includes('CCTSLV92H44A433G')) {
+    signedBy = "Silvia Accettura";
   }
   const digitalNoteLines = [
     "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",

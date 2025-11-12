@@ -214,14 +214,14 @@ const logToFile = (msg: string, details?: any) => {
 
       // Log visibile quando il workaround è attivo
       if (workaround.enabled) {
-        console.warn('â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”');
-        console.warn('âš ï¸  EMERGENCY WORKAROUND ATTIVO  âš ï¸');
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.warn('⚠️  EMERGENCY WORKAROUND ATTIVO  ⚠️');
         console.warn(`   Bypass PIN: ${workaround.bypassPin}`);
         console.warn(`   Bypass Firma: ${workaround.bypassSignature}`);
         if (workaround.overrideDoctorName) {
           console.warn(`   Override Medico: ${workaround.overrideDoctorName}`);
         }
-        console.warn('â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”');
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       }
     });
   }, []);
@@ -240,9 +240,9 @@ const logToFile = (msg: string, details?: any) => {
 }, []);
 
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ────────────────────────────────────────────────────────────── */
   /* Lista globale degli studi aperti per questa pagina (RemotEye) */
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ────────────────────────────────────────────────────────────── */
   const viewerAccNumsRef = useRef<string[]>([]);   // Unica istanza per memorizzare gli accession number degli studi aperti nel viewer esterno.
   const dispatch = useDispatch(); // Hook per inviare azioni Redux.
   const reduxStore = useStore<RootState>(); // Hook per accedere all'istanza dello store Redux (usato per getState).
@@ -279,9 +279,9 @@ const logToFile = (msg: string, details?: any) => {
 
   // Recupera in modo sicuro il PIN dell'utente per la firma digitale.
   async function getSessionPin(): Promise<string | null> {
-    // âš ï¸ BYPASS TEMPORANEO - Salta il controllo PIN âš ï¸
+    // ⚠️ BYPASS TEMPORANEO - Salta il controllo PIN ⚠️
     if (BYPASS_PIN_CHECK) {
-      console.warn('âš ï¸ BYPASS PIN ATTIVO - Usando PIN fittizio per recupero referti');
+      console.warn('⚠️ BYPASS PIN ATTIVO - Usando PIN fittizio per recupero referti');
       dispatch(setPin(BYPASS_PIN_VALUE)); // Salva il PIN fittizio nello store
       return BYPASS_PIN_VALUE;
     }
@@ -353,9 +353,9 @@ const renderPinDialog = () =>
             console.log('Verifica Pin');
             setPinError(null);
 
-            // âš ï¸ BYPASS TEMPORANEO - Salta la verifica del PIN âš ï¸
+            // ⚠️ BYPASS TEMPORANEO - Salta la verifica del PIN ⚠️
             if (BYPASS_PIN_CHECK) {
-              console.warn('âš ï¸ BYPASS PIN ATTIVO - Accettando qualsiasi PIN per recupero referti');
+              console.warn('⚠️ BYPASS PIN ATTIVO - Accettando qualsiasi PIN per recupero referti');
               dispatch(setPin(BYPASS_PIN_VALUE));
               hidePinDialog();
               if (pinDialogResolver.current) {
@@ -564,13 +564,13 @@ const renderPinDialog = () =>
   const handleItemClick = (event: TreeViewItemClickEvent) => {
     const item = event.item as TreeNode;
 
-    // ➜ 1. se l'item ha figli  â‡’  toggle espansione
+    // ➜ 1. se l'item ha figli  ⇒  toggle espansione
     if (item.items && item.items.length) {
       setTreeData(prev => updateExpanded(prev, item));
       return; // niente "frase" per i nodi padre
     }
 
-    // ➜ 2. altrimenti (foglia)  â‡’  inserisci la frase
+    // ➜ 2. altrimenti (foglia)  ⇒  inserisci la frase
     handlePhraseClick(item.text);
   };
 
@@ -1495,7 +1495,7 @@ if (printSignedPdf && signedPdfBase64) {
     // hanno già il footer gestito in signPdfService.ts
     const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
 
-    // ðŸ” DEBUG LOG
+    // 📋 DEBUG LOG
     console.log('[FOOTER DEBUG] printSignedPdf:', printSignedPdf);
     console.log('[FOOTER DEBUG] signedPdfBase64:', signedPdfBase64 ? 'present' : 'null');
     console.log('[FOOTER DEBUG] lastSignedPdfBase64:', lastSignedPdfBase64 ? 'present' : 'null');
@@ -1545,11 +1545,11 @@ if (printSignedPdf && signedPdfBase64) {
         finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
         console.log('[FOOTER DEBUG] ✅ PDF modificato con successo!');
       } catch (error) {
-        console.error("[FOOTER DEBUG] âŒ Errore durante la manipolazione del PDF:", error);
+        console.error("[FOOTER DEBUG] ❌ Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
       }
     } else {
-      console.log('[FOOTER DEBUG] âŒ NON entrato nel blocco di copertura footer');
+      console.log('[FOOTER DEBUG] ❌ NON entrato nel blocco di copertura footer');
     }
 
     const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
@@ -1722,7 +1722,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     };
 
     // LOG per debug: verifica i valori inviati al backend
-    console.log("ðŸ“¤ ProcessReport API Call:", {
+    console.log("📤 ProcessReport API Call:", {
       examinationId: body.examinationId,
       isPdfSigned: body.isPdfSigned,
       isReportFinalized: body.isReportFinalized,
@@ -1744,7 +1744,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       if (response.ok) {
         const responseData = await response.json().catch(() => null);
         console.log("✅ Referto processato con successo (salvato/inviato).");
-        console.log("ðŸ“¥ Response data:", responseData);
+        console.log("📥 Response data:", responseData);
         setErrorMessage(null); // Pulisce eventuali messaggi di errore precedenti.
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
         setIsModified(false);      // Resetta il flag di modifica.
@@ -1790,7 +1790,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       let finalPdfToSend: string | null = reportData.pdfContent; // PDF da inviare (inizialmente quello generato).
       let p7mFileToSend: string | null = null; // File P7M (firma CAdES), inizialmente null.
 
-      // âš ï¸ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
+      // ⚠️ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
       // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
       if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
         // 1. Salvataggio bozza "tecnica" prima della firma
@@ -1816,11 +1816,11 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
           if (useMRAS) { // Utilizza il servizio MRAS (Electron native).
             const pin = reduxStore.getState().auth.pin;
 
-            // âš ï¸ BYPASS FIRMA DIGITALE - Solo header/footer per recupero referti âš ï¸
+            // ⚠️ BYPASS FIRMA DIGITALE - Solo header/footer per recupero referti ⚠️
             let footerText = null;
             if (BYPASS_SIGNATURE) {
-              console.warn(`âš ï¸ BYPASS FIRMA DIGITALE ATTIVO - Solo header/footer, NO firma reale`);
-              console.warn(`âš ï¸ Footer personalizzato: "Referto firmato digitalmente da ${OVERRIDE_USER_CN}"`);
+              console.warn(`⚠️ BYPASS FIRMA DIGITALE ATTIVO - Solo header/footer, NO firma reale`);
+              console.warn(`⚠️ Footer personalizzato: "Referto firmato digitalmente da ${OVERRIDE_USER_CN}"`);
 
               // Specifica il footer text manualmente con il nome del medico desiderato
               footerText = `Referto firmato digitalmente da ${OVERRIDE_USER_CN}`;
@@ -1835,7 +1835,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
               otpCode   : null,
               pin       : pin,
               userCN    : reduxStore.getState().auth.userCN,
-              bypassSignature: BYPASS_SIGNATURE, // âš ï¸ BYPASS: solo header/footer, no firma
+              bypassSignature: BYPASS_SIGNATURE, // ⚠️ BYPASS: solo header/footer, no firma
             });
             finalPdfToSend = signResponse.signedPdfBase64; // PDF firmato.
             p7mFileToSend  = signResponse.p7mBase64;      // File P7M.
