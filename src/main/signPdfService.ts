@@ -39,7 +39,9 @@ export function loadSettings(): Settings {
     reportPageHeight: 0,
     editorZoomDefault: 0,
     rowsPerPage: 0,
-    highlightPlaceholder: false
+    highlightPlaceholder: false,
+    signatureTextLine1: 'Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ',
+    signatureTextLine2: '{signedBy} in data: {date}'
   };
 
   const settings = loadConfigJson<Settings>('sign-settings.json', defaultSettings);
@@ -308,10 +310,15 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
   if (signedBy.includes('NZDMHL80H26H501J')) {
     signedBy = "Dr. Anzidei Michele";
   }
-  const digitalNoteLines = [
-    "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
-    signedBy + " in data: " + now.toLocaleString()
-  ];
+
+  // Usa i template configurabili da sign-settings.json
+  const line1 = settings.signatureTextLine1;
+  const line2 = settings.signatureTextLine2
+    .replace('{signedBy}', signedBy)
+    .replace('{date}', now.toLocaleString());
+
+  const digitalNoteLines = [line1, line2];
+
   let lines;
   if (settings.footerCompanyDataMultiline) {
     lines = digitalNoteLines;      // 2 righe
