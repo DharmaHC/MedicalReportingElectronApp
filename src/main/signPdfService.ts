@@ -103,12 +103,13 @@ function log(msg: string) {
 export interface SignPdfRequest {
   pdfBase64 : string;
   companyId?: string;
-  footerText?: string;
+  footerText?: string;      // Testo footer aziendale (es. "Aster Diagnostica Srl...")
   pin?: string;             // se firma locale
   useRemote?: boolean;
   otpCode?: string;         // se firma remota
-  userCN?: string; // opzionale, per filtrare per CN
+  userCN?: string;          // opzionale, per filtrare per CN
   bypassSignature?: boolean; // ⚠️ BYPASS per recupero: solo header/footer, no firma digitale
+  signedByName?: string;    // Nome del medico per dicitura firma digitale (usato in bypass mode)
 }
 export interface SignPdfResponse {
   signedPdfBase64: string; // PDF estetico (non firmato)
@@ -130,8 +131,8 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     if (req.bypassSignature) {
       console.log('⚠️ BYPASS SIGNATURE ATTIVO - Nessuna firma digitale, solo header/footer');
 
-      // Aggiungi dicitura personalizzata se fornita nel footerText
-      const signedBy = req.footerText || "Documento con header/footer applicati";
+      // Usa signedByName per la dicitura di firma (non footerText che è per i dati aziendali)
+      const signedBy = req.signedByName || "Documento con header/footer applicati";
       pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
 
       log('success (bypass mode)');

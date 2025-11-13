@@ -1842,25 +1842,16 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
           if (useMRAS) { // Utilizza il servizio MRAS (Electron native).
             const pin = reduxStore.getState().auth.pin;
 
-            // ⚠️ BYPASS FIRMA DIGITALE - Solo header/footer per recupero referti ⚠️
-            let footerText = null;
-            if (BYPASS_SIGNATURE) {
-              console.warn(`⚠️ BYPASS FIRMA DIGITALE ATTIVO - Solo header/footer, NO firma reale`);
-              console.warn(`⚠️ Footer personalizzato: "${OVERRIDE_USER_CN}"`);
-
-              // Passa solo il nome del medico - il template completo è in sign-settings.json
-              footerText = OVERRIDE_USER_CN;
-            }
-
             const signResponse = await (window as any).nativeSign.signPdf({
               pdfBase64 : reportData.pdfContent,
               companyId : companyId,
-              footerText: footerText,
+              footerText: null, // footerText è per i dati aziendali, non per il nome medico
               useRemote : null,
               otpCode   : null,
               pin       : pin,
               userCN    : reduxStore.getState().auth.userCN,
               bypassSignature: BYPASS_SIGNATURE, // ⚠️ BYPASS: solo header/footer, no firma
+              signedByName: BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined, // Nome medico per dicitura firma
             });
             finalPdfToSend = signResponse.signedPdfBase64; // PDF firmato.
             p7mFileToSend  = signResponse.p7mBase64;      // File P7M.
