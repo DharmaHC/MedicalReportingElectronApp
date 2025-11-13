@@ -1708,7 +1708,12 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     }));
 
     // Corpo della richiesta API.
-    // NOTA: p7mBase64 NON viene inviato perché NON esiste in ReportRequestModel del backend
+    // NOTA: p7mBase64 NON viene inviato perché NON esiste in ReportRequestModel del backend.
+    //       Il sistema utilizza firma PAdES (PDF firmato) che è legalmente sufficiente.
+    //       In futuro, se necessario per requisiti legali specifici, si potrebbe:
+    //       1. Aggiungere campo p7mBase64 a ReportRequestModel
+    //       2. Aggiungere colonna P7m in DigitalSignedReports
+    //       3. Inviare anche il file CAdES (p7m) separato dal PDF firmato
     const body = {
       pdfBase64: signedPdfBase64, // PDF (firmato o meno).
       rtfContent: rtfTextContent, // Contenuto RTF.
