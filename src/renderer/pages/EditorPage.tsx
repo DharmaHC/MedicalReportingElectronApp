@@ -1846,11 +1846,10 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
             let footerText = null;
             if (BYPASS_SIGNATURE) {
               console.warn(`⚠️ BYPASS FIRMA DIGITALE ATTIVO - Solo header/footer, NO firma reale`);
-              console.warn(`⚠️ Footer personalizzato: "Referto firmato digitalmente da ${OVERRIDE_USER_CN}"`);
+              console.warn(`⚠️ Footer personalizzato: "${OVERRIDE_USER_CN}"`);
 
-              // Specifica il footer text manualmente con il nome del medico desiderato
-              footerText = `Referto firmato digitalmente da ${OVERRIDE_USER_CN}`;
-              footerText = ``;
+              // Passa solo il nome del medico - il template completo è in sign-settings.json
+              footerText = OVERRIDE_USER_CN;
             }
 
             const signResponse = await (window as any).nativeSign.signPdf({
