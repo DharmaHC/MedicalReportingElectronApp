@@ -159,6 +159,59 @@ sudo chmod -R 755 /Applications/MedReportAndSign.app
 sudo chown -R $(whoami):staff /Applications/MedReportAndSign.app
 ```
 
+## Configurazione dell'Applicazione
+
+### Dove Trovare i File di Configurazione
+
+Al primo avvio, l'app crea automaticamente una cartella con i file di configurazione personalizzabili:
+
+```bash
+~/Library/Application Support/MedReportAndSign/assets/
+```
+
+**File di configurazione disponibili:**
+- `sign-settings.json` - Impostazioni firma digitale, PKCS11, layout PDF
+- `company-ui-settings.json` - Logo, colori, header, footer, workaround emergenza
+- `company-footer-settings.json` - Configurazione footer nei PDF firmati
+
+**Cartella immagini personalizzate:**
+```bash
+~/Library/Application Support/MedReportAndSign/assets/Images/
+```
+
+### Come Modificare le Impostazioni
+
+```bash
+# Apri la cartella configurazioni nel Finder
+open ~/Library/Application\ Support/MedReportAndSign/assets/
+
+# Modifica un file di configurazione (esempio: sign-settings.json)
+open -a TextEdit ~/Library/Application\ Support/MedReportAndSign/assets/sign-settings.json
+```
+
+**IMPORTANTE:** Le modifiche a questi file **sopravvivono agli aggiornamenti** dell'app. Non modificare i file dentro l'applicazione stessa, usa sempre quelli nella cartella `Application Support`.
+
+### Log dell'Applicazione
+
+I log si trovano in:
+
+```bash
+# Log principale
+~/Library/Logs/MedReportAndSign/main.log
+
+# Log editor
+~/Library/Application Support/medreportandsign/medreport-editor.log
+```
+
+Per visualizzarli:
+```bash
+# Log in tempo reale
+tail -f ~/Library/Logs/MedReportAndSign/main.log
+
+# Tutto il log
+cat ~/Library/Logs/MedReportAndSign/main.log
+```
+
 ## Note sulla Firma Digitale
 
 Quest'app non è attualmente firmata con un certificato Apple Developer. Per una distribuzione in produzione, considera:

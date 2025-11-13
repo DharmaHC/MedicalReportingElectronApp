@@ -1,12 +1,15 @@
 /**
  * Config Manager - Gestione centralizzata dei file di configurazione
  *
- * PROBLEMA: I file di configurazione nella cartella di installazione (Program Files)
+ * PROBLEMA: I file di configurazione nella cartella di installazione
  * vengono sovrascritti ad ogni aggiornamento, perdendo le personalizzazioni.
  *
  * SOLUZIONE: Sistema a due livelli:
  * - File DEFAULT: nella cartella di installazione (sovrascritti ad ogni update)
- * - File PERSONALIZZATI: in C:\ProgramData\MedReportAndSign (persistenti tra gli update)
+ * - File PERSONALIZZATI: in cartella dati utente (persistenti tra gli update)
+ *   * Windows: C:\ProgramData\MedReportAndSign\assets
+ *   * macOS: ~/Library/Application Support/MedReportAndSign/assets
+ *   * Linux: ~/.config/MedReportAndSign/assets
  *
  * LOGICA: Cerca prima il file personalizzato, se non esiste usa il default
  */
@@ -28,28 +31,44 @@ export function getDefaultConfigDir(): string {
  * Ottiene la cartella per i file PERSONALIZZATI (persistenti tra update)
  *
  * Windows: C:\ProgramData\MedReportAndSign\assets
+ * macOS: ~/Library/Application Support/MedReportAndSign/assets
+ * Linux: ~/.config/MedReportAndSign/assets
+ *
  * Questa cartella NON viene toccata dagli aggiornamenti
  *
- * NOTA: Stessa struttura di resources/assets in Program Files
+ * NOTA: Stessa struttura di resources/assets nell'installazione
  */
 export function getCustomConfigDir(): string {
-  // ProgramData è la cartella standard per dati condivisi tra tutti gli utenti
-  // su Windows è C:\ProgramData
-  const programData = process.env.ProgramData || 'C:\\ProgramData';
-  return path.join(programData, 'MedReportAndSign', 'assets');
+  let baseDir: string;
+
+  if (process.platform === 'darwin') {
+    // macOS: ~/Library/Application Support/MedReportAndSign/assets
+    baseDir = path.join(app.getPath('appData'), 'MedReportAndSign', 'assets');
+  } else if (process.platform === 'win32') {
+    // Windows: C:\ProgramData\MedReportAndSign\assets (condiviso tra tutti gli utenti)
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    baseDir = path.join(programData, 'MedReportAndSign', 'assets');
+  } else {
+    // Linux: ~/.config/MedReportAndSign/assets
+    baseDir = path.join(app.getPath('appData'), 'MedReportAndSign', 'assets');
+  }
+
+  return baseDir;
 }
 
 /**
  * Ottiene la cartella per le IMMAGINI PERSONALIZZATE (persistenti tra update)
  *
  * Windows: C:\ProgramData\MedReportAndSign\assets\Images
+ * macOS: ~/Library/Application Support/MedReportAndSign/assets/Images
+ * Linux: ~/.config/MedReportAndSign/assets/Images
+ *
  * Questa cartella NON viene toccata dagli aggiornamenti
  *
- * NOTA: Stessa struttura di resources/assets/Images in Program Files
+ * NOTA: Stessa struttura di resources/assets/Images nell'installazione
  */
 export function getCustomImagesDir(): string {
-  const programData = process.env.ProgramData || 'C:\\ProgramData';
-  return path.join(programData, 'MedReportAndSign', 'assets', 'Images');
+  return path.join(getCustomConfigDir(), 'Images');
 }
 
 /**
@@ -196,7 +215,6 @@ export function initializeAllConfigs(): void {
     }
     console.log('\n💡 IMPORTANTE: Per personalizzare, modifica i file in:');
     console.log(`   ${getCustomConfigDir()}`);
-    console.log('   (stessa struttura di resources/assets in Program Files)');
     console.log('   Questi file NON verranno sovrascritti durante gli aggiornamenti!\n');
   } else {
     console.log('\n✓ Tutti i file personalizzati già presenti');
