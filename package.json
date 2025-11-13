@@ -16,6 +16,7 @@
     "build:renderer": "vite build --config vite.renderer.config.mjs",
     "build": "npm run build:main && npm run build:renderer && npm run build:preload",
     "make": "electron-forge make",
+    "dist": "cross-env TMP=D:\\temp TEMP=D:\\temp electron-builder",
     "lint": "echo \"No linting configured\"",
     "postinstall": "electron-builder install-app-deps"
   },
