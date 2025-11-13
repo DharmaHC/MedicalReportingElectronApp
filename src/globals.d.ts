@@ -36,6 +36,7 @@ interface CompanyFooterSettings {
   blankFooterHeight: number;
   yPosFooterImage: number;
   footerImageXPositionOffset: number;
+  footerText: string; // Testo dati aziendali (es. "Aster Diagnostica Srl - P.I. 06191121000")
 }
 
 interface EmergencyWorkaround {

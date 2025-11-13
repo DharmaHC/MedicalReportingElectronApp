@@ -63,7 +63,8 @@ function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
       footerImageHeight: 32,
       blankFooterHeight: 15,
       yPosFooterImage: 15,
-      footerImageXPositionOffset: 0
+      footerImageXPositionOffset: 0,
+      footerText: "Aster Diagnostica Srl - P.I. 06191121000"
     }
   };
 
@@ -83,7 +84,8 @@ export function getCompanyFooterSettings(companyId?: string): CompanyFooterSetti
     footerImageHeight: 32,
     blankFooterHeight: 15,
     yPosFooterImage: 15,
-    footerImageXPositionOffset: 0
+    footerImageXPositionOffset: 0,
+    footerText: "Aster Diagnostica Srl - P.I. 06191121000"
   };
 }
 
@@ -351,37 +353,41 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
 function getCompanyAssets(companyId?: string) {
+    // Carica il footerText dal file di configurazione
+    const companySettings = getCompanyFooterSettings(companyId);
+    const footerTextDefault = companySettings.footerText;
+
     // Usa getImagePath per caricare immagini da ProgramData se disponibili
     switch ((companyId ?? '').trim().toUpperCase()) {
     case 'ASTER':
       return {
         logoPath: getImagePath('LogoAster.png'),
         footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault: 'Aster Diagnostica Srl - P.I. e C.F. 06191121000'
+        footerTextDefault
       };
     case 'RAD':
       return {
         logoPath: getImagePath('LogoAster.png'),
         footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
+        footerTextDefault
       };
     case 'HEALTHWAY':
       return {
         logoPath: getImagePath('LogoAster.png'),
         footerImgPath: getImagePath('FooterHW.png'),
-        footerTextDefault: 'Aster Diagnostica Mezzocammino Srl - P. I. e C.F. 12622721004'
+        footerTextDefault
       };
     case 'CIN':
       return {
         logoPath: getImagePath('LogoAster.png'),
         footerImgPath: getImagePath('FooterCin.png'),
-        footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
+        footerTextDefault
       };
     default:
       return {
         logoPath: getImagePath('LogoAster.png'),
         footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault: 'Aster Diagnostica Srl - P.I. 06191121000'
+        footerTextDefault
       };
   }
 }
