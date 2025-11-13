@@ -1708,14 +1708,15 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     }));
 
     // Corpo della richiesta API.
+    // NOTA: p7mBase64 NON viene inviato perché NON esiste in ReportRequestModel del backend
     const body = {
       pdfBase64: signedPdfBase64, // PDF (firmato o meno).
-      p7mBase64: p7mBase64,       // File P7M (opzionale).
       rtfContent: rtfTextContent, // Contenuto RTF.
       examinationId: Number(selectedExaminationId),
       doctorCode: doctorCode,
       companyId: companyId,
-      isPdfSigned: allowMedicalReportDigitalSignature && !isDraft && p7mBase64 !== null, // Indica se il PDF inviato è firmato.
+      // isPdfSigned: true solo se c'è una VERA firma digitale (non bypass)
+      isPdfSigned: allowMedicalReportDigitalSignature && !isDraft && !BYPASS_SIGNATURE && p7mBase64 !== null && p7mBase64 !== '', // Indica se il PDF inviato è firmato.
       isReportFinalized: !isDraft, // Indica se il report è finalizzato.
       LinkedResultsList: linkedResultsList,
       isSavingDraft: isDraft, // Flag esplicito per il salvataggio bozza.
