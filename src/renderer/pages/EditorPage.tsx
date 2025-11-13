@@ -1714,27 +1714,47 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     //       1. Aggiungere campo p7mBase64 a ReportRequestModel
     //       2. Aggiungere colonna P7m in DigitalSignedReports
     //       3. Inviare anche il file CAdES (p7m) separato dal PDF firmato
+
+    // Calcola isPdfSigned con cast esplicito a boolean per evitare errori di serializzazione
+    const isPdfSigned = Boolean(
+      allowMedicalReportDigitalSignature &&
+      !isDraft &&
+      !BYPASS_SIGNATURE &&
+      p7mBase64 !== null &&
+      p7mBase64 !== ''
+    );
+
+    // LOG pre-body per debug dei valori
+    console.log("🔍 Pre-Body Debug:", {
+      allowMedicalReportDigitalSignature,
+      isDraft,
+      BYPASS_SIGNATURE,
+      p7mBase64Type: typeof p7mBase64,
+      p7mBase64Value: p7mBase64 === null ? 'null' : p7mBase64 === '' ? 'empty string' : 'has value',
+      calculatedIsPdfSigned: isPdfSigned,
+      isPdfSignedType: typeof isPdfSigned,
+    });
+
     const body = {
       pdfBase64: signedPdfBase64, // PDF (firmato o meno).
       rtfContent: rtfTextContent, // Contenuto RTF.
       examinationId: Number(selectedExaminationId),
       doctorCode: doctorCode,
       companyId: companyId,
-      // isPdfSigned: true solo se c'è una VERA firma digitale (non bypass)
-      isPdfSigned: allowMedicalReportDigitalSignature && !isDraft && !BYPASS_SIGNATURE && p7mBase64 !== null && p7mBase64 !== '', // Indica se il PDF inviato è firmato.
-      isReportFinalized: !isDraft, // Indica se il report è finalizzato.
+      isPdfSigned: isPdfSigned, // Boolean esplicito
+      isReportFinalized: Boolean(!isDraft), // Boolean esplicito
       LinkedResultsList: linkedResultsList,
-      isSavingDraft: isDraft, // Flag esplicito per il salvataggio bozza.
+      isSavingDraft: Boolean(isDraft), // Boolean esplicito
     };
 
     // LOG per debug: verifica i valori inviati al backend
     console.log("📤 ProcessReport API Call:", {
       examinationId: body.examinationId,
       isPdfSigned: body.isPdfSigned,
+      isPdfSignedType: typeof body.isPdfSigned,
       isReportFinalized: body.isReportFinalized,
       isSavingDraft: body.isSavingDraft,
-      hasP7m: p7mBase64 !== null,
-      hasPdf: signedPdfBase64 !== null,
+      bodyJSON: JSON.stringify(body).substring(0, 500),
     });
 
     try {
