@@ -312,7 +312,10 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
   }
 
   // Usa i template configurabili da sign-settings.json
-  const line1 = settings.signatureTextLine1;
+  // Applica la sostituzione dei placeholder a ENTRAMBE le linee
+  const line1 = settings.signatureTextLine1
+    .replace('{signedBy}', signedBy)
+    .replace('{date}', now.toLocaleString());
   const line2 = settings.signatureTextLine2
     .replace('{signedBy}', signedBy)
     .replace('{date}', now.toLocaleString());
