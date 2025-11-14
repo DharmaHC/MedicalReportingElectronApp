@@ -89,6 +89,7 @@ jobs:
             dist/*.dmg
             dist/*.zip
             MACOS_INSTALLATION.md
+            INSTALLAZIONE_MAC_RAPIDA.md
             launch-macos.sh
           retention-days: 30
 
