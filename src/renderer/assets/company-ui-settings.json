@@ -24,14 +24,14 @@
     "enabled": false,
     "bypassPin": false,
     "bypassSignature": false,
-    "overrideDoctorName": null,
+    "overrideDoctorName": "",
     "notes": "⚠️ WORKAROUND EMERGENZA - Attivare SOLO per recupero referti corrotti. DISATTIVARE immediatamente dopo l'uso!"
   },
   "logipacsServer": {
-    "baseUrl": "http://192.9.200.102/LPW/Display",
+    "baseUrl": "http://192.9.200.102:81/LPW/Display",
     "username": "radiologo",
     "password": "radiologo"
   },
-  "useExternalIdSystem": false,
-  "dicomImageSystemName": "RemoteEye"
+  "useExternalIdSystem": true,
+  "dicomImageSystemName": "RemoteEyeLite"
 }
