@@ -1,5 +1,5 @@
 {
-  "apiBaseUrl": "http://ORTASA-DHARMA-SRV:8090/api/",
+  "apiBaseUrl": "http://192.9.200.79:8090/api/",
   "header": {
     "logo": {
       "url": "https://www.pantamedica.it/wp-content/uploads/2019/09/logo_pantamedica-web-1.png",
