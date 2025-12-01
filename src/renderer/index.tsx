@@ -8,6 +8,12 @@ import { PersistGate } from "redux-persist/integration/react";
 import store, { persistor } from "./store"; // Importiamo il persistor
 import { setPin } from "./store/authSlice";
 
+// ⚠️ KENDO UI LICENSE: Attivazione licenza Kendo UI
+// La licenza viene letta automaticamente dal file .k-license
+// generato da: npx kendo-ui-license activate
+// IMPORTANTE: Esegui "npm install @progress/kendo-licensing --save" prima
+import '@progress/kendo-licensing';
+
  // Componente “wrapper” per azzerare il PIN al primo render
  const Init: React.FC = () => {
    const dispatch = useDispatch();

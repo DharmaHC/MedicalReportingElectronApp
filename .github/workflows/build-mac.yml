@@ -32,6 +32,16 @@ jobs:
           npm run postinstall
           npm list @electron/notarize || npm install @electron/notarize --save-dev
 
+      - name: Activate Kendo UI License
+        run: |
+          if [ -n "${{ secrets.KENDO_UI_LICENSE }}" ]; then
+            echo "🔑 Activating Kendo UI license..."
+            echo "${{ secrets.KENDO_UI_LICENSE }}" | npx kendo-ui-license activate
+            echo "✅ Kendo UI license activated"
+          else
+            echo "⚠️ KENDO_UI_LICENSE secret not set - building without license (will show warnings)"
+          fi
+
       - name: Build application
         run: npm run build
 
