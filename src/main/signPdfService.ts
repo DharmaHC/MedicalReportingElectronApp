@@ -440,6 +440,10 @@ export async function signViaPkcs11WithCN(
       '/Library/Frameworks/bit4ipki.framework/bit4ipki',
       '/opt/homebrew/lib/libbit4xpki.dylib', // Homebrew installation (Apple Silicon)
       '/opt/homebrew/lib/libbit4ipki.dylib',
+      '/Applications/Firma4NG Keyfour.app/Contents/Resources/utilities/mac/PKCS11/libbit4xpki.dylib', // Firma4NG Keyfour
+      '/Applications/Firma4NG Keyfour.app/Contents/Resources/System/Firma4NG.app/Contents/Resources/libbit4xpki.dylib', // Firma4NG alt
+      '/usr/local/lib/opensc-pkcs11.so', // OpenSC generic driver (Intel)
+      '/opt/homebrew/lib/opensc-pkcs11.so', // OpenSC generic driver (Apple Silicon)
     ] : []),
   ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
 
