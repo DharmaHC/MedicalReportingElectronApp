@@ -85,9 +85,17 @@ export function getDefaultImagesDir(): string {
  */
 export function ensureCustomConfigDir(): void {
   const customDir = getCustomConfigDir();
+  console.log(`🔍 Verifico cartella configurazione: ${customDir}`);
   if (!fs.existsSync(customDir)) {
-    fs.mkdirSync(customDir, { recursive: true });
-    console.log(`✓ Creata cartella configurazione personalizzata: ${customDir}`);
+    try {
+      fs.mkdirSync(customDir, { recursive: true });
+      console.log(`✓ Creata cartella configurazione personalizzata: ${customDir}`);
+    } catch (err) {
+      console.error(`❌ ERRORE creazione cartella: ${err}`);
+      throw err;
+    }
+  } else {
+    console.log(`✓ Cartella configurazione già esistente: ${customDir}`);
   }
 }
 
@@ -96,9 +104,17 @@ export function ensureCustomConfigDir(): void {
  */
 export function ensureCustomImagesDir(): void {
   const customDir = getCustomImagesDir();
+  console.log(`🔍 Verifico cartella immagini: ${customDir}`);
   if (!fs.existsSync(customDir)) {
-    fs.mkdirSync(customDir, { recursive: true });
-    console.log(`✓ Creata cartella immagini personalizzate: ${customDir}`);
+    try {
+      fs.mkdirSync(customDir, { recursive: true });
+      console.log(`✓ Creata cartella immagini personalizzate: ${customDir}`);
+    } catch (err) {
+      console.error(`❌ ERRORE creazione cartella immagini: ${err}`);
+      throw err;
+    }
+  } else {
+    console.log(`✓ Cartella immagini già esistente: ${customDir}`);
   }
 }
 

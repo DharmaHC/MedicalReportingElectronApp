@@ -64,7 +64,7 @@ function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
       blankFooterHeight: 15,
       yPosFooterImage: 15,
       footerImageXPositionOffset: 0,
-      footerText: "Aster Diagnostica Srl - P.I. 06191121000"
+      footerText: ""
     }
   };
 
@@ -112,6 +112,7 @@ export interface SignPdfRequest {
   userCN?: string;          // opzionale, per filtrare per CN
   bypassSignature?: boolean; // ⚠️ BYPASS per recupero: solo header/footer, no firma digitale
   signedByName?: string;    // Nome del medico per dicitura firma digitale (usato in bypass mode)
+  doctorName?: string;      // Nome leggibile del medico (es. "Dr. Mario Rossi") - ha priorità sul CN del certificato
 }
 export interface SignPdfResponse {
   signedPdfBase64: string; // PDF estetico (non firmato)
@@ -157,7 +158,9 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
       }
 
     // 3. Aggiungi dicitura del firmatario nell'ultima pagina del PDF
-    pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
+    // Usa doctorName se presente, altrimenti usa il CN del certificato
+    const finalSignedBy = req.doctorName || signedBy;
+    pdfBuf = await addSignatureNotice(pdfBuf, finalSignedBy, currentSettings);
 
     // 4. Marca temporale
     const tspBuf = await timestampCms(cmsBuf, currentSettings);
@@ -309,11 +312,6 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
   const now = new Date();
 
-  // Esempio: settings.footerCompanyDataMultiline è booleano (true = multilinea, false = una riga)
-  if (signedBy.includes('CCTSLV92H44A433G')) {
-    signedBy = "Silvia Accettura";
-  }
-
   // Usa i template configurabili da sign-settings.json
   // Applica la sostituzione dei placeholder a ENTRAMBE le linee
   const line1 = settings.signatureTextLine1
@@ -416,21 +414,58 @@ export async function signViaPkcs11WithCN(
   userCN?: string
 ): Promise<{ cmsBuf: Buffer, signedBy: string }> {
   const pkcs11 = new pkcs11js.PKCS11();
-  pkcs11.load(settings.pkcs11Lib);
-  pkcs11.C_Initialize();
+
+  // Lista di librerie PKCS#11 da provare (in ordine di priorità)
+  const pkcs11Libraries = [
+    settings.pkcs11Lib, // Libreria configurata dall'utente
+    'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
+    'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
+    'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+  ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
+
+  let loadedLib: string | null = null;
+  let initError: Error | null = null;
+
+  // Prova a caricare le librerie in sequenza
+  for (const libPath of pkcs11Libraries) {
+    try {
+      console.log(`🔐 Tentativo caricamento libreria PKCS#11: ${libPath}`);
+      pkcs11.load(libPath);
+      pkcs11.C_Initialize();
+      loadedLib = libPath;
+      console.log(`✅ Libreria PKCS#11 caricata con successo: ${libPath}`);
+      break; // Successo, esci dal loop
+    } catch (err: any) {
+      console.warn(`⚠️ Impossibile caricare ${libPath}: ${err.message}`);
+      initError = err;
+      // Prova la prossima libreria
+    }
+  }
+
+  if (!loadedLib) {
+    console.error(`❌ NESSUNA LIBRERIA PKCS#11 DISPONIBILE`);
+    throw new Error(`Impossibile caricare il driver della smartcard. Ultimo errore: ${initError?.message || 'Sconosciuto'}`);
+  }
 
   let result: { cmsBuf: Buffer, signedBy: string } | null = null;
 
   try {
     // Cicla su tutti gli slot con token inserito
-    for (const slot of pkcs11.C_GetSlotList(true)) {
+    const slots = pkcs11.C_GetSlotList(true);
+    console.log(`🔍 Trovati ${slots.length} slot con token inserito`);
+
+    for (const slot of slots) {
+      console.log(`\n📋 Esaminando slot ${slot}...`);
       let sess: pkcs11js.Handle | null = null;
       try {
         sess = pkcs11.C_OpenSession(
           slot,
           pkcs11js.CKF_SERIAL_SESSION | pkcs11js.CKF_RW_SESSION
         );
+        console.log(`✓ Sessione aperta su slot ${slot}`);
+
         pkcs11.C_Login(sess, pkcs11js.CKU_USER, pin);
+        console.log(`✓ Login effettuato con successo`);
 
         // Cerca il certificato X.509
         pkcs11.C_FindObjectsInit(sess, [
@@ -440,12 +475,18 @@ export async function signViaPkcs11WithCN(
         const certHandles = pkcs11.C_FindObjects(sess, 20) as pkcs11js.Handle[]; // Fino a 20 cert
 
         pkcs11.C_FindObjectsFinal(sess);
+        console.log(`📜 Trovati ${certHandles.length} certificati X.509 su questo slot`);
 
-        for (const hCert of certHandles) {
+        for (let i = 0; i < certHandles.length; i++) {
+          const hCert = certHandles[i];
+          console.log(`\n  📄 Certificato ${i + 1}/${certHandles.length}:`);
+
           // Ottieni ID del certificato
           const [{ value: certId }] = pkcs11.C_GetAttributeValue(sess, hCert, [
             { type: pkcs11js.CKA_ID }
           ]);
+          const certIdHex = Buffer.from(certId as Buffer).toString('hex');
+          console.log(`     CKA_ID: ${certIdHex}`);
 
           // Cerca la chiave privata corrispondente
           pkcs11.C_FindObjectsInit(sess, [
@@ -455,30 +496,51 @@ export async function signViaPkcs11WithCN(
           const [privKey] = pkcs11.C_FindObjects(sess, 1) as pkcs11js.Handle[];
           pkcs11.C_FindObjectsFinal(sess);
 
-          if (!privKey) continue;
+          if (!privKey) {
+            console.log(`     ❌ Chiave privata NON trovata per questo certificato`);
+            continue;
+          }
+          console.log(`     ✓ Chiave privata trovata`);
 
           // Estrai il certificato in formato DER
-          const [{ value: certRaw }] = pkcs11.C_GetAttributeValue(sess, hCert, [
-            { type: pkcs11js.CKA_VALUE }
-          ]);
-          const certRawBuf = Buffer.isBuffer(certRaw) ? certRaw : Buffer.from(certRaw);
-          const asn1Cert = asn1js.fromBER(certRawBuf.buffer);
-          const cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
-          const certCN = getCNfromPkijsCertificate(cert);
+          let certCN = "";
+          let cert: any;
+          try {
+            const [{ value: certRaw }] = pkcs11.C_GetAttributeValue(sess, hCert, [
+              { type: pkcs11js.CKA_VALUE }
+            ]);
+            const certRawBuf = Buffer.isBuffer(certRaw) ? certRaw : Buffer.from(certRaw);
+            console.log(`     Certificato raw buffer: ${certRawBuf.length} bytes`);
+
+            const asn1Cert = asn1js.fromBER(certRawBuf.buffer);
+            if (asn1Cert.offset === -1) {
+              console.error(`     ❌ Errore parsing ASN.1 del certificato`);
+              continue;
+            }
+
+            cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
+            certCN = getCNfromPkijsCertificate(cert);
+            console.log(`     CN: "${certCN}"`);
+          } catch (parseError: any) {
+            console.error(`     ❌ Errore durante il parsing del certificato: ${parseError.message}`);
+            continue;
+          }
 
           // ⚠️ BYPASS TEMPORANEO - Se userCN è null/undefined/vuoto, usa il primo certificato trovato
           // Confronta col CN richiesto solo se userCN è specificato
           if (userCN && userCN.trim() !== '' && certCN && !certCN.toLowerCase().includes(userCN.toLowerCase())) {
-            console.log(`⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
+            console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
             continue;
           }
 
           // Se arriviamo qui, il certificato è valido (o userCN è null/vuoto)
           if (!userCN || userCN.trim() === '') {
-            console.log(`⚠️ BYPASS ATTIVO - Usando primo certificato trovato: CN="${certCN}"`);
+            console.log(`     ⚠️ BYPASS ATTIVO - Usando primo certificato trovato: CN="${certCN}"`);
           } else {
-            console.log(`✓ Certificato trovato: CN="${certCN}" matcha userCN="${userCN}"`);
+            console.log(`     ✓ Certificato trovato: CN="${certCN}" matcha userCN="${userCN}"`);
           }
+
+          console.log(`     🔐 Inizio processo di firma...`);
 
           // Attributi firmati
           const hash = createHash("sha256").update(data).digest();
@@ -557,8 +619,10 @@ export async function signViaPkcs11WithCN(
         // Se non trovato, chiudi la sessione su questo slot
         pkcs11.C_Logout(sess);
         pkcs11.C_CloseSession(sess);
-      } catch (e) {
+      } catch (e: any) {
         // Se errore, tenta clean-up su sessione
+        console.error(`❌ ERRORE su slot ${slot}: ${e.message}`);
+        console.error(`   Stack trace: ${e.stack}`);
         if (sess) {
           try { pkcs11.C_Logout(sess); } catch {}
           try { pkcs11.C_CloseSession(sess); } catch {}
@@ -571,7 +635,11 @@ export async function signViaPkcs11WithCN(
     try { pkcs11.C_Finalize(); } catch {}
   }
 
-  if (!result) throw new Error("Nessun certificato compatibile trovato sulla smartcard!");
+  if (!result) {
+    console.error(`\n❌ NESSUN CERTIFICATO COMPATIBILE TROVATO DOPO AVER ESAMINATO TUTTI GLI SLOT`);
+    throw new Error("Nessun certificato compatibile trovato sulla smartcard!");
+  }
+  console.log(`\n✅ Firma completata con successo!`);
   return result;
 }
 

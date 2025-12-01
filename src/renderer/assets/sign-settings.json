@@ -16,6 +16,9 @@
   "footerCompanyDataMultiline": true,
   "blankFooterHeight": 50,
 
+  "signatureTextLine1": "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
+  "signatureTextLine2": "{signedBy} in data: {date}",
+
   "printSignedPdfIfAvailable": true,
 
   "reportPageWidth": 210,
@@ -26,7 +29,7 @@
   "rowsPerPage": 30,
   "highlightPlaceholder": false,
 
-  "pkcs11Lib": "/usr/local/lib/libbit4xpki.dylib",
+  "pkcs11Lib": "C:\\Windows\\System32\\bit4xpki.dll",
   "cspSlotIndex": 0,
   "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
   "tsaUrl": "https://freetsa.org/tsr",
