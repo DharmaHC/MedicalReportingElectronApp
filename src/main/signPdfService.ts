@@ -415,13 +415,36 @@ export async function signViaPkcs11WithCN(
 ): Promise<{ cmsBuf: Buffer, signedBy: string }> {
   const pkcs11 = new pkcs11js.PKCS11();
 
+  // Rileva la piattaforma
+  const isMac = process.platform === 'darwin';
+  const isWindows = process.platform === 'win32';
+  console.log(`🖥️ Piattaforma rilevata: ${process.platform} (isMac: ${isMac}, isWindows: ${isWindows})`);
+
   // Lista di librerie PKCS#11 da provare (in ordine di priorità)
   const pkcs11Libraries = [
     settings.pkcs11Lib, // Libreria configurata dall'utente
-    'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
-    'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
-    'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+
+    // Librerie Windows
+    ...(isWindows ? [
+      'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
+      'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
+      'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+    ] : []),
+
+    // Librerie macOS
+    ...(isMac ? [
+      '/usr/local/lib/libbit4xpki.dylib', // Bit4id extended
+      '/usr/local/lib/libbit4ipki.dylib', // Bit4id standard
+      '/usr/local/lib/libbit4opki.dylib', // Bit4id OTP
+      '/Library/Frameworks/bit4xpki.framework/bit4xpki', // Framework format
+      '/Library/Frameworks/bit4ipki.framework/bit4ipki',
+      '/opt/homebrew/lib/libbit4xpki.dylib', // Homebrew installation (Apple Silicon)
+      '/opt/homebrew/lib/libbit4ipki.dylib',
+    ] : []),
   ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
+
+  console.log(`📚 Librerie PKCS#11 da provare: ${pkcs11Libraries.length} percorsi`);
+  pkcs11Libraries.forEach((lib, idx) => console.log(`   ${idx + 1}. ${lib}`));
 
   let loadedLib: string | null = null;
   let initError: Error | null = null;
