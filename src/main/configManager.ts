@@ -182,10 +182,112 @@ export function initializeCustomConfig(filename: string): boolean {
 }
 
 /**
+ * Verifica se esiste il file marker per forzare il reset delle configurazioni
+ *
+ * Per forzare il reset, creare un file vuoto:
+ * C:\ProgramData\MedReportAndSign\RESET_CONFIG
+ *
+ * @returns true se il file marker esiste
+ */
+export function shouldForceReset(): boolean {
+  if (process.platform === 'win32') {
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    const markerPath = path.join(programData, 'MedReportAndSign', 'RESET_CONFIG');
+    return fs.existsSync(markerPath);
+  }
+  return false;
+}
+
+/**
+ * Rimuove il file marker per il reset
+ */
+export function clearResetMarker(): void {
+  if (process.platform === 'win32') {
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    const markerPath = path.join(programData, 'MedReportAndSign', 'RESET_CONFIG');
+    if (fs.existsSync(markerPath)) {
+      try {
+        fs.unlinkSync(markerPath);
+        console.log('✓ File marker RESET_CONFIG rimosso');
+      } catch (err) {
+        console.error('✗ Errore rimozione marker:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Forza la ricreazione di tutti i file di configurazione personalizzati
+ * sovrascrivendoli con quelli default più recenti
+ */
+export function resetAllConfigs(): void {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔄 RESET FORZATO: Sovrascrivo tutti i file personalizzati');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  ensureCustomConfigDir();
+  ensureCustomImagesDir();
+
+  // Reset file di configurazione JSON
+  const configFiles = [
+    'sign-settings.json',
+    'company-ui-settings.json',
+    'company-footer-settings.json'
+  ];
+
+  configFiles.forEach(filename => {
+    const customPath = path.join(getCustomConfigDir(), filename);
+    const defaultPath = path.join(getDefaultConfigDir(), filename);
+
+    if (fs.existsSync(defaultPath)) {
+      try {
+        fs.copyFileSync(defaultPath, customPath);
+        console.log(`✓ Reset ${filename}`);
+      } catch (err) {
+        console.error(`✗ Errore reset ${filename}:`, err);
+      }
+    }
+  });
+
+  // Reset immagini
+  const imageFiles = [
+    'LogoAster.png',
+    'FooterAster.png',
+    'FooterHW.png',
+    'FooterCin.png'
+  ];
+
+  imageFiles.forEach(filename => {
+    const customPath = path.join(getCustomImagesDir(), filename);
+    const defaultPath = path.join(getDefaultImagesDir(), filename);
+
+    if (fs.existsSync(defaultPath)) {
+      try {
+        fs.copyFileSync(defaultPath, customPath);
+        console.log(`✓ Reset ${filename}`);
+      } catch (err) {
+        console.error(`✗ Errore reset ${filename}:`, err);
+      }
+    }
+  });
+
+  console.log('\n✓ Reset completato!');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+}
+
+/**
  * Inizializza tutti i file di configurazione e immagini personalizzati al primo avvio
  * Questa funzione va chiamata all'avvio dell'app (nel main)
  */
 export function initializeAllConfigs(): void {
+  // Verifica se è stato richiesto un reset forzato
+  if (shouldForceReset()) {
+    console.log('\n⚠️ RILEVATO FILE MARKER: C:\\ProgramData\\MedReportAndSign\\RESET_CONFIG');
+    console.log('   Eseguo reset forzato delle configurazioni...\n');
+    resetAllConfigs();
+    clearResetMarker();
+    return;
+  }
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('📋 Inizializzazione file di configurazione e immagini');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -240,28 +342,92 @@ export function initializeAllConfigs(): void {
 }
 
 /**
- * Carica un file JSON di configurazione
+ * Carica un file JSON di configurazione con MERGE INTELLIGENTE
+ *
+ * LOGICA:
+ * 1. Carica il file DEFAULT (con tutti i nuovi campi)
+ * 2. Se esiste il file PERSONALIZZATO, fa un merge (deep merge per oggetti nested)
+ * 3. Risultato: tutti i campi nuovi + personalizzazioni mantenute
+ *
+ * ESEMPIO:
+ * Default:        { "a": 1, "b": 2, "c": 3 }  (versione nuova)
+ * Personalizzato: { "a": 999 }                (vecchia versione, solo "a" modificato)
+ * Risultato:      { "a": 999, "b": 2, "c": 3 } (merge: "a" personalizzato, "b" e "c" dai default)
  *
  * @param filename Nome del file (es. "sign-settings.json")
  * @param fallbackValue Valore di default se il file non esiste o è corrotto
- * @returns Il contenuto del file parsato, o fallbackValue in caso di errore
+ * @returns Il contenuto del file con merge, o fallbackValue in caso di errore
  */
 export function loadConfigJson<T>(filename: string, fallbackValue: T): T {
   try {
-    const configPath = getConfigPath(filename);
+    const defaultPath = path.join(getDefaultConfigDir(), filename);
+    const customPath = path.join(getCustomConfigDir(), filename);
 
-    if (!fs.existsSync(configPath)) {
-      console.warn(`⚠️ File non trovato: ${configPath}, uso fallback`);
-      return fallbackValue;
+    // 1. Carica il file DEFAULT (base con tutti i campi più recenti)
+    let baseConfig: T = fallbackValue;
+    if (fs.existsSync(defaultPath)) {
+      const defaultRaw = fs.readFileSync(defaultPath, 'utf8');
+      baseConfig = JSON.parse(defaultRaw) as T;
+      console.log(`📁 Caricato ${filename} default da: ${defaultPath}`);
+    } else {
+      console.warn(`⚠️ File default non trovato: ${defaultPath}, uso fallback`);
     }
 
-    const raw = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(raw) as T;
+    // 2. Se esiste il file PERSONALIZZATO, fa il merge
+    if (fs.existsSync(customPath)) {
+      const customRaw = fs.readFileSync(customPath, 'utf8');
+      const customConfig = JSON.parse(customRaw) as T;
+      console.log(`📁 Trovato ${filename} personalizzato da: ${customPath}`);
+
+      // Deep merge: customConfig sovrascrive baseConfig
+      const merged = deepMerge(baseConfig, customConfig);
+      console.log(`✓ Merge completato: default + personalizzazioni`);
+      return merged;
+    }
+
+    // 3. Se non esiste personalizzato, usa solo il default
+    return baseConfig;
   } catch (err) {
     console.error(`✗ Errore caricamento ${filename}:`, err);
     console.log('  Uso valori fallback');
     return fallbackValue;
   }
+}
+
+/**
+ * Deep merge di due oggetti (ricorsivo per oggetti nested)
+ * customConfig sovrascrive baseConfig, ma mantiene i campi di baseConfig non presenti in custom
+ */
+function deepMerge<T>(base: T, custom: Partial<T>): T {
+  if (typeof base !== 'object' || base === null) {
+    return custom as T;
+  }
+
+  const result = { ...base };
+
+  for (const key in custom) {
+    if (custom.hasOwnProperty(key)) {
+      const customValue = custom[key];
+      const baseValue = (base as any)[key];
+
+      // Se entrambi sono oggetti, merge ricorsivo
+      if (
+        typeof customValue === 'object' &&
+        customValue !== null &&
+        !Array.isArray(customValue) &&
+        typeof baseValue === 'object' &&
+        baseValue !== null &&
+        !Array.isArray(baseValue)
+      ) {
+        (result as any)[key] = deepMerge(baseValue, customValue);
+      } else {
+        // Altrimenti sovrascrivi con il valore custom
+        (result as any)[key] = customValue;
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
