@@ -21,15 +21,13 @@ autoUpdater.logger = log;
 log.info('App starting...');
 
 // ============================================================================
-// 🚨 VERSIONE BUILD - Se non vedi questo messaggio, stai usando una build vecchia!
+// 🚀 MedReportAndSign - Version Info
 // ============================================================================
 console.log("=".repeat(80));
-console.log("🚀 MedReportAndSign - VERSIONE MACOS CON SUPPORTO FIRMA4NG KEYFOUR");
-console.log("🖥️  BUILD: 2025-12-02 02:30 - FIX VERIFY-PIN");
-console.log(`📱 Piattaforma: ${process.platform} (${process.arch})`);
-console.log("✅ Supporto smartcard macOS: ATTIVO (verify-pin + signPdf)");
-console.log("✅ Firma4NG Keyfour: ATTIVO");
-console.log("🔧 FIX: verify-pin ora usa platform detection");
+console.log("🚀 MedReportAndSign v1.0.37");
+console.log(`📱 Platform: ${process.platform} (${process.arch})`);
+console.log("✅ Cross-platform smartcard support (Windows & macOS)");
+console.log("✅ Bit4id Firma4NG / Keyfour drivers supported");
 console.log("=".repeat(80));
 // ============================================================================
 
