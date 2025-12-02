@@ -27,7 +27,25 @@ const ElencoRegistrazioni = () => {
   const dispatch = useDispatch();
 
   // [MODIFICA] Stato locale per mantenere i criteri di sorting
-  const [sort, setSort] = useState<SortDescriptor[]>([]);
+  // Inizializza il sort dal localStorage se disponibile
+  const [sort, setSort] = useState<SortDescriptor[]>(() => {
+    try {
+      const savedSort = localStorage.getItem('elencoRegistrazioni_sort');
+      return savedSort ? JSON.parse(savedSort) : [];
+    } catch (error) {
+      console.error('[SORT] Error loading sort from localStorage:', error);
+      return [];
+    }
+  });
+
+  // Salva il sort nel localStorage quando cambia
+  useEffect(() => {
+    try {
+      localStorage.setItem('elencoRegistrazioni_sort', JSON.stringify(sort));
+    } catch (error) {
+      console.error('[SORT] Error saving sort to localStorage:', error);
+    }
+  }, [sort]);
 
   // Reset del sort quando cambiano i dati per evitare problemi con sort invalidi
   useEffect(() => {
