@@ -25,10 +25,11 @@ log.info('App starting...');
 // ============================================================================
 console.log("=".repeat(80));
 console.log("🚀 MedReportAndSign - VERSIONE MACOS CON SUPPORTO FIRMA4NG KEYFOUR");
-console.log("🖥️  BUILD: 2025-12-02 01:00 - Commit: f55fa2b");
+console.log("🖥️  BUILD: 2025-12-02 02:30 - FIX VERIFY-PIN");
 console.log(`📱 Piattaforma: ${process.platform} (${process.arch})`);
-console.log("✅ Supporto smartcard macOS: ATTIVO");
+console.log("✅ Supporto smartcard macOS: ATTIVO (verify-pin + signPdf)");
 console.log("✅ Firma4NG Keyfour: ATTIVO");
+console.log("🔧 FIX: verify-pin ora usa platform detection");
 console.log("=".repeat(80));
 // ============================================================================
 
@@ -163,10 +164,67 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
     // Carica le impostazioni globali
     settings = await loadGlobalSettings();
 
-    // Inizializza PKCS11
+    // Inizializza PKCS11 con rilevamento piattaforma
     pkcs11 = new pkcs11js.PKCS11();
-    pkcs11.load(settings.pkcs11Lib);
-    pkcs11.C_Initialize();
+
+    // Rileva la piattaforma
+    const isMac = process.platform === 'darwin';
+    const isWindows = process.platform === 'win32';
+    console.log(`🖥️ [verify-pin] Piattaforma rilevata: ${process.platform} (isMac: ${isMac}, isWindows: ${isWindows})`);
+
+    // Lista di librerie PKCS#11 da provare (in ordine di priorità)
+    const pkcs11Libraries = [
+      settings.pkcs11Lib, // Libreria configurata dall'utente
+
+      // Librerie Windows
+      ...(isWindows ? [
+        'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
+        'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
+        'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+      ] : []),
+
+      // Librerie macOS
+      ...(isMac ? [
+        '/usr/local/lib/libbit4xpki.dylib', // Bit4id extended
+        '/usr/local/lib/libbit4ipki.dylib', // Bit4id standard
+        '/usr/local/lib/libbit4opki.dylib', // Bit4id OTP
+        '/Library/Frameworks/bit4xpki.framework/bit4xpki', // Framework format
+        '/Library/Frameworks/bit4ipki.framework/bit4ipki',
+        '/opt/homebrew/lib/libbit4xpki.dylib', // Homebrew installation (Apple Silicon)
+        '/opt/homebrew/lib/libbit4ipki.dylib',
+        '/Applications/Firma4NG Keyfour.app/Contents/Resources/utilities/mac/PKCS11/libbit4xpki.dylib', // Firma4NG Keyfour
+        '/Applications/Firma4NG Keyfour.app/Contents/Resources/System/Firma4NG.app/Contents/Resources/libbit4xpki.dylib', // Firma4NG alt
+        '/usr/local/lib/opensc-pkcs11.so', // OpenSC generic driver (Intel)
+        '/opt/homebrew/lib/opensc-pkcs11.so', // OpenSC generic driver (Apple Silicon)
+      ] : []),
+    ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
+
+    console.log(`📚 [verify-pin] Librerie PKCS#11 da provare: ${pkcs11Libraries.length} percorsi`);
+    pkcs11Libraries.forEach((lib, idx) => console.log(`   ${idx + 1}. ${lib}`));
+
+    let loadedLib: string | null = null;
+    let initError: Error | null = null;
+
+    // Prova a caricare le librerie in sequenza
+    for (const libPath of pkcs11Libraries) {
+      try {
+        console.log(`🔐 [verify-pin] Tentativo caricamento libreria PKCS#11: ${libPath}`);
+        pkcs11.load(libPath);
+        pkcs11.C_Initialize();
+        loadedLib = libPath;
+        console.log(`✅ [verify-pin] Libreria PKCS#11 caricata con successo: ${libPath}`);
+        break; // Successo, esci dal loop
+      } catch (err: any) {
+        console.warn(`⚠️ [verify-pin] Impossibile caricare ${libPath}: ${err.message}`);
+        initError = err;
+        // Prova la prossima libreria
+      }
+    }
+
+    if (!loadedLib) {
+      console.error(`❌ [verify-pin] NESSUNA LIBRERIA PKCS#11 DISPONIBILE`);
+      throw new Error(`Impossibile caricare il driver della smartcard. Ultimo errore: ${initError?.message || 'Sconosciuto'}`);
+    }
 
     try {
       // Ottieni lista slot con token presente
