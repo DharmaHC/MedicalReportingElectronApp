@@ -51,6 +51,7 @@ const dispatch = useDispatch();
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
+  const [doctorSex, setDoctorSex] = useState<string | null>(null);
 
   // Filtro per GestioneReferti
   const [filtersReady, setFiltersReady] = useState(false);
@@ -149,6 +150,38 @@ const dispatch = useDispatch();
     navigate("/register-user");
   };
 
+  // Helper per determinare il titolo in base al sesso
+  const getDoctorTitle = (sex: string | null): string => {
+    if (!sex) return "Dott."; // Fallback se sex è null o undefined
+
+    try {
+      const normalizedSex = sex.toString().trim().toUpperCase();
+
+      // Formato numerico: 2 = Femmina, 1 = Maschio
+      if (normalizedSex === "2") return "Dott.ssa";
+      if (normalizedSex === "1") return "Dott.";
+
+      // Formato testuale
+      if (normalizedSex === "F" ||
+          normalizedSex === "FEMALE" ||
+          normalizedSex === "FEMMINA") {
+        return "Dott.ssa";
+      }
+
+      if (normalizedSex === "M" ||
+          normalizedSex === "MALE" ||
+          normalizedSex === "MASCHIO") {
+        return "Dott.";
+      }
+
+      // Fallback per valori non riconosciuti
+      return "Dott.";
+    } catch (error) {
+      console.warn("Errore nel determinare il titolo del medico:", error);
+      return "Dott."; // Fallback in caso di errore
+    }
+  };
+
   const handleLogoutAndExit = () => {
 
   if (window.electron && window.electron.ipcRenderer) {
@@ -178,6 +211,7 @@ const dispatch = useDispatch();
         if (contentType && contentType.includes('application/json')) {
           const data = await response.json();
           setDoctorPropeName(data.doctorDescription);
+          setDoctorSex(data.sex || null);
         } else {
           console.error("Response is not JSON");
         }
@@ -271,7 +305,7 @@ const dispatch = useDispatch();
             <div className="header">
               <div className="header-left">
                 {doctorPropeName && (
-                  <h4 className="less-margin">Dr. {doctorPropeName}</h4>
+                  <h4 className="less-margin">{getDoctorTitle(doctorSex)} {doctorPropeName}</h4>
                 )}
               </div>
 

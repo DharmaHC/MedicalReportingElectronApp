@@ -7,6 +7,7 @@ interface AuthState {
   token: string | null;
   userId: string | null;
   doctorCode: string | null;
+  doctorFullName: string | null;
   rememberMe: boolean;
   allowMedicalReportDigitalSignature: boolean;
   printReportWhenFinished: boolean;
@@ -25,6 +26,7 @@ const initialState: AuthState = {
   token: null,
   userId: null,
   doctorCode: null,
+  doctorFullName: null,
   rememberMe: false,
   allowMedicalReportDigitalSignature: false,
   printReportWhenFinished: false,
@@ -69,6 +71,9 @@ const authSlice = createSlice({
     setDoctorCode(state, action: PayloadAction<string | null>) {
       state.doctorCode = action.payload;
     },
+    setDoctorFullName(state, action: PayloadAction<string | null>) {
+      state.doctorFullName = action.payload;
+    },
     setPin(state, action: PayloadAction<string | null>) {
       state.pin = action.payload;
     },
@@ -92,6 +97,7 @@ export const {
   setAllowMedicalReportDigitalSignature,
   setprintReportWhenFinished,
   setDoctorCode,
+  setDoctorFullName,
   setPin,
   setUserCN,
   setIsTechnician,

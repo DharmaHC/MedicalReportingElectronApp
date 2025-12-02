@@ -14,6 +14,7 @@ import {
   setToken,
   setUserId,
   setDoctorCode,
+  setDoctorFullName,
   setAllowMedicalReportDigitalSignature,
   setprintReportWhenFinished,
   setUserCN,
@@ -192,11 +193,13 @@ const Login = () => {
         const result = JSON.parse(text);
         const userId = result.userId;
         const doctorCode = result.doctorCode;
+        const doctorFullName = result.doctorFullName;
     		const printReportWhenFinished = !!result.printReportWhenFinished;
     		const userCN = result.userCN;
 
         dispatch(setUserId(userId));
         dispatch(setDoctorCode(doctorCode));
+        dispatch(setDoctorFullName(doctorFullName));
         dispatch(setprintReportWhenFinished(printReportWhenFinished));
         dispatch(setUserCN(userCN));
         if (doctorCode) {
