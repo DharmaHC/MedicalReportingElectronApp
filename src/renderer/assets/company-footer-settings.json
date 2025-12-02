@@ -1,5 +1,6 @@
 {
   "ORTASA": {
+    "footerText": "",
     "footerImageWidth": 0,
     "footerImageHeight": 0,
     "blankFooterHeight": 50,
@@ -7,6 +8,7 @@
     "footerImageXPositionOffset": 0
   },
   "DEFAULT": {
+    "footerText": "",
     "footerImageWidth": 0,
     "footerImageHeight": 0,
     "blankFooterHeight": 50,

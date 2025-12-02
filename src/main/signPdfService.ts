@@ -240,7 +240,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
     throw err;
   }
 
-  const footerTxt = req.footerText ?? footerTextDefault;
+  const footerTxt = req.footerText ?? footerTextDefault ?? "";
 
   // Settings generici (logo, testo) - rimangono invariati
   const {
