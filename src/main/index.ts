@@ -20,6 +20,18 @@ autoUpdater.logger = log;
 
 log.info('App starting...');
 
+// ============================================================================
+// 🚨 VERSIONE BUILD - Se non vedi questo messaggio, stai usando una build vecchia!
+// ============================================================================
+console.log("=".repeat(80));
+console.log("🚀 MedReportAndSign - VERSIONE MACOS CON SUPPORTO FIRMA4NG KEYFOUR");
+console.log("🖥️  BUILD: 2025-12-02 01:00 - Commit: f55fa2b");
+console.log(`📱 Piattaforma: ${process.platform} (${process.arch})`);
+console.log("✅ Supporto smartcard macOS: ATTIVO");
+console.log("✅ Firma4NG Keyfour: ATTIVO");
+console.log("=".repeat(80));
+// ============================================================================
+
 let isForceClosing = false;
 let proceedCloseTriggered = false;
 
