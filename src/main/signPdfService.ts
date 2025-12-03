@@ -314,10 +314,21 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
   // Usa i template configurabili da sign-settings.json
   // Applica la sostituzione dei placeholder a ENTRAMBE le linee
-  const line1 = settings.signatureTextLine1
+  // Fallback ai valori di default se i campi sono undefined (file configurazione vecchio)
+  if (!settings.signatureTextLine1 || !settings.signatureTextLine2) {
+    console.warn('⚠️ signatureTextLine1 o signatureTextLine2 mancanti in sign-settings.json, uso valori di default');
+    console.warn('   Questo può accadere con file di configurazione vecchi. Eseguire Reset_Configurazioni.bat per aggiornare.');
+  }
+
+  const line1Template = settings.signatureTextLine1 ||
+    'Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ';
+  const line2Template = settings.signatureTextLine2 ||
+    '{signedBy} in data: {date}';
+
+  const line1 = line1Template
     .replace('{signedBy}', signedBy)
     .replace('{date}', now.toLocaleString());
-  const line2 = settings.signatureTextLine2
+  const line2 = line2Template
     .replace('{signedBy}', signedBy)
     .replace('{date}', now.toLocaleString());
 

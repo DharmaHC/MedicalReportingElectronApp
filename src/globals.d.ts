@@ -26,8 +26,8 @@ interface Settings {
   editorZoomDefault: number;
   rowsPerPage: number;
   highlightPlaceholder: boolean;
-  signatureTextLine1: string;
-  signatureTextLine2: string;
+  signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
+  signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
 }
 
 interface CompanyFooterSettings {
