@@ -26,6 +26,8 @@ interface Settings {
   editorZoomDefault: number;
   rowsPerPage: number;
   highlightPlaceholder: boolean;
+  signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
+  signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
 }
 
 interface CompanyFooterSettings {
@@ -34,6 +36,7 @@ interface CompanyFooterSettings {
   blankFooterHeight: number;
   yPosFooterImage: number;
   footerImageXPositionOffset: number;
+  footerText: string; // Testo dati aziendali (es. "Aster Diagnostica Srl - P.I. 06191121000")
 }
 
 interface EmergencyWorkaround {
@@ -67,6 +70,13 @@ interface CompanyUISettings {
     };
   };
   emergencyWorkaround?: EmergencyWorkaround; // Configurazione workaround per emergenze
+  logipacsServer?: {
+    baseUrl: string;     // URL base del servizio RemotEye/Logipacs
+    username: string;    // Username per l'autenticazione
+    password: string;    // Password per l'autenticazione
+  };
+  useExternalIdSystem?: boolean; // Se true, usa ExternalPatientId e ExternalAccessionNumber per RemotEye
+  dicomImageSystemName?: "RemoteEye" | "RemoteEyeLite" | "Other"; // Sistema di visualizzazione immagini DICOM da utilizzare
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   Splitter,
   SplitterPaneProps,
@@ -8,7 +8,7 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 
 import ProfileDropDown from "../components/ProfileDropDown";
 
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
 import "./HomePage.css";
 
@@ -34,10 +34,14 @@ const HomePage = () => {
 
 const dispatch = useDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Autenticazione
   const token = useSelector((state: RootState) => state.auth.token);
   const userName = useSelector((state: RootState) => state.auth.userName);
+
+  // Verifica se l'utente è amministratore
+  const isAdmin = userName === "FRSRFL72R25H282U";
 
   // Stato per cambio password (Dialog)
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
@@ -47,6 +51,7 @@ const dispatch = useDispatch();
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
+  const [doctorSex, setDoctorSex] = useState<string | null>(null);
 
   // Filtro per GestioneReferti
   const [filtersReady, setFiltersReady] = useState(false);
@@ -69,6 +74,11 @@ const dispatch = useDispatch();
   };
 
   // ---- FUNZIONI CAMBIO PASSWORD ---------------------------------
+  // Apre il dialog di cambio password
+  const handleOpenChangePassword = () => {
+    setChangePasswordVisible(true);
+  };
+
   const handleChangePasswordSubmit = async () => {
     // Validazione base
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -81,7 +91,7 @@ const dispatch = useDispatch();
     }
 
     try {
-      const response = await fetch(url_changePassword, {
+      const response = await fetch(url_changePassword(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,7 +117,7 @@ const dispatch = useDispatch();
       setConfirmPassword("");
       setChangePasswordVisible(false);
     } catch (error) {
-      alert("Errore durante il cambio password, riprova più tardi.");
+      alert("Errore durante il cambio password, riprova piÃ¹ tardi.");
       console.error(error);
     }
   };
@@ -135,6 +145,43 @@ const dispatch = useDispatch();
   };
 
 
+  // Naviga alla pagina di registrazione utente (solo per admin)
+  const handleRegisterUser = () => {
+    navigate("/register-user");
+  };
+
+  // Helper per determinare il titolo in base al sesso
+  const getDoctorTitle = (sex: string | null): string => {
+    if (!sex) return "Dott."; // Fallback se sex è null o undefined
+
+    try {
+      const normalizedSex = sex.toString().trim().toUpperCase();
+
+      // Formato numerico: 2 = Femmina, 1 = Maschio
+      if (normalizedSex === "2") return "Dott.ssa";
+      if (normalizedSex === "1") return "Dott.";
+
+      // Formato testuale
+      if (normalizedSex === "F" ||
+          normalizedSex === "FEMALE" ||
+          normalizedSex === "FEMMINA") {
+        return "Dott.ssa";
+      }
+
+      if (normalizedSex === "M" ||
+          normalizedSex === "MALE" ||
+          normalizedSex === "MASCHIO") {
+        return "Dott.";
+      }
+
+      // Fallback per valori non riconosciuti
+      return "Dott.";
+    } catch (error) {
+      console.warn("Errore nel determinare il titolo del medico:", error);
+      return "Dott."; // Fallback in caso di errore
+    }
+  };
+
   const handleLogoutAndExit = () => {
 
   if (window.electron && window.electron.ipcRenderer) {
@@ -150,11 +197,11 @@ const dispatch = useDispatch();
   }
 };
 
-  // FetchDoctorInfo”
+  // FetchDoctorInfo"
   const fetchDoctorInfo = async () => {
     if (!userName || !token) return;
     try {
-      const response = await fetch(`${url_doctors_id}?userName=${userName}`, {
+      const response = await fetch(`${url_doctors_id()}?userName=${userName}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -164,6 +211,7 @@ const dispatch = useDispatch();
         if (contentType && contentType.includes('application/json')) {
           const data = await response.json();
           setDoctorPropeName(data.doctorDescription);
+          setDoctorSex(data.sex || null);
         } else {
           console.error("Response is not JSON");
         }
@@ -257,13 +305,19 @@ const dispatch = useDispatch();
             <div className="header">
               <div className="header-left">
                 {doctorPropeName && (
-                  <h4 className="less-margin">Dr. {doctorPropeName}</h4>
+                  <h4 className="less-margin">{getDoctorTitle(doctorSex)} {doctorPropeName}</h4>
                 )}
               </div>
 
-              {/* ---- (3) DropDownButton “Profilo” con gearIcon */}
+              {/* ---- (3) DropDownButton "Profilo" con gearIcon */}
               <div className="header-right">
-        				<ProfileDropDown onLogout={handleLogout} onChangePassword={handleChangePasswordSubmit} onLogoutAndExit={handleLogoutAndExit}/>
+        				<ProfileDropDown
+                  onLogout={handleLogout}
+                  onChangePassword={handleOpenChangePassword}
+                  onLogoutAndExit={handleLogoutAndExit}
+                  isAdmin={isAdmin}
+                  onRegisterUser={isAdmin ? handleRegisterUser : undefined}
+                />
               </div>
             </div>
 

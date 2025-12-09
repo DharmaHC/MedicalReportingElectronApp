@@ -24,6 +24,8 @@ interface Registration {
   medicalPrescriptionId: string | null;
   patientClinicNoteModDate: string | null;
   isDraft?: boolean;
+  externalPatientId?: string | null;
+  externalAccessionNumber?: string | null;
 }
 const initialState: Registration[] = [];
 

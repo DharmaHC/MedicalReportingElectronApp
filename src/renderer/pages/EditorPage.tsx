@@ -35,6 +35,7 @@ import {
 } from "../utility/urlLib";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { RootState } from "../store";
+import type { EmergencyWorkaround } from "../../globals";
 import PdfPreview from "../components/PdfPreview";
 import {
   TreeView,
@@ -154,6 +155,27 @@ const logToFile = (msg: string, details?: any) => {
 
 
 
+  // Stato per la configurazione del workaround di emergenza
+  const [emergencyWorkaround, setEmergencyWorkaround] = useState<EmergencyWorkaround>({
+    enabled: false,
+    bypassPin: false,
+    bypassSignature: false,
+    overrideDoctorName: null
+  });
+
+  // Stato per la configurazione del server logipacs
+  const [logipacsServer, setLogipacsServer] = useState({
+    baseUrl: "http://172.16.18.52/LPW/Display",
+    username: "radiologia",
+    password: "radiologia"
+  });
+
+  // Stato per abilitare l'uso degli ID esterni per il PACS
+  const [useExternalIdSystem, setUseExternalIdSystem] = useState(false);
+
+  // Stato per il sistema di visualizzazione immagini DICOM da utilizzare
+  const [dicomImageSystemName, setDicomImageSystemName] = useState<"RemoteEye" | "RemoteEyeLite" | "Other">("RemoteEye");
+
   useEffect(() => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
@@ -164,6 +186,45 @@ const logToFile = (msg: string, details?: any) => {
         setBlankFooterHeight(settings.blankFooterHeight ?? 30);
       });
     }, []);
+
+  useEffect(() => {
+    // Carica le impostazioni UI della company, incluso il workaround di emergenza
+    window.companyUISettings.get().then(settings => {
+      const workaround = settings.emergencyWorkaround || {
+        enabled: false,
+        bypassPin: false,
+        bypassSignature: false,
+        overrideDoctorName: null
+      };
+      setEmergencyWorkaround(workaround);
+
+      // Carica configurazione server logipacs
+      const logipacs = settings.logipacsServer || {
+        baseUrl: "http://172.16.18.52/LPW/Display",
+        username: "radiologia",
+        password: "radiologia"
+      };
+      setLogipacsServer(logipacs);
+
+      // Carica configurazione uso ID esterni
+      setUseExternalIdSystem(settings.useExternalIdSystem ?? false);
+
+      // Carica configurazione sistema visualizzazione immagini DICOM
+      setDicomImageSystemName(settings.dicomImageSystemName ?? "RemoteEye");
+
+      // Log visibile quando il workaround è attivo
+      if (workaround.enabled) {
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.warn('⚠️  EMERGENCY WORKAROUND ATTIVO  ⚠️');
+        console.warn(`   Bypass PIN: ${workaround.bypassPin}`);
+        console.warn(`   Bypass Firma: ${workaround.bypassSignature}`);
+        if (workaround.overrideDoctorName) {
+          console.warn(`   Override Medico: ${workaround.overrideDoctorName}`);
+        }
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      }
+    });
+  }, []);
 
 
   useEffect(() => {
@@ -186,6 +247,25 @@ const logToFile = (msg: string, details?: any) => {
   const dispatch = useDispatch(); // Hook per inviare azioni Redux.
   const reduxStore = useStore<RootState>(); // Hook per accedere all'istanza dello store Redux (usato per getState).
 
+  // Helper function per rimuovere titoli dal nome del medico
+  const removeTitlesFromName = (name: string | null): string | null => {
+    if (!name) return null;
+    // Rimuove titoli comuni italiani: Dr., Dott., Dott.ssa, Dott.re, Prof., Prof.ssa, etc.
+    return name
+      .replace(/^(Dr\.?|Dott\.?|Dott\.ssa|Dott\.re|Prof\.?|Prof\.ssa)\s+/gi, '')
+      .trim();
+  };
+
+  // Configurazione workaround da company-ui-settings.json
+  const BYPASS_PIN_CHECK = emergencyWorkaround.enabled && emergencyWorkaround.bypassPin;
+  const BYPASS_PIN_VALUE = "12345678"; // PIN fittizio per bypass
+  const BYPASS_SIGNATURE = emergencyWorkaround.enabled && emergencyWorkaround.bypassSignature;
+
+  // Se overrideDoctorName è specificato nel JSON, usalo; altrimenti usa il nome dell'utente corrente
+  const OVERRIDE_USER_CN = emergencyWorkaround.overrideDoctorName
+    ? removeTitlesFromName(emergencyWorkaround.overrideDoctorName)
+    : removeTitlesFromName(userName);
+
   // Gestione Pin della smart-card.
   const [isPinDialogVisible, setIsPinDialogVisible] = useState(false);
   const [pinInput, setPinInput] = useState("");
@@ -199,6 +279,13 @@ const logToFile = (msg: string, details?: any) => {
 
   // Recupera in modo sicuro il PIN dell'utente per la firma digitale.
   async function getSessionPin(): Promise<string | null> {
+    // ⚠️ BYPASS TEMPORANEO - Salta il controllo PIN ⚠️
+    if (BYPASS_PIN_CHECK) {
+      console.warn('⚠️ BYPASS PIN ATTIVO - Usando PIN fittizio per recupero referti');
+      dispatch(setPin(BYPASS_PIN_VALUE)); // Salva il PIN fittizio nello store
+      return BYPASS_PIN_VALUE;
+    }
+
     // 1) se ho già il PIN in store, lo restituisco subito
     const existingPin = reduxStore.getState().auth.pin;
     if (existingPin) {
@@ -265,6 +352,19 @@ const renderPinDialog = () =>
           try {
             console.log('Verifica Pin');
             setPinError(null);
+
+            // ⚠️ BYPASS TEMPORANEO - Salta la verifica del PIN ⚠️
+            if (BYPASS_PIN_CHECK) {
+              console.warn('⚠️ BYPASS PIN ATTIVO - Accettando qualsiasi PIN per recupero referti');
+              dispatch(setPin(BYPASS_PIN_VALUE));
+              hidePinDialog();
+              if (pinDialogResolver.current) {
+                pinDialogResolver.current(BYPASS_PIN_VALUE);
+                pinDialogResolver.current = null;
+              }
+              return;
+            }
+
             await (window as any).nativeSign.verifyPin(pinInput);
             dispatch(setPin(pinInput));
             hidePinDialog();
@@ -464,10 +564,10 @@ const renderPinDialog = () =>
   const handleItemClick = (event: TreeViewItemClickEvent) => {
     const item = event.item as TreeNode;
 
-    // ➜ 1. se l’item ha figli  ⇒  toggle espansione
+    // ➜ 1. se l'item ha figli  ⇒  toggle espansione
     if (item.items && item.items.length) {
       setTreeData(prev => updateExpanded(prev, item));
-      return; // niente “frase” per i nodi padre
+      return; // niente "frase" per i nodi padre
     }
 
     // ➜ 2. altrimenti (foglia)  ⇒  inserisci la frase
@@ -529,7 +629,7 @@ const renderPinDialog = () =>
 
     try {
       const response = await fetch(
-        `${url_getPatientReportsNoPdf}?patientId=${patientId}&examinationId=${selectedExaminationId}`,
+        `${url_getPatientReportsNoPdf()}?patientId=${patientId}&examinationId=${selectedExaminationId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.ok) {
@@ -672,7 +772,7 @@ const renderPinDialog = () =>
     /* 3. fetch: Esegue la chiamata API per ottenere le frasi. */
     try {
       const rsp = await fetch(
-        `${url_getPredefinedTexts}?${qs.toString()}`, // URL con query string.
+        `${url_getPredefinedTexts()}?${qs.toString()}`, // URL con query string.
         {
           method : "POST", // Metodo POST per inviare `linkedResultsList` nel body.
           headers: {
@@ -836,7 +936,7 @@ const renderPinDialog = () =>
       try {
         // Chiamata API per inviare l'HTML e ricevere PDF/RTF.
         const response = await fetch(
-          `${url_send_singleReportHTML}?${queryParams.toString()}`,
+          `${url_send_singleReportHTML()}?${queryParams.toString()}`,
           {
             method: "POST",
             headers: {
@@ -935,7 +1035,7 @@ const renderPinDialog = () =>
   }
 
   /**
-   * Mantiene la lista locale degli studi aperti nel viewer e costruisce l'URL JNLP per RemotEye.
+   * Mantiene la lista locale degli studi aperti nel viewer e costruisce l'URL per il sistema configurato.
    * @param accNum Accession Number dello studio da aprire/gestire.
    * @param mode Modalità di interazione con il viewer.
    */
@@ -956,11 +1056,32 @@ const renderPinDialog = () =>
         break;
     }
 
-    /* 2. Costruisce l'URL JNLP per RemotEye. */
-    const BASE = "http://172.16.18.52/LPW/Display"; // URL base del servizio RemotEye.
-    const USER = "radiologia"; // Username per RemotEye.
-    const PWD  = "radiologia"; // Password per RemotEye.
+    // Carica i parametri di connessione dalla configurazione
+    const BASE = logipacsServer.baseUrl; // URL base del servizio.
+    const USER = logipacsServer.username; // Username.
+    const PWD  = logipacsServer.password; // Password.
 
+    /* 2. Gestione differenziata in base al sistema di visualizzazione configurato */
+    switch (dicomImageSystemName) {
+      case "RemoteEye":
+        openViewerRemoteEye(accNum, mode, BASE, USER, PWD);
+        break;
+      case "RemoteEyeLite":
+        openViewerRemoteEyeLite(accNum, mode, BASE, USER, PWD);
+        break;
+      case "Other":
+        console.warn("⚠️ Sistema DICOM 'Other' non implementato. Configura un sistema supportato.");
+        break;
+      default:
+        console.error("❌ Sistema DICOM non riconosciuto:", dicomImageSystemName);
+    }
+  }
+
+  /**
+   * Apre il viewer con RemoteEye (JNLP protocol handler).
+   */
+  function openViewerRemoteEye(accNum: string, mode: ViewerMode, BASE: string, USER: string, PWD: string) {
+    /* Costruisce l'URL JNLP per RemotEye. */
     let jnlpURL =
       `${BASE}?username=${encodeURIComponent(USER)}` +
       `&password=${encodeURIComponent(PWD)}`;
@@ -970,7 +1091,7 @@ const renderPinDialog = () =>
       jnlpURL += `&accNumsList=${joinedAccNums}`; // Aggiunge la lista degli accNum.
     }
 
-    /* 2b. Parametri JNLP aggiuntivi in base alla modalità. */
+    /* Parametri JNLP aggiuntivi in base alla modalità. */
     switch (mode) {
       case "openOnly":
         jnlpURL +=
@@ -996,7 +1117,7 @@ const renderPinDialog = () =>
         break;
     }
 
-    /* 3. Avvia RemotEye tramite il protocol-handler `rhjnlp:`. */
+    /* Avvia RemotEye tramite il protocol-handler `rhjnlp:`. */
     const payload = {
       msgType: "MSG_LAUNCHJNLP_RQ", // Tipo di messaggio per il protocol-handler.
       dataMap: { jnlpURL }          // URL JNLP da lanciare.
@@ -1004,16 +1125,46 @@ const renderPinDialog = () =>
     // Redirige a un URL custom che il client RemotEye dovrebbe intercettare.
     window.location.href =
       "rhjnlp:" + encodeURIComponent(JSON.stringify(payload));
-      console.log("Apertura viewer RemotEye con Payload:", "rhjnlp:" + encodeURIComponent(JSON.stringify(payload)));
+    console.log("📋 Apertura viewer RemotEye con Payload:", "rhjnlp:" + encodeURIComponent(JSON.stringify(payload)));
   }
 
   /**
-   * Apre lo studio corrente nel viewer RemotEye.
+   * Apre il viewer con RemoteEyeLite (URL diretto HTTP).
+   */
+  function openViewerRemoteEyeLite(accNum: string, mode: ViewerMode, BASE: string, USER: string, PWD: string) {
+    // RemoteEyeLite supporta solo apertura diretta, non comandi "exit" o "openOnly"
+    if (mode === "exit" || mode === "openOnly") {
+      console.log("ℹ️ RemoteEyeLite non supporta modalità 'exit' o 'openOnly'");
+      return;
+    }
+
+    // Estrae IP e porta dal baseUrl (es. "http://192.9.200.102:81/LPW/Display" -> "http://192.9.200.102:81")
+    const baseUrlObj = new URL(BASE);
+    const serverBase = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
+
+    // Costruisce l'URL per RemoteEyeLite
+    let viewerURL = `${serverBase}/viewer/DisplayStudy.html?accNumsList=${encodeURIComponent(accNum.trim())}&username=${encodeURIComponent(USER)}&password=${encodeURIComponent(PWD)}`;
+
+    // Apre in una nuova finestra/tab del browser
+    window.open(viewerURL, '_blank');
+    console.log("📋 Apertura viewer RemoteEyeLite:", viewerURL);
+  }
+
+  /**
+   * Apre lo studio corrente nel viewer DICOM configurato (RemoteEye, RemoteEyeLite, etc.).
    * - Se il viewer non contiene niente (lista locale vuota) -> "clearAndLoad".
    * - Altrimenti -> "add" (aggiunge lo studio a quelli esistenti).
+   * - Se useExternalIdSystem è true, usa ExternalAccessionNumber, altrimenti usa examinationMnemonicCodeFull
    */
   function openCurrentStudy() {
-    const acc = selectedRegistrationFullCode.trim(); // Accession Number dell'esame corrente.
+    // Determina quale Accession Number usare
+    let acc: string;
+    if (useExternalIdSystem && selectedRegistration?.externalAccessionNumber) {
+      acc = selectedRegistration.externalAccessionNumber.trim();
+    } else {
+      acc = selectedRegistrationFullCode.trim();
+    }
+
     if (!acc) return; // Non fare nulla se non c'è un accNum.
 
     const mode: "clearAndLoad" | "add" =
@@ -1022,8 +1173,9 @@ const renderPinDialog = () =>
   }
 
   /**
- * Chiude gli studi attualmente aperti nel viewer RemotEye senza chiudere l'app.
+ * Chiude gli studi attualmente aperti nel viewer DICOM configurato senza chiudere l'app.
  * Se non ci sono studi aperti (viewerAccNumsRef vuoto), non invia il comando di chiusura.
+ * Supportato solo per RemoteEye (JNLP), non per RemoteEyeLite.
  */
   function closeViewer() {
     // Se non ci sono studi aperti, non fare nulla
@@ -1034,10 +1186,16 @@ const renderPinDialog = () =>
     // Svuota la lista locale degli accNum aperti
     viewerAccNumsRef.current = [];
 
-    // Costruisce l'URL JNLP per inviare il comando "genericRemoveAllFromMemory"
-    const BASE = "http://172.16.18.52/LPW/Display";
-    const USER = "radiologia";
-    const PWD  = "radiologia";
+    // Solo RemoteEye supporta il comando di chiusura tramite JNLP
+    if (dicomImageSystemName !== "RemoteEye") {
+      console.log("ℹ️ Il sistema", dicomImageSystemName, "non supporta il comando di chiusura automatica");
+      return;
+    }
+
+    // Carica i parametri di connessione dalla configurazione
+    const BASE = logipacsServer.baseUrl;
+    const USER = logipacsServer.username;
+    const PWD  = logipacsServer.password;
 
     let jnlpURL =
       `${BASE}?username=${encodeURIComponent(USER)}` +
@@ -1064,7 +1222,7 @@ const renderPinDialog = () =>
 
   // Stampa referto PDF o RTF, gestendo la firma digitale se disponibile.
 // Componente Modal per l'anteprima di stampa (con timeout e loader)
-const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
+const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void, onCloseAndSave?: () => void): void => {
   const pdfUrl = URL.createObjectURL(pdfBlob);
 
   // 1. Mostra loader temporaneo subito
@@ -1154,16 +1312,36 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
       transition: background-color 0.2s;
     `;
 
+    const cancelBtn = document.createElement('button');
+    cancelBtn.innerHTML = `
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+      </svg>
+      Annulla
+    `;
+    cancelBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      transition: background-color 0.2s;
+    `;
+
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = `
       <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
-        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+        <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
       </svg>
       Chiudi
     `;
     closeBtn.style.cssText = `
       padding: 10px 20px;
-      background: #6b7280;
+      background: #10b981;
       color: white;
       border: none;
       border-radius: 8px;
@@ -1177,8 +1355,10 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
     // Hover effects
     printBtn.onmouseover = () => printBtn.style.background = '#2563eb';
     printBtn.onmouseout = () => printBtn.style.background = '#3b82f6';
-    closeBtn.onmouseover = () => closeBtn.style.background = '#4b5563';
-    closeBtn.onmouseout = () => closeBtn.style.background = '#6b7280';
+    cancelBtn.onmouseover = () => cancelBtn.style.background = '#dc2626';
+    cancelBtn.onmouseout = () => cancelBtn.style.background = '#ef4444';
+    closeBtn.onmouseover = () => closeBtn.style.background = '#059669';
+    closeBtn.onmouseout = () => closeBtn.style.background = '#10b981';
 
     // Contenitore per l'iframe
     const iframeContainer = document.createElement('div');
@@ -1200,7 +1380,10 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
 
     // Assembla il modal
     buttonContainer.appendChild(printBtn);
-    buttonContainer.appendChild(closeBtn);
+    buttonContainer.appendChild(cancelBtn);
+    if (onCloseAndSave) {
+      buttonContainer.appendChild(closeBtn);
+    }
     header.appendChild(title);
     header.appendChild(buttonContainer);
     iframeContainer.appendChild(iframe);
@@ -1220,7 +1403,14 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void): void => {
       URL.revokeObjectURL(pdfUrl);
     };
 
-    closeBtn.onclick = closeModal;
+    cancelBtn.onclick = closeModal;
+
+    if (onCloseAndSave) {
+      closeBtn.onclick = (): void => {
+        onCloseAndSave(); // Salva e chiudi l'editor
+        closeModal();
+      };
+    }
 
     // Chiudi cliccando fuori dal modal
     modal.onclick = (e): void => {
@@ -1304,46 +1494,82 @@ if (printSignedPdf && signedPdfBase64) {
     // NOTA: Questo viene applicato SOLO per PDF NON firmati, perché i PDF firmati
     // hanno già il footer gestito in signPdfService.ts
     const isPdfSigned = printSignedPdf && (signedPdfBase64 || lastSignedPdfBase64);
+
+    // 📋 DEBUG LOG
+    console.log('[FOOTER DEBUG] printSignedPdf:', printSignedPdf);
+    console.log('[FOOTER DEBUG] signedPdfBase64:', signedPdfBase64 ? 'present' : 'null');
+    console.log('[FOOTER DEBUG] lastSignedPdfBase64:', lastSignedPdfBase64 ? 'present' : 'null');
+    console.log('[FOOTER DEBUG] isPdfSigned:', isPdfSigned);
+    console.log('[FOOTER DEBUG] companyId:', companyId);
+    console.log('[FOOTER DEBUG] companyId.trim():', companyId?.trim());
+    console.log('[FOOTER DEBUG] Condition check:', !isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN"));
+
     if (!isPdfSigned && companyId && (companyId.trim() === "HEALTHWAY" || companyId.trim() === "CIN")) {
+      console.log('[FOOTER DEBUG] ✅ Entrato nel blocco di copertura footer!');
       try {
-        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
+        // ⭐ NUOVO: Carica settings specifici per company invece di usare valore hardcoded
         const companyFooterSettings = await window.electron.ipcRenderer.invoke(
           'get-company-footer-settings',
           companyId
         );
 
+        console.log('[FOOTER DEBUG] companyFooterSettings:', companyFooterSettings);
+
         const pdfBytes = await pdfBlob.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
-        pages.forEach(page => {
-          const { width } = page.getSize();
+        console.log('[FOOTER DEBUG] Numero pagine:', pages.length);
+
+        const finalHeight = companyFooterSettings?.blankFooterHeight || blankFooterHeight;
+        console.log('[FOOTER DEBUG] blankFooterHeight usato:', finalHeight);
+        console.log('[FOOTER DEBUG] blankFooterHeight da settings:', companyFooterSettings?.blankFooterHeight);
+        console.log('[FOOTER DEBUG] blankFooterHeight fallback:', blankFooterHeight);
+
+        pages.forEach((page, index) => {
+          const { width, height } = page.getSize();
+          console.log(`[FOOTER DEBUG] Pagina ${index + 1}: width=${width}, height=${height}`);
           page.drawRectangle({
             x: 0,
             y: 0,
             width: width,
-            height: companyFooterSettings?.blankFooterHeight || blankFooterHeight, // ⭐ USA settings company-specific
+            height: finalHeight, // ⭐ USA settings company-specific
             color: rgb(1, 1, 1)
           });
+          console.log(`[FOOTER DEBUG] Rettangolo bianco disegnato: x=0, y=0, width=${width}, height=${finalHeight}`);
         });
 
         const modifiedPdfBytes = await pdfDoc.save();
         // Convert to standard Uint8Array to ensure compatibility
         const pdfBytesArray = new Uint8Array(modifiedPdfBytes);
         finalPdfBlob = new Blob([pdfBytesArray], { type: "application/pdf" });
+        console.log('[FOOTER DEBUG] ✅ PDF modificato con successo!');
       } catch (error) {
-        console.error("Errore durante la manipolazione del PDF:", error);
+        console.error("[FOOTER DEBUG] ❌ Errore durante la manipolazione del PDF:", error);
         finalPdfBlob = pdfBlob;
       }
+    } else {
+      console.log('[FOOTER DEBUG] ❌ NON entrato nel blocco di copertura footer');
     }
 
     const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
     //const newPdfBlob = finalPdfBlob; // Usa il PDF finale senza margini aggiuntivi
     // 3. Mostra anteprima o stampa diretta a seconda del flag showPrintPreview
     if (showPrintPreview) {
-      showPrintPreviewModal(newPdfBlob, () => {
-        executePrint(newPdfBlob);
-      });
+      showPrintPreviewModal(
+        newPdfBlob,
+        () => {
+          executePrint(newPdfBlob);
+        },
+        () => {
+          // Chiudi senza stampare: naviga indietro come fa executePrint ma senza stampare
+          dispatch(clearSelectedMoreExams());
+          dispatch(resetExaminationState());
+          dispatch(clearRegistrations());
+          closeViewer();
+          navigate("/", { state: { reload: true } });
+        }
+      );
     } else {
       executePrint(newPdfBlob);
     }
@@ -1482,31 +1708,57 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     }));
 
     // Corpo della richiesta API.
+    // NOTA: p7mBase64 NON viene inviato perché NON esiste in ReportRequestModel del backend.
+    //       Il sistema utilizza firma PAdES (PDF firmato) che è legalmente sufficiente.
+    //       In futuro, se necessario per requisiti legali specifici, si potrebbe:
+    //       1. Aggiungere campo p7mBase64 a ReportRequestModel
+    //       2. Aggiungere colonna P7m in DigitalSignedReports
+    //       3. Inviare anche il file CAdES (p7m) separato dal PDF firmato
+
+    // Calcola isPdfSigned con cast esplicito a boolean per evitare errori di serializzazione
+    const isPdfSigned = Boolean(
+      allowMedicalReportDigitalSignature &&
+      !isDraft &&
+      !BYPASS_SIGNATURE &&
+      p7mBase64 !== null &&
+      p7mBase64 !== ''
+    );
+
+    // LOG pre-body per debug dei valori
+    console.log("🔍 Pre-Body Debug:", {
+      allowMedicalReportDigitalSignature,
+      isDraft,
+      BYPASS_SIGNATURE,
+      p7mBase64Type: typeof p7mBase64,
+      p7mBase64Value: p7mBase64 === null ? 'null' : p7mBase64 === '' ? 'empty string' : 'has value',
+      calculatedIsPdfSigned: isPdfSigned,
+      isPdfSignedType: typeof isPdfSigned,
+    });
+
     const body = {
       pdfBase64: signedPdfBase64, // PDF (firmato o meno).
-      p7mBase64: p7mBase64,       // File P7M (opzionale).
       rtfContent: rtfTextContent, // Contenuto RTF.
       examinationId: Number(selectedExaminationId),
       doctorCode: doctorCode,
       companyId: companyId,
-      isPdfSigned: allowMedicalReportDigitalSignature && !isDraft && p7mBase64 !== null, // Indica se il PDF inviato è firmato.
-      isReportFinalized: !isDraft, // Indica se il report è finalizzato.
+      isPdfSigned: isPdfSigned, // Boolean esplicito
+      isReportFinalized: Boolean(!isDraft), // Boolean esplicito
       LinkedResultsList: linkedResultsList,
-      isSavingDraft: isDraft, // Flag esplicito per il salvataggio bozza.
+      isSavingDraft: Boolean(isDraft), // Boolean esplicito
     };
 
     // LOG per debug: verifica i valori inviati al backend
     console.log("📤 ProcessReport API Call:", {
       examinationId: body.examinationId,
       isPdfSigned: body.isPdfSigned,
+      isPdfSignedType: typeof body.isPdfSigned,
       isReportFinalized: body.isReportFinalized,
       isSavingDraft: body.isSavingDraft,
-      hasP7m: p7mBase64 !== null,
-      hasPdf: signedPdfBase64 !== null,
+      bodyJSON: JSON.stringify(body).substring(0, 500),
     });
 
     try {
-      const response = await fetch(url_processReport, {
+      const response = await fetch(url_processReport(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1564,8 +1816,9 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       let finalPdfToSend: string | null = reportData.pdfContent; // PDF da inviare (inizialmente quello generato).
       let p7mFileToSend: string | null = null; // File P7M (firma CAdES), inizialmente null.
 
+      // ⚠️ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
       // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
-      if (allowMedicalReportDigitalSignature && !isDraft) {
+      if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
         // 1. Salvataggio bozza "tecnica" prima della firma
         await callProcessReportApi(
         finalPdfToSend, // PDF originale da salvare come bozza prima della firma.
@@ -1588,15 +1841,19 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
           // Logica di firma (MRAS o endpoint locale).
           if (useMRAS) { // Utilizza il servizio MRAS (Electron native).
             const pin = reduxStore.getState().auth.pin;
-            const userCN = reduxStore.getState().auth.userCN;
+            const doctorFullName = reduxStore.getState().auth.doctorFullName;
+
             const signResponse = await (window as any).nativeSign.signPdf({
               pdfBase64 : reportData.pdfContent,
               companyId : companyId,
-              footerText: null,
+              footerText: null, // footerText è per i dati aziendali, non per il nome medico
               useRemote : null,
               otpCode   : null,
               pin       : pin,
-              userCN    : userCN,
+              userCN    : reduxStore.getState().auth.userCN,
+              bypassSignature: BYPASS_SIGNATURE, // ⚠️ BYPASS: solo header/footer, no firma
+              signedByName: BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined, // Nome medico per dicitura firma
+              doctorName: doctorFullName, // Nome leggibile del medico per la dicitura di firma
             });
             finalPdfToSend = signResponse.signedPdfBase64; // PDF firmato.
             p7mFileToSend  = signResponse.p7mBase64;      // File P7M.
@@ -1729,7 +1986,7 @@ const handleResultClick = async (result: any) => {
 
   try {
     const response = await fetch(
-      `${url_getPatientSignedReport}?${params.toString()}`,
+      `${url_getPatientSignedReport()}?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -2116,7 +2373,7 @@ const handleResultClick = async (result: any) => {
                 if (exitReason === "app") {
                   window.electron.ipcRenderer.send('proceed-close');
                 } else {
-                  // Naviga fuori dall’editor
+                  // Naviga fuori dall'editor
                   navigate("/", { state: { reload: false } });
                 }
               }}
@@ -2167,7 +2424,7 @@ const handleResultClick = async (result: any) => {
       {/* Dialogo di Caricamento durante il Salvataggio/Firma */}
       {isProcessing && (
         <Dialog               /*  tolto modal / closeButton  */
-          title="Elaborazione in corso…"
+          title="Elaborazione in corso..."
           onClose={() => {}}   /*  disabilita la chiusura manuale  */
         >
           <div style={{ padding: "30px 20px", textAlign: "center" }}>
@@ -2176,8 +2433,8 @@ const handleResultClick = async (result: any) => {
             />
             <p>
               {allowMedicalReportDigitalSignature && !isDraftOperation
-                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto…"
-                : "Attendere, stiamo completando il salvataggio del referto…"}
+                ? "Attendere, stiamo completando il salvataggio e la firma digitale del referto..."
+                : "Attendere, stiamo completando il salvataggio del referto..."}
             </p>
           </div>
         </Dialog>

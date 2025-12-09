@@ -57,6 +57,7 @@ export const url_getPatientSignedReport = (): string => buildUrl("ExamResults/Ge
 export const url_DeletePatientPdfReport = (): string => buildUrl("ExamResults/DeletePatientPdfReport");
 export const url_changePassword = (): string => buildUrl("Account/changePassword");
 export const url_passwordForgot = (): string => buildUrl("Account/forgotPasswordForm");
+export const url_registerUser = (): string => buildUrl("Account/register");
 
 // Technician Authorization
 export const url_isTechnician = (): string => buildUrl("MedicalPrescriptions/IsTechnician");

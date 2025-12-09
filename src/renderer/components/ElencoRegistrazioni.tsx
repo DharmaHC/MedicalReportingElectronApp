@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Grid, GridColumn as Column, GridSortChangeEvent } from "@progress/kendo-react-grid";
 import { orderBy, SortDescriptor } from "@progress/kendo-data-query";
 import moment from "moment";
@@ -27,16 +27,38 @@ const ElencoRegistrazioni = () => {
   const dispatch = useDispatch();
 
   // [MODIFICA] Stato locale per mantenere i criteri di sorting
+  // Inizializza il sort dal localStorage se disponibile
   const [sort, setSort] = useState<SortDescriptor[]>(() => {
-    const saved = localStorage.getItem("elencoRegistrazioniSort");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const savedSort = localStorage.getItem('elencoRegistrazioni_sort');
+      return savedSort ? JSON.parse(savedSort) : [];
+    } catch (error) {
+      console.error('[SORT] Error loading sort from localStorage:', error);
+      return [];
+    }
   });
 
- useEffect(() => {
-    localStorage.setItem("elencoRegistrazioniSort", JSON.stringify(sort));
+  // Salva il sort nel localStorage quando cambia
+  useEffect(() => {
+    try {
+      localStorage.setItem('elencoRegistrazioni_sort', JSON.stringify(sort));
+    } catch (error) {
+      console.error('[SORT] Error saving sort to localStorage:', error);
+    }
   }, [sort]);
-  
-  
+
+  // Reset del sort quando cambiano i dati per evitare problemi con sort invalidi
+  useEffect(() => {
+    if (data.length > 0 && sort.length > 0) {
+      const validFields = Object.keys(data[0] || {});
+      const hasInvalidField = sort.some(s => !validFields.includes(s.field || ''));
+      if (hasInvalidField) {
+        console.log('[SORT] Resetting invalid sort criteria');
+        setSort([]);
+      }
+    }
+  }, [data.length]);
+
   const handleRowClick = (event: any) => {
     try {
       const selectedExaminationId = event.dataItem?.examinationId;
@@ -78,89 +100,104 @@ const ElencoRegistrazioni = () => {
     }
   }, [data.length, dispatch]);
 
-  // Custom row rendering to highlight the selected row
-  const rowRender = (row: any, props: any) => {
-    const isSelected = props.dataItem.examinationId === selectedExaminationId;
-    const rowProps = {
-      ...row.props,
-      style: {
-        ...row.props.style,
-        backgroundColor: isSelected ? "lightblue" : undefined,
-      },
+  // Rimuovi duplicati per examinationId e poi ordina
+  const sortedData = useMemo(() => {
+    // Filtra i duplicati mantenendo solo la prima occorrenza
+    const uniqueData = data.filter((item, index, self) =>
+      index === self.findIndex(t => t.examinationId === item.examinationId)
+    );
+
+    const originalLength = data.length;
+    const uniqueLength = uniqueData.length;
+
+    if (originalLength !== uniqueLength) {
+      console.warn(
+        `[DEDUPE] Rimossi ${originalLength - uniqueLength} duplicati dall'API ` +
+        `(${originalLength} → ${uniqueLength} record)`
+      );
+    }
+
+    return orderBy(uniqueData, sort);
+  }, [data, sort]);
+
+  // Helper per creare celle con evidenziazione
+  const createCellWithSelection = (fieldGetter: (dataItem: any) => any) => {
+    return (props: any) => {
+      const isSelected = props.dataItem.examinationId === selectedExaminationId;
+      return (
+        <td style={{ backgroundColor: isSelected ? "lightblue" : undefined }}>
+          {fieldGetter(props.dataItem)}
+        </td>
+      );
     };
-    return React.cloneElement(row, rowProps, row.props.children);
   };
 
   return (
     <div className="elenco-registrazioni">
       <Grid
-        data={orderBy(data.map(d => ({...d, selected: d.examinationId === Number(selectedExaminationId)})), sort)}
+        data={sortedData}
         style={{ height: "100%", cursor: "pointer" }}
         onRowClick={handleRowClick}
-        rowRender={rowRender}
-        // [MODIFICA] Abilitiamo il sorting built-in
-        sortable
+        sortable={true}
         sort={sort}
         onSortChange={(e: GridSortChangeEvent) => {
           setSort(e.sort);
         }}
-        selectedField="examinationId"
-        selectable={{
-          enabled: true,
-          mode: 'single',
-        }}
-        dataItemKey={"examinationId"}
+        dataItemKey="examinationId"
       >
         <Column
           field="withdrawalDate"
           title={labels.elencoRegistrazioni.dataRitiro}
           width="120px"
-          cell={(props) => (
-            <td>{dateFormatter(props.dataItem.withdrawalDate)}</td>
-          )}
+          cell={createCellWithSelection(d => dateFormatter(d.withdrawalDate))}
         />
         <Column
           field="examinationStartDate"
           title={labels.elencoRegistrazioni.del}
           width="120px"
-          cell={(props) => (
-            <td>{dateFormatter(props.dataItem.examinationStartDate)}</td>
-          )}
+          cell={createCellWithSelection(d => dateFormatter(d.examinationStartDate))}
         />
         <Column
           field="lastName"
           title={labels.elencoRegistrazioni.cognome}
           width="150px"
+          cell={createCellWithSelection(d => d.lastName)}
         />
         <Column
           field="firstName"
           title={labels.elencoRegistrazioni.nome}
           width="150px"
+          cell={createCellWithSelection(d => d.firstName)}
         />
         <Column
           field="age"
           title={labels.elencoRegistrazioni.eta}
           width="80px"
+          cell={createCellWithSelection(d => d.age)}
         />
         <Column
           field="examinationMnemonicCodeFull"
           title={labels.elencoRegistrazioni.codice}
           width="150px"
+          cell={createCellWithSelection(d => d.examinationMnemonicCodeFull)}
         />
         <Column
           field="workareaId"
           title={labels.elencoRegistrazioni.settori}
           width="150px"
+          cell={createCellWithSelection(d => d.workareaId)}
         />
         <Column
           field="examinationWorkflowNote"
           title={labels.elencoRegistrazioni.examinationWorkflowNote}
           width="150px"
+          cell={createCellWithSelection(d => d.examinationWorkflowNote)}
         />
         <Column
           field="createdByUser"
           title={labels.elencoRegistrazioni.creataDa}
           width="150px"
+          cell={createCellWithSelection(d => d.createdByUser)}
         />
       </Grid>
     </div>
