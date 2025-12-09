@@ -28,9 +28,39 @@ export function getDefaultConfigDir(): string {
 }
 
 /**
+ * Rileva se l'installazione è perMachine o perUser su Windows
+ *
+ * perMachine: Installato in C:\Program Files o C:\Program Files (x86)
+ * perUser: Installato in %LOCALAPPDATA%\Programs
+ *
+ * @returns true se perMachine, false se perUser
+ */
+function isPerMachineInstallation(): boolean {
+  if (process.platform !== 'win32') {
+    return false; // Non applicabile su altri OS
+  }
+
+  const exePath = app.getPath('exe').toLowerCase();
+
+  // Installazioni perMachine tipicamente in Program Files
+  if (exePath.includes('\\program files\\') || exePath.includes('\\program files (x86)\\')) {
+    return true;
+  }
+
+  // Installazioni perUser tipicamente in %LOCALAPPDATA%\Programs
+  if (exePath.includes('\\appdata\\local\\programs\\')) {
+    return false;
+  }
+
+  // Fallback: considera perMachine se non siamo sicuri
+  return true;
+}
+
+/**
  * Ottiene la cartella per i file PERSONALIZZATI (persistenti tra update)
  *
- * Windows: C:\ProgramData\MedReportAndSign\assets
+ * Windows perMachine: C:\ProgramData\MedReportAndSign\assets (condiviso tra utenti)
+ * Windows perUser: %APPDATA%\MedReportAndSign\assets (specifico utente)
  * macOS: ~/Library/Application Support/MedReportAndSign/assets
  * Linux: ~/.config/MedReportAndSign/assets
  *
@@ -45,9 +75,17 @@ export function getCustomConfigDir(): string {
     // macOS: ~/Library/Application Support/MedReportAndSign/assets
     baseDir = path.join(app.getPath('appData'), 'MedReportAndSign', 'assets');
   } else if (process.platform === 'win32') {
-    // Windows: C:\ProgramData\MedReportAndSign\assets (condiviso tra tutti gli utenti)
-    const programData = process.env.ProgramData || 'C:\\ProgramData';
-    baseDir = path.join(programData, 'MedReportAndSign', 'assets');
+    // Windows: distingue tra perMachine e perUser
+    if (isPerMachineInstallation()) {
+      // perMachine: C:\ProgramData\MedReportAndSign\assets (condiviso tra tutti gli utenti)
+      const programData = process.env.ProgramData || 'C:\\ProgramData';
+      baseDir = path.join(programData, 'MedReportAndSign', 'assets');
+      console.log(`🔍 Rilevata installazione perMachine, configurazioni in: ${baseDir}`);
+    } else {
+      // perUser: %APPDATA%\MedReportAndSign\assets (specifico per l'utente corrente)
+      baseDir = path.join(app.getPath('appData'), 'MedReportAndSign', 'assets');
+      console.log(`🔍 Rilevata installazione perUser, configurazioni in: ${baseDir}`);
+    }
   } else {
     // Linux: ~/.config/MedReportAndSign/assets
     baseDir = path.join(app.getPath('appData'), 'MedReportAndSign', 'assets');
@@ -276,10 +314,221 @@ export function resetAllConfigs(): void {
 }
 
 /**
+ * Ottiene la vecchia cartella di configurazione (struttura precedente con subfolder 'config')
+ *
+ * Windows (perMachine): C:\ProgramData\MedReportAndSign\config
+ * Windows (perUser): %APPDATA%\MedReportAndSign\config
+ * macOS: ~/Library/Application Support/MedReportAndSign/config
+ * Linux: ~/.config/MedReportAndSign/config
+ */
+function getOldConfigDir(): string {
+  if (process.platform === 'darwin') {
+    return path.join(app.getPath('appData'), 'MedReportAndSign', 'config');
+  } else if (process.platform === 'win32') {
+    // Windows: usa la cartella appropriata in base al tipo di installazione
+    if (isPerMachineInstallation()) {
+      const programData = process.env.ProgramData || 'C:\\ProgramData';
+      return path.join(programData, 'MedReportAndSign', 'config');
+    } else {
+      return path.join(app.getPath('appData'), 'MedReportAndSign', 'config');
+    }
+  } else {
+    return path.join(app.getPath('appData'), 'MedReportAndSign', 'config');
+  }
+}
+
+/**
+ * Ottiene la vecchia cartella immagini (struttura precedente)
+ */
+function getOldImagesDir(): string {
+  return path.join(getOldConfigDir(), 'Images');
+}
+
+/**
+ * Su Windows, controlla anche la cartella utente (perUser) per la vecchia struttura
+ */
+function getOldConfigDirPerUser(): string | null {
+  if (process.platform === 'win32') {
+    return path.join(app.getPath('appData'), 'MedReportAndSign', 'config');
+  }
+  return null;
+}
+
+/**
+ * Migra un singolo file dalla vecchia alla nuova struttura
+ *
+ * @param oldPath Path del file nella vecchia struttura
+ * @param newPath Path del file nella nuova struttura
+ * @param filename Nome del file (per logging)
+ * @returns true se migrato con successo, false altrimenti
+ */
+function migrateFile(oldPath: string, newPath: string, filename: string): boolean {
+  try {
+    // Se il file nuovo esiste già, non sovrascrivere (preserva personalizzazioni più recenti)
+    if (fs.existsSync(newPath)) {
+      console.log(`  ⏭️  ${filename} già esistente nella nuova posizione, skip`);
+      return false;
+    }
+
+    // Se il file vecchio non esiste, niente da migrare
+    if (!fs.existsSync(oldPath)) {
+      return false;
+    }
+
+    // Copia il file nella nuova posizione
+    fs.copyFileSync(oldPath, newPath);
+    console.log(`  ✓ Migrato: ${filename}`);
+    console.log(`    Da: ${oldPath}`);
+    console.log(`    A:  ${newPath}`);
+    return true;
+  } catch (err) {
+    console.error(`  ✗ Errore migrazione ${filename}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Migra tutti i file di configurazione e immagini dalla vecchia struttura
+ *
+ * VECCHIA STRUTTURA:
+ * - Windows perMachine: C:\ProgramData\MedReportAndSign\config\*.json
+ * - Windows perUser: %APPDATA%\MedReportAndSign\config\*.json
+ * - macOS: ~/Library/Application Support/MedReportAndSign/config\*.json
+ *
+ * NUOVA STRUTTURA:
+ * - Windows perMachine: C:\ProgramData\MedReportAndSign\assets\*.json
+ * - Windows perUser: %APPDATA%\MedReportAndSign\assets\*.json
+ * - macOS: ~/Library/Application Support/MedReportAndSign/assets\*.json
+ *
+ * NOTA: Su Windows, controlla entrambe le posizioni (perMachine e perUser)
+ * per gestire i casi di aggiornamento da un tipo di installazione all'altro
+ *
+ * @returns true se è stata effettuata una migrazione, false altrimenti
+ */
+export function migrateOldConfigStructure(): boolean {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔍 Verifica presenza vecchia struttura configurazioni');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  let migrationPerformed = false;
+  const oldDirs: Array<{ path: string; type: string }> = [];
+
+  // 1. Controlla la vecchia struttura perMachine (ProgramData)
+  const oldConfigDirMachine = getOldConfigDir();
+  if (fs.existsSync(oldConfigDirMachine)) {
+    console.log(`\n📂 Trovata vecchia struttura (perMachine): ${oldConfigDirMachine}`);
+    oldDirs.push({ path: oldConfigDirMachine, type: 'perMachine' });
+  }
+
+  // 2. Su Windows, controlla anche la struttura perUser (AppData)
+  const oldConfigDirUser = getOldConfigDirPerUser();
+  if (oldConfigDirUser && fs.existsSync(oldConfigDirUser)) {
+    console.log(`\n📂 Trovata vecchia struttura (perUser): ${oldConfigDirUser}`);
+    oldDirs.push({ path: oldConfigDirUser, type: 'perUser' });
+  }
+
+  // Se non ci sono vecchie strutture, niente da migrare
+  if (oldDirs.length === 0) {
+    console.log('\n✓ Nessuna vecchia struttura trovata, niente da migrare');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    return false;
+  }
+
+  // Assicura che le nuove directory esistano
+  ensureCustomConfigDir();
+  ensureCustomImagesDir();
+
+  // 3. Migra i file da ciascuna vecchia directory
+  for (const oldDir of oldDirs) {
+    console.log(`\n🔄 Migrazione da ${oldDir.type}: ${oldDir.path}`);
+    console.log('─────────────────────────────────────────────────');
+
+    let filesMigrated = 0;
+
+    // Lista dei file di configurazione da migrare
+    const configFiles = [
+      'sign-settings.json',
+      'company-ui-settings.json',
+      'company-footer-settings.json'
+    ];
+
+    // Migra file JSON
+    console.log('\n📄 File di configurazione:');
+    for (const filename of configFiles) {
+      const oldPath = path.join(oldDir.path, filename);
+      const newPath = path.join(getCustomConfigDir(), filename);
+      if (migrateFile(oldPath, newPath, filename)) {
+        filesMigrated++;
+        migrationPerformed = true;
+      }
+    }
+
+    // Lista delle immagini da migrare
+    const imageFiles = [
+      'LogoAster.png',
+      'FooterAster.png',
+      'FooterHW.png',
+      'FooterCin.png'
+    ];
+
+    // Migra immagini
+    console.log('\n🖼️  Immagini:');
+    const oldImagesDir = path.join(oldDir.path, 'Images');
+    if (fs.existsSync(oldImagesDir)) {
+      for (const filename of imageFiles) {
+        const oldPath = path.join(oldImagesDir, filename);
+        const newPath = path.join(getCustomImagesDir(), filename);
+        if (migrateFile(oldPath, newPath, filename)) {
+          filesMigrated++;
+          migrationPerformed = true;
+        }
+      }
+    } else {
+      console.log('  ℹ️  Cartella Images non trovata nella vecchia struttura');
+    }
+
+    // 4. Se la migrazione è andata a buon fine, rimuovi la vecchia directory
+    if (filesMigrated > 0) {
+      console.log(`\n🗑️  Rimozione vecchia struttura: ${oldDir.path}`);
+      try {
+        // Rimuovi ricorsivamente la vecchia directory
+        fs.rmSync(oldDir.path, { recursive: true, force: true });
+        console.log(`  ✓ Vecchia directory rimossa con successo`);
+      } catch (err) {
+        console.error(`  ⚠️  Impossibile rimuovere la vecchia directory:`, err);
+        console.log(`  ℹ️  Puoi rimuoverla manualmente: ${oldDir.path}`);
+      }
+    } else {
+      console.log(`\n  ℹ️  Nessun file migrato da ${oldDir.type}, directory lasciata invariata`);
+    }
+  }
+
+  // 5. Report finale
+  if (migrationPerformed) {
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✅ MIGRAZIONE COMPLETATA CON SUCCESSO');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('\n📂 Nuova posizione configurazioni:');
+    console.log(`   ${getCustomConfigDir()}`);
+    console.log('\n🖼️  Nuova posizione immagini:');
+    console.log(`   ${getCustomImagesDir()}`);
+    console.log('\n💡 Le personalizzazioni sono state preservate!\n');
+  } else {
+    console.log('\n✓ Nessuna migrazione necessaria');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+  }
+
+  return migrationPerformed;
+}
+
+/**
  * Inizializza tutti i file di configurazione e immagini personalizzati al primo avvio
  * Questa funzione va chiamata all'avvio dell'app (nel main)
  */
 export function initializeAllConfigs(): void {
+  // STEP 0: Migra la vecchia struttura se esiste
+  migrateOldConfigStructure();
+
   // Verifica se è stato richiesto un reset forzato
   if (shouldForceReset()) {
     console.log('\n⚠️ RILEVATO FILE MARKER: C:\\ProgramData\\MedReportAndSign\\RESET_CONFIG');

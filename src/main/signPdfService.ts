@@ -486,6 +486,7 @@ export async function signViaPkcs11WithCN(
   }
 
   let result: { cmsBuf: Buffer, signedBy: string } | null = null;
+  const foundCertificates: string[] = []; // Raccoglie i CN dei certificati trovati per errore dettagliato
 
   try {
     // Cicla su tutti gli slot con token inserito
@@ -565,10 +566,14 @@ export async function signViaPkcs11WithCN(
           }
 
           // ⚠️ BYPASS TEMPORANEO - Se userCN è null/undefined/vuoto, usa il primo certificato trovato
-          // Confronta col CN richiesto solo se userCN è specificato
-          if (userCN && userCN.trim() !== '' && certCN && !certCN.toLowerCase().includes(userCN.toLowerCase())) {
-            console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
-            continue;
+          // Confronta col CN richiesto solo se userCN è specificato (match case-insensitive ESATTO)
+          if (userCN && userCN.trim() !== '' && certCN) {
+            foundCertificates.push(certCN); // Salva il certificato trovato
+
+            if (certCN.toLowerCase() !== userCN.toLowerCase()) {
+              console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
+              continue;
+            }
           }
 
           // Se arriviamo qui, il certificato è valido (o userCN è null/vuoto)
@@ -675,6 +680,21 @@ export async function signViaPkcs11WithCN(
 
   if (!result) {
     console.error(`\n❌ NESSUN CERTIFICATO COMPATIBILE TROVATO DOPO AVER ESAMINATO TUTTI GLI SLOT`);
+
+    // Costruisci messaggio di errore dettagliato
+    if (foundCertificates.length > 0 && userCN) {
+      const certList = foundCertificates.map((cn, idx) => `  ${idx + 1}. "${cn}"`).join('\n');
+      const errorMsg =
+        `❌ Certificato non trovato!\n\n` +
+        `CN configurato nel sistema: "${userCN}"\n\n` +
+        `Certificati trovati sulla smartcard (${foundCertificates.length}):\n${certList}\n\n` +
+        `💡 SOLUZIONE: Modifica il CN utente in Health.NET per matchare ESATTAMENTE uno dei certificati sopra.\n` +
+        `   Il nome deve essere identico (case-insensitive).`;
+
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
     throw new Error("Nessun certificato compatibile trovato sulla smartcard!");
   }
   console.log(`\n✅ Firma completata con successo!`);

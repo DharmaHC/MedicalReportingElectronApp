@@ -106,12 +106,39 @@ const PrescriptionEditorModal: React.FC = () => {
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const editorRef = useRef<any>(null);
 
-  // Sync Redux content to local state when modal opens
+  // Sync Redux content to local state when modal opens OR when content changes
   useEffect(() => {
     if (isOpen) {
-      setEditorContent(content);
+      // Debug: log initial content
+      console.log('=== EDITOR CONTENT DEBUG ===');
+      console.log('Content length:', content?.length || 0);
+      console.log('Content:', JSON.stringify(content));
+      console.log('First 10 charCodes:', content?.substring(0, 10).split('').map(c => c.charCodeAt(0)).join(','));
+
+      // Normalize content: remove ONLY leading/trailing whitespace, keep HTML structure intact
+      let normalizedContent = (content || '').trim();
+
+      // If content is empty or contains only whitespace/html tags, set to empty paragraph
+      if (!normalizedContent || normalizedContent === '<p></p>' || normalizedContent === '<br>') {
+        normalizedContent = '<p></p>';
+        console.log('Content was empty or invalid, normalized to:', normalizedContent);
+      } else {
+        // DON'T remove wrapper div - keep HTML structure intact
+        // The editor might need the wrapper for proper rendering
+        console.log('Content normalized (whitespace only), length:', normalizedContent.length);
+      }
+
+      setEditorContent(normalizedContent);
+
+      // Set focus on editor after a short delay to ensure it's rendered
+      setTimeout(() => {
+        if (editorRef.current?.view) {
+          editorRef.current.view.focus();
+          console.log('Editor focused');
+        }
+      }, 150);
     }
-  }, [isOpen, content]);
+  }, [isOpen, content]); // Sync when modal opens OR when content from Redux changes
 
   // Fetch creator display name when modal opens with existing prescription
   useEffect(() => {
@@ -146,9 +173,14 @@ const PrescriptionEditorModal: React.FC = () => {
 
   // Handle editor content change
   const handleEditorChange = (event: any) => {
+    // Prevent changes if read-only
+    if (isReadOnly) {
+      return;
+    }
     const newContent = event.html;
+    // Update local state for saving later (editor is uncontrolled, but we track changes)
     setEditorContent(newContent);
-    dispatch(setPrescriptionContent(newContent));
+    // DON'T dispatch to Redux during typing to prevent re-renders
   };
 
   // Build tree structure from phrases - already expanded
@@ -540,12 +572,12 @@ const PrescriptionEditorModal: React.FC = () => {
             )}
 
             {/* Editor section - takes remaining space */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
               <Editor
                 ref={editorRef}
                 value={editorContent}
                 onChange={handleEditorChange}
-                tools={[
+                tools={isReadOnly ? [] : [
                   [Bold, Italic, Underline],
                   [FontSize, FontName],
                   [ForeColor, BackColor],
@@ -558,9 +590,22 @@ const PrescriptionEditorModal: React.FC = () => {
                   height: '550px',
                   fontSize: '12pt',
                   fontFamily: 'Arial, sans-serif',
+                  backgroundColor: isReadOnly ? '#f5f5f5' : 'white',
+                  cursor: isReadOnly ? 'default' : 'text',
                 }}
-                disabled={isReadOnly}
               />
+              {isReadOnly && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'transparent',
+                  cursor: 'not-allowed',
+                  zIndex: 1
+                }} />
+              )}
             </div>
           </div>
         </div>

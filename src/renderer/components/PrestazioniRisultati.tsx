@@ -524,6 +524,10 @@ const PrestazioniRisultati = () => {
             // Prescrizione esistente trovata
             const { htmlContent, prescriptionId, createdBy, lastModified } = data;
 
+            console.log('=== PRESCRIZIONE ESISTENTE CARICATA ===');
+            console.log('HTML Content length:', htmlContent?.length || 0);
+            console.log('HTML Content preview:', htmlContent?.substring(0, 100));
+
             dispatch(setPrescriptionContent(htmlContent));
             dispatch(setCurrentExamResultId(examResultId));
             dispatch(setCurrentExaminationId(Number(selectedExaminationId)));
@@ -579,6 +583,10 @@ const PrestazioniRisultati = () => {
       if (templateResponse.ok) {
         const data = await templateResponse.json();
         const { htmlContent } = data;
+
+        console.log('=== TEMPLATE PRESCRIZIONE CARICATO ===');
+        console.log('HTML Content length:', htmlContent?.length || 0);
+        console.log('HTML Content preview:', htmlContent?.substring(0, 100));
 
         dispatch(setPrescriptionContent(htmlContent));
         dispatch(setCurrentExamResultId(examResultId));

@@ -10,7 +10,7 @@ import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
 import { loadConfigJson, initializeAllConfigs } from './configManager';
-import type { CompanyUISettings } from '../globals';
+import type { CompanyUISettings, Settings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -35,47 +35,179 @@ let isForceClosing = false;
 let proceedCloseTriggered = false;
 
 // ---------------- SETTINGS & UTILS ----------------
-interface Settings {
-  yPosLogo: number;
-  logoWidth: number;
-  logoHeight: number;
-  yPosFooterImage: number;
-  footerImageWidth: number;
-  footerImageHeight: number;
-  footerImageXPositionOffset: number;
-  footerTextFontFamily: string;
-  footerTextPointFromBottom: number;
-  footerTextFontSize: number;
-  footerCompanyDataPointFromBottom: number;
-  footerCompanyDataMultiline: boolean,
-  printSignedPdfIfAvailable: boolean;
-  pkcs11Lib: string;
-  cspSlotIndex: number;
-  remoteSignUrl: string;
-  tsaUrl: string;
-  useMRAS: boolean;
-  showAppMenu: boolean;
-  reportPageWidth: number;
-  reportPageHeight: number;
-  editorZoomDefault: number;
-  rowsPerPage: number;
-  highlightPlaceholder: boolean;
+
+/**
+ * Valori di fallback per sign-settings.json
+ * Usati solo se il file non esiste o è corrotto
+ */
+const DEFAULT_SETTINGS: Settings = {
+  yPosLogo: 0,
+  logoWidth: 0,
+  logoHeight: 0,
+  yPosFooterImage: 0,
+  footerImageWidth: 0,
+  footerImageHeight: 0,
+  footerImageXPositionOffset: 0,
+  footerTextFontFamily: "Times New Roman",
+  footerTextPointFromBottom: 20,
+  footerTextFontSize: 8,
+  footerCompanyDataPointFromBottom: 0,
+  footerCompanyDataMultiline: 1, // 1 = true, 0 = false (defined as number in globals.d.ts)
+  blankFooterHeight: 50,
+  printSignedPdfIfAvailable: true,
+  reportPageWidth: 210,
+  reportPageHeight: 297,
+  editorZoomDefault: 1.3,
+  rowsPerPage: 30,
+  highlightPlaceholder: false,
+  pkcs11Lib: "C:\\Windows\\System32\\bit4xpki.dll",
+  cspSlotIndex: 0,
+  remoteSignUrl: "https://mio-server-remote-sign.example.com/sign",
+  tsaUrl: "https://freetsa.org/tsr",
+  useMRAS: true,
+  showAppMenu: false,
+  signatureTextLine1: "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
+  signatureTextLine2: "{signedBy} in data: {date}"
+};
+
+/**
+ * Carica le impostazioni globali usando il sistema di merge intelligente
+ *
+ * LOGICA:
+ * 1. Carica il file DEFAULT da resources/assets (sempre aggiornato con nuovi campi)
+ * 2. Se esiste il file PERSONALIZZATO in ProgramData/assets, fa il merge
+ * 3. Risultato: tutti i nuovi campi + personalizzazioni preservate
+ *
+ * @returns Settings con merge intelligente default + custom
+ */
+export function loadGlobalSettings(): Settings {
+  const settings = loadConfigJson<Settings>('sign-settings.json', DEFAULT_SETTINGS);
+  return settings;
 }
 
-export function loadGlobalSettings(): Settings {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
+/**
+ * Carica settings con informazioni di debug sulla provenienza di ogni campo
+ * @returns Oggetto con settings e info sulla provenienza
+ */
+function loadSettingsWithDebugInfo(): {
+  settings: Settings;
+  sources: Record<string, 'default' | 'custom' | 'merged'>;
+  paths: { default: string; custom: string };
+} {
+  const { getDefaultConfigDir, getCustomConfigDir } = require('./configManager');
 
-  const settingsPath = path.join(baseDir, 'sign-settings.json');
-  if (!fs.existsSync(settingsPath)) {
-    throw new Error(`sign-settings.json non trovato in ${settingsPath}`);
+  const defaultPath = path.join(getDefaultConfigDir(), 'sign-settings.json');
+  const customPath = path.join(getCustomConfigDir(), 'sign-settings.json');
+
+  // Carica file default
+  let defaultSettings: Settings = DEFAULT_SETTINGS;
+  if (fs.existsSync(defaultPath)) {
+    try {
+      const raw = fs.readFileSync(defaultPath, 'utf8');
+      defaultSettings = JSON.parse(raw) as Settings;
+    } catch (err) {
+      log.error('Error loading default settings:', err);
+    }
   }
+
+  // Carica file custom (se esiste)
+  let customSettings: Partial<Settings> | null = null;
+  const hasCustomFile = fs.existsSync(customPath);
+  if (hasCustomFile) {
+    try {
+      const raw = fs.readFileSync(customPath, 'utf8');
+      customSettings = JSON.parse(raw) as Partial<Settings>;
+    } catch (err) {
+      log.error('Error loading custom settings:', err);
+    }
+  }
+
+  // Determina la provenienza di ogni campo
+  const sources: Record<string, 'default' | 'custom' | 'merged'> = {};
+  const finalSettings = loadGlobalSettings();
+
+  for (const key in finalSettings) {
+    if (customSettings && key in customSettings) {
+      sources[key] = 'custom';
+    } else {
+      sources[key] = 'default';
+    }
+  }
+
+  return {
+    settings: finalSettings,
+    sources,
+    paths: { default: defaultPath, custom: customPath }
+  };
+}
+
+/**
+ * Espone i settings nella console di Chrome per debugging
+ * Accessibile tramite: window.debugSettings()
+ */
+export function logSettingsToConsole(mainWindow: BrowserWindow | null): void {
+  if (!mainWindow) return;
+
   try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Settings;
+    const { settings, sources, paths } = loadSettingsWithDebugInfo();
+
+    // Prepara dati per la console
+    const debugData: any[] = [];
+    for (const key in settings) {
+      const value = (settings as any)[key];
+      const source = sources[key] || 'default';
+      debugData.push({
+        'Setting': key,
+        'Valore': typeof value === 'string' ? value : JSON.stringify(value),
+        'Provenienza': source === 'custom' ? '🔧 Personalizzato' : '📦 Default'
+      });
+    }
+
+    // Conta personalizzazioni
+    const customCount = Object.values(sources).filter(s => s === 'custom').length;
+    const totalCount = Object.keys(settings).length;
+
+    // Espone i settings nella console del renderer
+    mainWindow.webContents.executeJavaScript(`
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+      console.log('%c📋 SETTINGS CARICATI (sign-settings.json)', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+
+      console.log('%c📂 Percorsi File:', 'color: #888; font-weight: bold;');
+      console.log('  📦 Default:       ${paths.default.replace(/\\/g, '\\\\')}');
+      console.log('  🔧 Personalizzato: ${paths.custom.replace(/\\/g, '\\\\')}');
+      console.log('');
+
+      console.log('%c📊 Statistiche:', 'color: #888; font-weight: bold;');
+      console.log('  Totale settings: ${totalCount}');
+      console.log('  Personalizzati:  ${customCount}');
+      console.log('  Default:         ${totalCount - customCount}');
+      console.log('');
+
+      console.log('%c🔍 Dettaglio Settings:', 'color: #888; font-weight: bold;');
+      console.table(${JSON.stringify(debugData)});
+
+      console.log('%c💡 Puoi usare window.debugSettings() per rivedere questi valori', 'color: #888; font-style: italic;');
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+
+      // Espone funzioni globali per debugging
+      window.debugSettings = () => {
+        console.table(${JSON.stringify(debugData)});
+        return ${JSON.stringify(settings)};
+      };
+
+      window.debugSettingsRaw = () => {
+        return {
+          settings: ${JSON.stringify(settings)},
+          sources: ${JSON.stringify(sources)},
+          paths: ${JSON.stringify(paths)}
+        };
+      };
+    `);
+
+    log.info(`Settings exposed to browser console: ${customCount}/${totalCount} personalizzati`);
   } catch (err) {
-    throw new Error(`Errore lettura/parsing sign-settings.json: ${err}`);
+    log.error('Error logging settings to console:', err);
   }
 }
 
@@ -495,6 +627,11 @@ function createWindow() {
     } else {
       mainWindow.loadFile(indexPath);
     }
+
+  // Espone i settings nella console del browser quando la pagina è caricata
+  mainWindow.webContents.on('did-finish-load', () => {
+    logSettingsToConsole(mainWindow);
+  });
 
   // Intercetta la richiesta di chiusura della finestra
 mainWindow.on('close', (e) => {
