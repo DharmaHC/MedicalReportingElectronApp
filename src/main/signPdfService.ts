@@ -9,62 +9,69 @@ import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
 import { Settings, CompanyFooterSettings } from '../globals';
+import { loadConfigJson, getImagePath } from './configManager';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
+  // Valori di default se il file non esiste o è corrotto
+  const defaultSettings: Settings = {
+    yPosLogo: 0,
+    logoWidth: 0,
+    logoHeight: 0,
+    yPosFooterImage: 0,
+    footerImageWidth: 0,
+    footerImageHeight: 0,
+    footerImageXPositionOffset: 0,
+    footerTextFontFamily: 'Helvetica',
+    footerTextPointFromBottom: 0,
+    footerTextFontSize: 0,
+    footerCompanyDataPointFromBottom: 0,
+    footerCompanyDataMultiline: 0,
+    blankFooterHeight: 0,
+    printSignedPdfIfAvailable: false,
+    pkcs11Lib: '',
+    cspSlotIndex: 0,
+    remoteSignUrl: '',
+    tsaUrl: '',
+    useMRAS: false,
+    showAppMenu: false,
+    reportPageWidth: 0,
+    reportPageHeight: 0,
+    editorZoomDefault: 0,
+    rowsPerPage: 0,
+    highlightPlaceholder: false,
+    signatureTextLine1: 'Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ',
+    signatureTextLine2: '{signedBy} in data: {date}'
+  };
 
-  const settingsPath = path.join(baseDir, 'sign-settings.json');
-  if (!fs.existsSync(settingsPath)) {
-    throw new Error(`sign-settings.json non trovato in ${settingsPath}`);
+  const settings = loadConfigJson<Settings>('sign-settings.json', defaultSettings);
+
+  // Verifica che i campi critici siano presenti
+  if (!settings.pkcs11Lib) {
+    throw new Error('sign-settings.json non contiene pkcs11Lib configurato');
   }
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Settings;
-  } catch (err) {
-    throw new Error(`Errore lettura/parsing sign-settings.json: ${err}`);
-  }
+
+  return settings;
 }
 
 /* █████████████████ COMPANY FOOTER SETTINGS █████████████████ */
 function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
-
-  const settingsPath = path.join(baseDir, 'company-footer-settings.json');
-
   // Fallback a valori di default se il file non esiste
-  if (!fs.existsSync(settingsPath)) {
-    console.warn('company-footer-settings.json non trovato, uso valori default');
-    return {
-      "DEFAULT": {
-        footerImageWidth: 160,
-        footerImageHeight: 32,
-        blankFooterHeight: 15,
-        yPosFooterImage: 15,
-        footerImageXPositionOffset: 0
-      }
-    };
-  }
+  const defaultSettings: Record<string, CompanyFooterSettings> = {
+    "DEFAULT": {
+      footerImageWidth: 160,
+      footerImageHeight: 32,
+      blankFooterHeight: 15,
+      yPosFooterImage: 15,
+      footerImageXPositionOffset: 0,
+      footerText: ""
+    }
+  };
 
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Record<string, CompanyFooterSettings>;
-  } catch (err) {
-    console.error('Errore caricamento company-footer-settings.json:', err);
-    return {
-      "DEFAULT": {
-        footerImageWidth: 160,
-        footerImageHeight: 32,
-        blankFooterHeight: 15,
-        yPosFooterImage: 15,
-        footerImageXPositionOffset: 0
-      }
-    };
-  }
+  return loadConfigJson<Record<string, CompanyFooterSettings>>(
+    'company-footer-settings.json',
+    defaultSettings
+  );
 }
 
 export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
@@ -77,7 +84,8 @@ export function getCompanyFooterSettings(companyId?: string): CompanyFooterSetti
     footerImageHeight: 32,
     blankFooterHeight: 15,
     yPosFooterImage: 15,
-    footerImageXPositionOffset: 0
+    footerImageXPositionOffset: 0,
+    footerText: "Aster Diagnostica Srl - P.I. 06191121000"
   };
 }
 
@@ -97,11 +105,14 @@ function log(msg: string) {
 export interface SignPdfRequest {
   pdfBase64 : string;
   companyId?: string;
-  footerText?: string;
+  footerText?: string;      // Testo footer aziendale (es. "Aster Diagnostica Srl...")
   pin?: string;             // se firma locale
   useRemote?: boolean;
   otpCode?: string;         // se firma remota
-  userCN?: string; // opzionale, per filtrare per CN
+  userCN?: string;          // opzionale, per filtrare per CN
+  bypassSignature?: boolean; // ⚠️ BYPASS per recupero: solo header/footer, no firma digitale
+  signedByName?: string;    // Nome del medico per dicitura firma digitale (usato in bypass mode)
+  doctorName?: string;      // Nome leggibile del medico (es. "Dr. Mario Rossi") - ha priorità sul CN del certificato
 }
 export interface SignPdfResponse {
   signedPdfBase64: string; // PDF estetico (non firmato)
@@ -119,7 +130,22 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
     pdfBuf = await decoratePdf(pdfBuf, req, currentSettings);
 
-    // 2. Firma digitale
+    // ⚠️ BYPASS SIGNATURE - Solo per recupero referti
+    if (req.bypassSignature) {
+      console.log('⚠️ BYPASS SIGNATURE ATTIVO - Nessuna firma digitale, solo header/footer');
+
+      // Usa signedByName per la dicitura di firma (non footerText che è per i dati aziendali)
+      const signedBy = req.signedByName || "Documento con header/footer applicati";
+      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
+
+      log('success (bypass mode)');
+      return {
+        signedPdfBase64: pdfBuf.toString('base64'),
+        p7mBase64: '' // Nessun p7m in modalità bypass
+      };
+    }
+
+    // 2. Firma digitale (solo se non in bypass)
     let signedBy = "";
     let cmsBuf: Buffer;
     if (req.useRemote) {
@@ -132,7 +158,9 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
       }
 
     // 3. Aggiungi dicitura del firmatario nell'ultima pagina del PDF
-    pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
+    // Usa doctorName se presente, altrimenti usa il CN del certificato
+    const finalSignedBy = req.doctorName || signedBy;
+    pdfBuf = await addSignatureNotice(pdfBuf, finalSignedBy, currentSettings);
 
     // 4. Marca temporale
     const tspBuf = await timestampCms(cmsBuf, currentSettings);
@@ -176,26 +204,43 @@ function readFileAsync(path: string): Promise<Buffer> {
 }
 
 async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings): Promise<Buffer> {
+  console.log('🎨 decoratePdf: Inizio decorazione PDF');
   const doc = await PDFDocument.load(pdf);
 
   // Embedding font
   const font = await embedFont(doc, settings.footerTextFontFamily);
+  console.log('✓ Font embedded');
 
   const {
     logoPath, footerImgPath, footerTextDefault
   } = getCompanyAssets(req.companyId);
 
+  console.log(`🖼️ Logo path: ${logoPath}`);
+  console.log(`🖼️ Footer image path: ${footerImgPath}`);
+
   // ⭐ NUOVO: Carica settings specifici per company
   const companyFooterSettings = getCompanyFooterSettings(req.companyId);
+  console.log(`⚙️ Company footer settings loaded`);
 
-  const [logoBytes, footBytes] = await Promise.all([
-    readFileAsync(logoPath),
-    readFileAsync(footerImgPath)
-  ]);
-  const logoImg = await doc.embedPng(logoBytes);
-  const footImg = await doc.embedPng(footBytes);
+  let logoImg, footImg;
+  try {
+    const [logoBytes, footBytes] = await Promise.all([
+      readFileAsync(logoPath),
+      readFileAsync(footerImgPath)
+    ]);
+    console.log(`✓ Logo bytes: ${logoBytes.length}, Footer bytes: ${footBytes.length}`);
 
-  const footerTxt = req.footerText ?? footerTextDefault;
+    logoImg = await doc.embedPng(logoBytes);
+    console.log('✓ Logo image embedded');
+
+    footImg = await doc.embedPng(footBytes);
+    console.log('✓ Footer image embedded');
+  } catch (err: any) {
+    console.error('❌ Errore nel caricamento delle immagini:', err.message);
+    throw err;
+  }
+
+  const footerTxt = req.footerText ?? footerTextDefault ?? "";
 
   // Settings generici (logo, testo) - rimangono invariati
   const {
@@ -267,14 +312,28 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
   const now = new Date();
 
-  // Esempio: settings.footerCompanyDataMultiline è booleano (true = multilinea, false = una riga)
-  if (signedBy.includes('NZDMHL80H26H501J')) {
-    signedBy = "Dr. Anzidei Michele";
+  // Usa i template configurabili da sign-settings.json
+  // Applica la sostituzione dei placeholder a ENTRAMBE le linee
+  // Fallback ai valori di default se i campi sono undefined (file configurazione vecchio)
+  if (!settings.signatureTextLine1 || !settings.signatureTextLine2) {
+    console.warn('⚠️ signatureTextLine1 o signatureTextLine2 mancanti in sign-settings.json, uso valori di default');
+    console.warn('   Questo può accadere con file di configurazione vecchi. Eseguire Reset_Configurazioni.bat per aggiornare.');
   }
-  const digitalNoteLines = [
-    "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
-    signedBy + " in data: " + now.toLocaleString()
-  ];
+
+  const line1Template = settings.signatureTextLine1 ||
+    'Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ';
+  const line2Template = settings.signatureTextLine2 ||
+    '{signedBy} in data: {date}';
+
+  const line1 = line1Template
+    .replace('{signedBy}', signedBy)
+    .replace('{date}', now.toLocaleString());
+  const line2 = line2Template
+    .replace('{signedBy}', signedBy)
+    .replace('{date}', now.toLocaleString());
+
+  const digitalNoteLines = [line1, line2];
+
   let lines;
   if (settings.footerCompanyDataMultiline) {
     lines = digitalNoteLines;      // 2 righe
@@ -303,39 +362,41 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
 function getCompanyAssets(companyId?: string) {
-    const base = app.isPackaged
-      ? path.join(process.resourcesPath, 'assets', 'Images')
-      : path.join(process.cwd(), 'src/renderer/assets/Images');
+    // Carica il footerText dal file di configurazione
+    const companySettings = getCompanyFooterSettings(companyId);
+    const footerTextDefault = companySettings.footerText;
+
+    // Usa getImagePath per caricare immagini da ProgramData se disponibili
     switch ((companyId ?? '').trim().toUpperCase()) {
     case 'ASTER':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
-        footerTextDefault: 'Aster Diagnostica Srl - P.I. e C.F. 06191121000'
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
+        footerTextDefault
       };
     case 'RAD':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
-        footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
+        footerTextDefault
       };
     case 'HEALTHWAY':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterHW.png'),
-        footerTextDefault: 'Aster Diagnostica Mezzocammino Srl - P. I. e C.F. 12622721004'
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterHW.png'),
+        footerTextDefault
       };
     case 'CIN':
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterCin.png'),
-        footerTextDefault: 'Radiologia Mostacciano Srl - P.I. 01321781005 - C.F. 04891080584'
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterCin.png'),
+        footerTextDefault
       };
     default:
       return {
-        logoPath: path.join(base, 'LogoAster.png'),
-        footerImgPath: path.join(base, 'FooterAster.png'),
-        footerTextDefault: 'Aster Diagnostica Srl - P.I. 06191121000'
+        logoPath: getImagePath('LogoAster.png'),
+        footerImgPath: getImagePath('FooterAster.png'),
+        footerTextDefault
       };
   }
 }
@@ -364,21 +425,86 @@ export async function signViaPkcs11WithCN(
   userCN?: string
 ): Promise<{ cmsBuf: Buffer, signedBy: string }> {
   const pkcs11 = new pkcs11js.PKCS11();
-  pkcs11.load(settings.pkcs11Lib);
-  pkcs11.C_Initialize();
+
+  // Rileva la piattaforma
+  const isMac = process.platform === 'darwin';
+  const isWindows = process.platform === 'win32';
+  console.log(`🖥️ Piattaforma rilevata: ${process.platform} (isMac: ${isMac}, isWindows: ${isWindows})`);
+
+  // Lista di librerie PKCS#11 da provare (in ordine di priorità)
+  const pkcs11Libraries = [
+    settings.pkcs11Lib, // Libreria configurata dall'utente
+
+    // Librerie Windows
+    ...(isWindows ? [
+      'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
+      'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
+      'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+    ] : []),
+
+    // Librerie macOS
+    ...(isMac ? [
+      '/usr/local/lib/libbit4xpki.dylib', // Bit4id extended
+      '/usr/local/lib/libbit4ipki.dylib', // Bit4id standard
+      '/usr/local/lib/libbit4opki.dylib', // Bit4id OTP
+      '/Library/Frameworks/bit4xpki.framework/bit4xpki', // Framework format
+      '/Library/Frameworks/bit4ipki.framework/bit4ipki',
+      '/opt/homebrew/lib/libbit4xpki.dylib', // Homebrew installation (Apple Silicon)
+      '/opt/homebrew/lib/libbit4ipki.dylib',
+      '/Applications/Firma4NG Keyfour.app/Contents/Resources/utilities/mac/PKCS11/libbit4xpki.dylib', // Firma4NG Keyfour
+      '/Applications/Firma4NG Keyfour.app/Contents/Resources/System/Firma4NG.app/Contents/Resources/libbit4xpki.dylib', // Firma4NG alt
+      '/usr/local/lib/opensc-pkcs11.so', // OpenSC generic driver (Intel)
+      '/opt/homebrew/lib/opensc-pkcs11.so', // OpenSC generic driver (Apple Silicon)
+    ] : []),
+  ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
+
+  console.log(`📚 Librerie PKCS#11 da provare: ${pkcs11Libraries.length} percorsi`);
+  pkcs11Libraries.forEach((lib, idx) => console.log(`   ${idx + 1}. ${lib}`));
+
+  let loadedLib: string | null = null;
+  let initError: Error | null = null;
+
+  // Prova a caricare le librerie in sequenza
+  for (const libPath of pkcs11Libraries) {
+    try {
+      console.log(`🔐 Tentativo caricamento libreria PKCS#11: ${libPath}`);
+      pkcs11.load(libPath);
+      pkcs11.C_Initialize();
+      loadedLib = libPath;
+      console.log(`✅ Libreria PKCS#11 caricata con successo: ${libPath}`);
+      break; // Successo, esci dal loop
+    } catch (err: any) {
+      console.warn(`⚠️ Impossibile caricare ${libPath}: ${err.message}`);
+      initError = err;
+      // Prova la prossima libreria
+    }
+  }
+
+  if (!loadedLib) {
+    console.error(`❌ NESSUNA LIBRERIA PKCS#11 DISPONIBILE`);
+    throw new Error(`Impossibile caricare il driver della smartcard. Ultimo errore: ${initError?.message || 'Sconosciuto'}`);
+  }
 
   let result: { cmsBuf: Buffer, signedBy: string } | null = null;
+  const foundCertificates: string[] = []; // Raccoglie i CN dei certificati trovati per errore dettagliato
 
   try {
     // Cicla su tutti gli slot con token inserito
-    for (const slot of pkcs11.C_GetSlotList(true)) {
+    const slots = pkcs11.C_GetSlotList(true);
+    console.log(`🔍 Trovati ${slots.length} slot con token inserito`);
+
+    for (const slot of slots) {
+      console.log(`\n📋 Esaminando slot ${slot}...`);
       let sess: pkcs11js.Handle | null = null;
       try {
         sess = pkcs11.C_OpenSession(
           slot,
           pkcs11js.CKF_SERIAL_SESSION | pkcs11js.CKF_RW_SESSION
         );
+        console.log(`✓ Sessione aperta su slot ${slot}`);
+
         pkcs11.C_Login(sess, pkcs11js.CKU_USER, pin);
+        console.log(`✓ Login effettuato con successo`);
 
         // Cerca il certificato X.509
         pkcs11.C_FindObjectsInit(sess, [
@@ -388,12 +514,18 @@ export async function signViaPkcs11WithCN(
         const certHandles = pkcs11.C_FindObjects(sess, 20) as pkcs11js.Handle[]; // Fino a 20 cert
 
         pkcs11.C_FindObjectsFinal(sess);
+        console.log(`📜 Trovati ${certHandles.length} certificati X.509 su questo slot`);
 
-        for (const hCert of certHandles) {
+        for (let i = 0; i < certHandles.length; i++) {
+          const hCert = certHandles[i];
+          console.log(`\n  📄 Certificato ${i + 1}/${certHandles.length}:`);
+
           // Ottieni ID del certificato
           const [{ value: certId }] = pkcs11.C_GetAttributeValue(sess, hCert, [
             { type: pkcs11js.CKA_ID }
           ]);
+          const certIdHex = Buffer.from(certId as Buffer).toString('hex');
+          console.log(`     CKA_ID: ${certIdHex}`);
 
           // Cerca la chiave privata corrispondente
           pkcs11.C_FindObjectsInit(sess, [
@@ -403,21 +535,55 @@ export async function signViaPkcs11WithCN(
           const [privKey] = pkcs11.C_FindObjects(sess, 1) as pkcs11js.Handle[];
           pkcs11.C_FindObjectsFinal(sess);
 
-          if (!privKey) continue;
-
-          // Estrai il certificato in formato DER
-          const [{ value: certRaw }] = pkcs11.C_GetAttributeValue(sess, hCert, [
-            { type: pkcs11js.CKA_VALUE }
-          ]);
-          const certRawBuf = Buffer.isBuffer(certRaw) ? certRaw : Buffer.from(certRaw);
-          const asn1Cert = asn1js.fromBER(certRawBuf.buffer);
-          const cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
-          const certCN = getCNfromPkijsCertificate(cert);
-
-          // Confronta col CN richiesto
-          if (userCN && certCN && !certCN.toLowerCase().includes(userCN.toLowerCase())) {
+          if (!privKey) {
+            console.log(`     ❌ Chiave privata NON trovata per questo certificato`);
             continue;
           }
+          console.log(`     ✓ Chiave privata trovata`);
+
+          // Estrai il certificato in formato DER
+          let certCN = "";
+          let cert: any;
+          try {
+            const [{ value: certRaw }] = pkcs11.C_GetAttributeValue(sess, hCert, [
+              { type: pkcs11js.CKA_VALUE }
+            ]);
+            const certRawBuf = Buffer.isBuffer(certRaw) ? certRaw : Buffer.from(certRaw);
+            console.log(`     Certificato raw buffer: ${certRawBuf.length} bytes`);
+
+            const asn1Cert = asn1js.fromBER(certRawBuf.buffer);
+            if (asn1Cert.offset === -1) {
+              console.error(`     ❌ Errore parsing ASN.1 del certificato`);
+              continue;
+            }
+
+            cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
+            certCN = getCNfromPkijsCertificate(cert);
+            console.log(`     CN: "${certCN}"`);
+          } catch (parseError: any) {
+            console.error(`     ❌ Errore durante il parsing del certificato: ${parseError.message}`);
+            continue;
+          }
+
+          // ⚠️ BYPASS TEMPORANEO - Se userCN è null/undefined/vuoto, usa il primo certificato trovato
+          // Confronta col CN richiesto solo se userCN è specificato (match case-insensitive ESATTO)
+          if (userCN && userCN.trim() !== '' && certCN) {
+            foundCertificates.push(certCN); // Salva il certificato trovato
+
+            if (certCN.toLowerCase() !== userCN.toLowerCase()) {
+              console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
+              continue;
+            }
+          }
+
+          // Se arriviamo qui, il certificato è valido (o userCN è null/vuoto)
+          if (!userCN || userCN.trim() === '') {
+            console.log(`     ⚠️ BYPASS ATTIVO - Usando primo certificato trovato: CN="${certCN}"`);
+          } else {
+            console.log(`     ✓ Certificato trovato: CN="${certCN}" matcha userCN="${userCN}"`);
+          }
+
+          console.log(`     🔐 Inizio processo di firma...`);
 
           // Attributi firmati
           const hash = createHash("sha256").update(data).digest();
@@ -496,8 +662,10 @@ export async function signViaPkcs11WithCN(
         // Se non trovato, chiudi la sessione su questo slot
         pkcs11.C_Logout(sess);
         pkcs11.C_CloseSession(sess);
-      } catch (e) {
+      } catch (e: any) {
         // Se errore, tenta clean-up su sessione
+        console.error(`❌ ERRORE su slot ${slot}: ${e.message}`);
+        console.error(`   Stack trace: ${e.stack}`);
         if (sess) {
           try { pkcs11.C_Logout(sess); } catch {}
           try { pkcs11.C_CloseSession(sess); } catch {}
@@ -510,7 +678,26 @@ export async function signViaPkcs11WithCN(
     try { pkcs11.C_Finalize(); } catch {}
   }
 
-  if (!result) throw new Error("Nessun certificato compatibile trovato sulla smartcard!");
+  if (!result) {
+    console.error(`\n❌ NESSUN CERTIFICATO COMPATIBILE TROVATO DOPO AVER ESAMINATO TUTTI GLI SLOT`);
+
+    // Costruisci messaggio di errore dettagliato
+    if (foundCertificates.length > 0 && userCN) {
+      const certList = foundCertificates.map((cn, idx) => `  ${idx + 1}. "${cn}"`).join('\n');
+      const errorMsg =
+        `❌ Certificato non trovato!\n\n` +
+        `CN configurato nel sistema: "${userCN}"\n\n` +
+        `Certificati trovati sulla smartcard (${foundCertificates.length}):\n${certList}\n\n` +
+        `💡 SOLUZIONE: Modifica il CN utente in Health.NET per matchare ESATTAMENTE uno dei certificati sopra.\n` +
+        `   Il nome deve essere identico (case-insensitive).`;
+
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    throw new Error("Nessun certificato compatibile trovato sulla smartcard!");
+  }
+  console.log(`\n✅ Firma completata con successo!`);
   return result;
 }
 

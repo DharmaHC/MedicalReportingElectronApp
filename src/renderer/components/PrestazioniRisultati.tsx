@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { Grid, GridColumn as Column } from "@progress/kendo-react-grid";
 import moment from "moment";
 import { Button } from "@progress/kendo-react-buttons";
@@ -130,7 +130,7 @@ const PrestazioniRisultati = () => {
     const prescriptionChecks = examResultIds.map(async (examResultId: number) => {
       try {
         const response = await fetch(
-          `${url_getExistingPrescription}?examResultId=${examResultId}`,
+          `${url_getExistingPrescription()}?examResultId=${examResultId}`,
           {
             method: "GET",
             headers: {
@@ -139,10 +139,13 @@ const PrestazioniRisultati = () => {
           }
         );
         if (response.ok) {
-          prescriptionsSet.add(examResultId);
+          const data = await response.json();
+          if (data.exists) {
+            prescriptionsSet.add(examResultId);
+          }
         }
       } catch (error) {
-        // Prescrizione non esistente, ignora l'errore
+        // Errore di rete, ignora
       }
     });
 
@@ -183,7 +186,7 @@ const PrestazioniRisultati = () => {
       queryParams.append("allResults", String(allResults));
 
     try {
-      const response = await fetch(`${url_examResults}?${queryParams.toString()}`, {
+      const response = await fetch(`${url_examResults()}?${queryParams.toString()}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -229,7 +232,7 @@ const PrestazioniRisultati = () => {
   };
 
   // -------------------------------------------------
-  // fetchSingleReport (aggiungiamo readOnly come 3° arg)
+  // fetchSingleReport (aggiungiamo readOnly come 3Â° arg)
   // -------------------------------------------------
   const fetchSingleReport = async (doctorCode: string, exam: any, readOnly: boolean, openedByOtherDoctor: boolean) => {
     // Seleziona l'esame
@@ -248,7 +251,7 @@ const PrestazioniRisultati = () => {
       });
       try {
         const response = await fetch(
-          `${url_GetPatientRTFHtmlResult}?${queryParams.toString()}`,
+          `${url_GetPatientRTFHtmlResult()}?${queryParams.toString()}`,
           {
             method: "GET",
             headers: {
@@ -277,7 +280,7 @@ const PrestazioniRisultati = () => {
       });
       try {
         const response = await fetch(
-          `${url_singleReportHTML}?${queryParams.toString()}`,
+          `${url_singleReportHTML()}?${queryParams.toString()}`,
           {
             method: "GET",
             headers: {
@@ -299,7 +302,7 @@ const PrestazioniRisultati = () => {
   };
 
   // -------------------------------------------------
-  // fetchMoreReports (aggiungiamo readOnly come 3° arg)
+  // fetchMoreReports (aggiungiamo readOnly come 3Â° arg)
   // -------------------------------------------------
   const fetchMoreReports = async (
     examIds: string[],
@@ -336,7 +339,7 @@ const PrestazioniRisultati = () => {
       });
       try {
         const response = await fetch(
-          `${url_GetPatientRTFHtmlResult}?${queryParams.toString()}`,
+          `${url_GetPatientRTFHtmlResult()}?${queryParams.toString()}`,
           {
             method: "GET",
             headers: {
@@ -369,7 +372,7 @@ const PrestazioniRisultati = () => {
 
       try {
         const response = await fetch(
-          `${url_linkedReportTemplatesHTML}?${queryParams.toString()}`,
+          `${url_linkedReportTemplatesHTML()}?${queryParams.toString()}`,
           {
             method: "POST",
             headers: {
@@ -406,7 +409,7 @@ const PrestazioniRisultati = () => {
 
         try {
           const response = await fetch(
-            `${url_getPatientReport}?${queryParams.toString()}`,
+            `${url_getPatientReport()}?${queryParams.toString()}`,
             {
               method: "GET",
               headers: {
@@ -504,7 +507,7 @@ const PrestazioniRisultati = () => {
       // 1. Verifica se esiste già una prescrizione
       try {
         const existingResponse = await fetch(
-          `${url_getExistingPrescription}?examResultId=${examResultId}`,
+          `${url_getExistingPrescription()}?examResultId=${examResultId}`,
           {
             method: "GET",
             headers: {
@@ -514,45 +517,56 @@ const PrestazioniRisultati = () => {
         );
 
         if (existingResponse.ok) {
-          // Prescrizione esistente trovata
           const data = await existingResponse.json();
-          const { htmlContent, prescriptionId, createdBy, lastModified } = data;
 
-          dispatch(setPrescriptionContent(htmlContent));
-          dispatch(setCurrentExamResultId(examResultId));
-          dispatch(setCurrentExaminationId(Number(selectedExaminationId)));
-          dispatch(setHasExistingPrescription(true));
-          dispatch(setExistingPrescriptionId(prescriptionId));
-          dispatch(setCreatedBy(createdBy));
-          dispatch(setLastModified(lastModified));
+          // Verifica se la prescrizione esiste tramite il flag
+          if (data.exists) {
+            // Prescrizione esistente trovata
+            const { htmlContent, prescriptionId, createdBy, lastModified } = data;
 
-          // Descrizione esame
-          if (linkedExamsData.length > 1) {
-            dispatch(setExamDescription(`Prescrizione Unica per ${linkedExamsData.length} Esami`));
+            console.log('=== PRESCRIZIONE ESISTENTE CARICATA ===');
+            console.log('HTML Content length:', htmlContent?.length || 0);
+            console.log('HTML Content preview:', htmlContent?.substring(0, 100));
+
+            dispatch(setPrescriptionContent(htmlContent));
+            dispatch(setCurrentExamResultId(examResultId));
+            dispatch(setCurrentExaminationId(Number(selectedExaminationId)));
+            dispatch(setHasExistingPrescription(true));
+            dispatch(setExistingPrescriptionId(prescriptionId));
+            dispatch(setCreatedBy(createdBy));
+            dispatch(setLastModified(lastModified));
+
+            // Descrizione esame
+            if (linkedExamsData.length > 1) {
+              dispatch(setExamDescription(`Prescrizione Unica per ${linkedExamsData.length} Esami`));
+            } else {
+              dispatch(setExamDescription(exam.examName));
+            }
+
+            // Verifica se il tecnico può modificare (solo se creata da lui)
+            const isReadOnly =
+              createdBy &&
+              createdBy.trim().toUpperCase() !== userCode.trim().toUpperCase();
+            dispatch(setIsReadOnly(isReadOnly));
+
+            // Aggiungi l'esame al set di quelli con prescrizione
+            setExamsWithPrescriptions(prev => new Set(prev).add(examResultId));
+
+            dispatch(setIsEditingPrescription(true));
+            return;
           } else {
-            dispatch(setExamDescription(exam.examName));
+            // Prescrizione non esistente, procedi con il template
+            console.log("No existing prescription:", data.message);
           }
-
-          // Verifica se il tecnico può modificare (solo se creata da lui)
-          const isReadOnly =
-            createdBy &&
-            createdBy.trim().toUpperCase() !== userCode.trim().toUpperCase();
-          dispatch(setIsReadOnly(isReadOnly));
-
-          // Aggiungi l'esame al set di quelli con prescrizione
-          setExamsWithPrescriptions(prev => new Set(prev).add(examResultId));
-
-          dispatch(setIsEditingPrescription(true));
-          return;
         }
       } catch (error) {
-        // Prescrizione non esistente, procedi con il template
-        console.log("No existing prescription, fetching template");
+        // Errore di rete, procedi con il template
+        console.log("Error fetching prescription, fetching template:", error);
       }
 
       // 2. Carica template prescrizione (o documento vuoto)
       const templateResponse = await fetch(
-        `${url_getPrescriptionTemplate}?` +
+        `${url_getPrescriptionTemplate()}?` +
           `technicianCode=${encodeURIComponent(userCode)}&` +
           `examId=${examId}&` +
           `examVersion=${examVersion}&` +
@@ -569,6 +583,10 @@ const PrestazioniRisultati = () => {
       if (templateResponse.ok) {
         const data = await templateResponse.json();
         const { htmlContent } = data;
+
+        console.log('=== TEMPLATE PRESCRIZIONE CARICATO ===');
+        console.log('HTML Content length:', htmlContent?.length || 0);
+        console.log('HTML Content preview:', htmlContent?.substring(0, 100));
 
         dispatch(setPrescriptionContent(htmlContent));
         dispatch(setCurrentExamResultId(examResultId));
@@ -772,7 +790,7 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       };
 
       try {
-        const response = await fetch(url_insertPdfAttachment, {
+        const response = await fetch(url_insertPdfAttachment(), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -842,7 +860,7 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
 
     try {
       const response = await fetch(
-        `${url_DeletePatientPdfReport}?${queryParams.toString()}`,
+        `${url_DeletePatientPdfReport()}?${queryParams.toString()}`,
         {
           method: "DELETE",
           headers: {
@@ -1062,6 +1080,13 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
   };
 
   // -------------------------------------------------
+  // Memoizza i dati ordinati per evitare duplicazioni
+  // -------------------------------------------------
+  const sortedResultsData = useMemo(() => {
+    return orderBy(resultsData, sort);
+  }, [resultsData, sort]);
+
+  // -------------------------------------------------
   // RENDER
   // -------------------------------------------------
   return (
@@ -1073,16 +1098,25 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       ) : resultsData.length === 0 ? (
         <div className="no-records">Nessun dato disponibile</div>
       ) : (
-        <Grid data={resultsData} dataItemKey="examResultId" style={{ height: "100%" }}>
-          <Column
+        <Grid
+          data={sortedResultsData}
+          dataItemKey="examResultId"
+          style={{ height: "100%" }}
+          sortable={true}
+          sort={sort}
+          onSortChange={(e: GridSortChangeEvent) => {
+            setSort(e.sort);
+          }}
+        >
+          {/* <Column
             field="examBriefName"
             title={labels.prestazioniRisultati.codice}
             width="100px"
-          />
+          /> */}
           <Column
             field="examName"
             title={labels.prestazioniRisultati.nome}
-            width="200px"
+            width="350px"
           />
           <Column
             field="examinationExamWithdrawalDate"

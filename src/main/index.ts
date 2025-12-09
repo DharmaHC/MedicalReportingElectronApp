@@ -10,7 +10,7 @@ import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
 import { loadConfigJson, initializeAllConfigs } from './configManager';
-import type { CompanyUISettings } from '../globals';
+import type { CompanyUISettings, Settings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -20,51 +20,194 @@ autoUpdater.logger = log;
 
 log.info('App starting...');
 
+// ============================================================================
+// 🚀 MedReportAndSign - Version Info
+// ============================================================================
+console.log("=".repeat(80));
+console.log("🚀 MedReportAndSign v1.0.37");
+console.log(`📱 Platform: ${process.platform} (${process.arch})`);
+console.log("✅ Cross-platform smartcard support (Windows & macOS)");
+console.log("✅ Bit4id Firma4NG / Keyfour drivers supported");
+console.log("=".repeat(80));
+// ============================================================================
+
 let isForceClosing = false;
 let proceedCloseTriggered = false;
 
 // ---------------- SETTINGS & UTILS ----------------
-interface Settings {
-  yPosLogo: number;
-  logoWidth: number;
-  logoHeight: number;
-  yPosFooterImage: number;
-  footerImageWidth: number;
-  footerImageHeight: number;
-  footerImageXPositionOffset: number;
-  footerTextFontFamily: string;
-  footerTextPointFromBottom: number;
-  footerTextFontSize: number;
-  footerCompanyDataPointFromBottom: number;
-  footerCompanyDataMultiline: boolean,
-  printSignedPdfIfAvailable: boolean;
-  pkcs11Lib: string;
-  cspSlotIndex: number;
-  remoteSignUrl: string;
-  tsaUrl: string;
-  useMRAS: boolean;
-  showAppMenu: boolean;
-  reportPageWidth: number;
-  reportPageHeight: number;
-  editorZoomDefault: number;
-  rowsPerPage: number;
-  highlightPlaceholder: boolean;
+
+/**
+ * Valori di fallback per sign-settings.json
+ * Usati solo se il file non esiste o è corrotto
+ */
+const DEFAULT_SETTINGS: Settings = {
+  yPosLogo: 0,
+  logoWidth: 0,
+  logoHeight: 0,
+  yPosFooterImage: 0,
+  footerImageWidth: 0,
+  footerImageHeight: 0,
+  footerImageXPositionOffset: 0,
+  footerTextFontFamily: "Times New Roman",
+  footerTextPointFromBottom: 20,
+  footerTextFontSize: 8,
+  footerCompanyDataPointFromBottom: 0,
+  footerCompanyDataMultiline: 1, // 1 = true, 0 = false (defined as number in globals.d.ts)
+  blankFooterHeight: 50,
+  printSignedPdfIfAvailable: true,
+  reportPageWidth: 210,
+  reportPageHeight: 297,
+  editorZoomDefault: 1.3,
+  rowsPerPage: 30,
+  highlightPlaceholder: false,
+  pkcs11Lib: "C:\\Windows\\System32\\bit4xpki.dll",
+  cspSlotIndex: 0,
+  remoteSignUrl: "https://mio-server-remote-sign.example.com/sign",
+  tsaUrl: "https://freetsa.org/tsr",
+  useMRAS: true,
+  showAppMenu: false,
+  signatureTextLine1: "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
+  signatureTextLine2: "{signedBy} in data: {date}"
+};
+
+/**
+ * Carica le impostazioni globali usando il sistema di merge intelligente
+ *
+ * LOGICA:
+ * 1. Carica il file DEFAULT da resources/assets (sempre aggiornato con nuovi campi)
+ * 2. Se esiste il file PERSONALIZZATO in ProgramData/assets, fa il merge
+ * 3. Risultato: tutti i nuovi campi + personalizzazioni preservate
+ *
+ * @returns Settings con merge intelligente default + custom
+ */
+export function loadGlobalSettings(): Settings {
+  const settings = loadConfigJson<Settings>('sign-settings.json', DEFAULT_SETTINGS);
+  return settings;
 }
 
-export function loadGlobalSettings(): Settings {
-  const baseDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(process.cwd(), 'src/renderer/assets');
+/**
+ * Carica settings con informazioni di debug sulla provenienza di ogni campo
+ * @returns Oggetto con settings e info sulla provenienza
+ */
+function loadSettingsWithDebugInfo(): {
+  settings: Settings;
+  sources: Record<string, 'default' | 'custom' | 'merged'>;
+  paths: { default: string; custom: string };
+} {
+  const { getDefaultConfigDir, getCustomConfigDir } = require('./configManager');
 
-  const settingsPath = path.join(baseDir, 'sign-settings.json');
-  if (!fs.existsSync(settingsPath)) {
-    throw new Error(`sign-settings.json non trovato in ${settingsPath}`);
+  const defaultPath = path.join(getDefaultConfigDir(), 'sign-settings.json');
+  const customPath = path.join(getCustomConfigDir(), 'sign-settings.json');
+
+  // Carica file default
+  let defaultSettings: Settings = DEFAULT_SETTINGS;
+  if (fs.existsSync(defaultPath)) {
+    try {
+      const raw = fs.readFileSync(defaultPath, 'utf8');
+      defaultSettings = JSON.parse(raw) as Settings;
+    } catch (err) {
+      log.error('Error loading default settings:', err);
+    }
   }
+
+  // Carica file custom (se esiste)
+  let customSettings: Partial<Settings> | null = null;
+  const hasCustomFile = fs.existsSync(customPath);
+  if (hasCustomFile) {
+    try {
+      const raw = fs.readFileSync(customPath, 'utf8');
+      customSettings = JSON.parse(raw) as Partial<Settings>;
+    } catch (err) {
+      log.error('Error loading custom settings:', err);
+    }
+  }
+
+  // Determina la provenienza di ogni campo
+  const sources: Record<string, 'default' | 'custom' | 'merged'> = {};
+  const finalSettings = loadGlobalSettings();
+
+  for (const key in finalSettings) {
+    if (customSettings && key in customSettings) {
+      sources[key] = 'custom';
+    } else {
+      sources[key] = 'default';
+    }
+  }
+
+  return {
+    settings: finalSettings,
+    sources,
+    paths: { default: defaultPath, custom: customPath }
+  };
+}
+
+/**
+ * Espone i settings nella console di Chrome per debugging
+ * Accessibile tramite: window.debugSettings()
+ */
+export function logSettingsToConsole(mainWindow: BrowserWindow | null): void {
+  if (!mainWindow) return;
+
   try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    return JSON.parse(raw) as Settings;
+    const { settings, sources, paths } = loadSettingsWithDebugInfo();
+
+    // Prepara dati per la console
+    const debugData: any[] = [];
+    for (const key in settings) {
+      const value = (settings as any)[key];
+      const source = sources[key] || 'default';
+      debugData.push({
+        'Setting': key,
+        'Valore': typeof value === 'string' ? value : JSON.stringify(value),
+        'Provenienza': source === 'custom' ? '🔧 Personalizzato' : '📦 Default'
+      });
+    }
+
+    // Conta personalizzazioni
+    const customCount = Object.values(sources).filter(s => s === 'custom').length;
+    const totalCount = Object.keys(settings).length;
+
+    // Espone i settings nella console del renderer
+    mainWindow.webContents.executeJavaScript(`
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+      console.log('%c📋 SETTINGS CARICATI (sign-settings.json)', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+
+      console.log('%c📂 Percorsi File:', 'color: #888; font-weight: bold;');
+      console.log('  📦 Default:       ${paths.default.replace(/\\/g, '\\\\')}');
+      console.log('  🔧 Personalizzato: ${paths.custom.replace(/\\/g, '\\\\')}');
+      console.log('');
+
+      console.log('%c📊 Statistiche:', 'color: #888; font-weight: bold;');
+      console.log('  Totale settings: ${totalCount}');
+      console.log('  Personalizzati:  ${customCount}');
+      console.log('  Default:         ${totalCount - customCount}');
+      console.log('');
+
+      console.log('%c🔍 Dettaglio Settings:', 'color: #888; font-weight: bold;');
+      console.table(${JSON.stringify(debugData)});
+
+      console.log('%c💡 Puoi usare window.debugSettings() per rivedere questi valori', 'color: #888; font-style: italic;');
+      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
+
+      // Espone funzioni globali per debugging
+      window.debugSettings = () => {
+        console.table(${JSON.stringify(debugData)});
+        return ${JSON.stringify(settings)};
+      };
+
+      window.debugSettingsRaw = () => {
+        return {
+          settings: ${JSON.stringify(settings)},
+          sources: ${JSON.stringify(sources)},
+          paths: ${JSON.stringify(paths)}
+        };
+      };
+    `);
+
+    log.info(`Settings exposed to browser console: ${customCount}/${totalCount} personalizzati`);
   } catch (err) {
-    throw new Error(`Errore lettura/parsing sign-settings.json: ${err}`);
+    log.error('Error logging settings to console:', err);
   }
 }
 
@@ -151,10 +294,67 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
     // Carica le impostazioni globali
     settings = await loadGlobalSettings();
 
-    // Inizializza PKCS11
+    // Inizializza PKCS11 con rilevamento piattaforma
     pkcs11 = new pkcs11js.PKCS11();
-    pkcs11.load(settings.pkcs11Lib);
-    pkcs11.C_Initialize();
+
+    // Rileva la piattaforma
+    const isMac = process.platform === 'darwin';
+    const isWindows = process.platform === 'win32';
+    console.log(`🖥️ [verify-pin] Piattaforma rilevata: ${process.platform} (isMac: ${isMac}, isWindows: ${isWindows})`);
+
+    // Lista di librerie PKCS#11 da provare (in ordine di priorità)
+    const pkcs11Libraries = [
+      settings.pkcs11Lib, // Libreria configurata dall'utente
+
+      // Librerie Windows
+      ...(isWindows ? [
+        'C:\\Windows\\System32\\bit4xpki.dll', // Bit4id extended (firma4ng, token moderni)
+        'C:\\Windows\\System32\\bit4ipki.dll', // Bit4id standard (smartcard tradizionali)
+        'C:\\Windows\\System32\\bit4opki.dll', // Bit4id OTP
+      ] : []),
+
+      // Librerie macOS
+      ...(isMac ? [
+        '/usr/local/lib/libbit4xpki.dylib', // Bit4id extended
+        '/usr/local/lib/libbit4ipki.dylib', // Bit4id standard
+        '/usr/local/lib/libbit4opki.dylib', // Bit4id OTP
+        '/Library/Frameworks/bit4xpki.framework/bit4xpki', // Framework format
+        '/Library/Frameworks/bit4ipki.framework/bit4ipki',
+        '/opt/homebrew/lib/libbit4xpki.dylib', // Homebrew installation (Apple Silicon)
+        '/opt/homebrew/lib/libbit4ipki.dylib',
+        '/Applications/Firma4NG Keyfour.app/Contents/Resources/utilities/mac/PKCS11/libbit4xpki.dylib', // Firma4NG Keyfour
+        '/Applications/Firma4NG Keyfour.app/Contents/Resources/System/Firma4NG.app/Contents/Resources/libbit4xpki.dylib', // Firma4NG alt
+        '/usr/local/lib/opensc-pkcs11.so', // OpenSC generic driver (Intel)
+        '/opt/homebrew/lib/opensc-pkcs11.so', // OpenSC generic driver (Apple Silicon)
+      ] : []),
+    ].filter((lib, index, self) => lib && self.indexOf(lib) === index); // Rimuovi duplicati e null
+
+    console.log(`📚 [verify-pin] Librerie PKCS#11 da provare: ${pkcs11Libraries.length} percorsi`);
+    pkcs11Libraries.forEach((lib, idx) => console.log(`   ${idx + 1}. ${lib}`));
+
+    let loadedLib: string | null = null;
+    let initError: Error | null = null;
+
+    // Prova a caricare le librerie in sequenza
+    for (const libPath of pkcs11Libraries) {
+      try {
+        console.log(`🔐 [verify-pin] Tentativo caricamento libreria PKCS#11: ${libPath}`);
+        pkcs11.load(libPath);
+        pkcs11.C_Initialize();
+        loadedLib = libPath;
+        console.log(`✅ [verify-pin] Libreria PKCS#11 caricata con successo: ${libPath}`);
+        break; // Successo, esci dal loop
+      } catch (err: any) {
+        console.warn(`⚠️ [verify-pin] Impossibile caricare ${libPath}: ${err.message}`);
+        initError = err;
+        // Prova la prossima libreria
+      }
+    }
+
+    if (!loadedLib) {
+      console.error(`❌ [verify-pin] NESSUNA LIBRERIA PKCS#11 DISPONIBILE`);
+      throw new Error(`Impossibile caricare il driver della smartcard. Ultimo errore: ${initError?.message || 'Sconosciuto'}`);
+    }
 
     try {
       // Ottieni lista slot con token presente
@@ -276,7 +476,6 @@ ipcMain.handle('get-company-footer-settings', async (_event, companyId: string) 
 ipcMain.handle('get-company-ui-settings', async () => {
   // Valori di default se il file non esiste
   const defaultSettings: CompanyUISettings = {
-    apiBaseUrl: "https://medicalreportingapi.asterdiagnostica.it/api/",
     header: {
       logo: {
         url: "https://referti.asterdiagnostica.it/images/logo.png",
@@ -302,7 +501,13 @@ ipcMain.handle('get-company-ui-settings', async () => {
       bypassPin: false,
       bypassSignature: false,
       overrideDoctorName: null
-    }
+    },
+    logipacsServer: {
+      baseUrl: "http://172.16.18.52/LPW/Display",
+      username: "radiologia",
+      password: "radiologia"
+    },
+    useExternalIdSystem: false
   };
 
   return loadConfigJson<CompanyUISettings>('company-ui-settings.json', defaultSettings);
@@ -423,6 +628,11 @@ function createWindow() {
       mainWindow.loadFile(indexPath);
     }
 
+  // Espone i settings nella console del browser quando la pagina è caricata
+  mainWindow.webContents.on('did-finish-load', () => {
+    logSettingsToConsole(mainWindow);
+  });
+
   // Intercetta la richiesta di chiusura della finestra
 mainWindow.on('close', (e) => {
   console.log('Evento close', { isForceClosing });
@@ -455,6 +665,13 @@ function setupAutoUpdater() {
   // Avvia subito la ricerca aggiornamenti (solo se non in dev!)
   if (isDev) return;
 
+  // Su macOS, disabilita l'autoUpdater se l'app non è firmata
+  // Altrimenti causerebbe errori 404 cercando latest-mac.yml
+  if (process.platform === 'darwin') {
+    log.info('AutoUpdater disabilitato su macOS (app non firmata)');
+    return;
+  }
+
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('checking-for-update', () => {
@@ -473,10 +690,9 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
+    // Log l'errore ma non mostrare dialog all'utente
+    // (errori comuni: 404 su latest.yml se non ci sono release)
     log.error('Error in auto-updater:', err);
-    if (mainWindow) {
-      dialog.showErrorBox('Errore aggiornamento', `${err == null ? "unknown" : (err.stack || err).toString()}`);
-    }
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -515,14 +731,20 @@ app.whenReady().then(() => {
 });
 
 // ---------------- CLOSE BEHAVIOR ---------------
-// app.on('window-all-closed', () => {
-//   if (process.platform !== 'darwin') {
-//     app.quit();
-//   }
-// });
+app.on('window-all-closed', () => {
+  // Su macOS le app rimangono attive anche quando tutte le finestre sono chiuse
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
 
-// app.on('activate', () => {
-//   if (mainWindow === null) {
-//     createWindow();
-//   }
-// });
+app.on('activate', () => {
+  // Su macOS, quando si clicca l'icona nel Dock, ricrea la finestra se non esiste
+  if (mainWindow === null || BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  } else {
+    // Se la finestra esiste ma è nascosta, mostrala
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
