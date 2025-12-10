@@ -9,7 +9,7 @@ import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
-import { loadConfigJson, initializeAllConfigs } from './configManager';
+import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
@@ -723,8 +723,17 @@ function setupAutoUpdater() {
 
 // ---------------- APP READY ----------------
 app.whenReady().then(() => {
-  // Inizializza i file di configurazione personalizzati al primo avvio
+  // 1. Migra eventuali configurazioni dalla vecchia struttura (config → assets)
+  //    Controlla TUTTE le posizioni possibili: ProgramData e AppData
+  migrateOldConfigStructure();
+
+  // 2. Inizializza i file di configurazione personalizzati al primo avvio
+  //    Copia i default nella cartella personalizzata se non esistono
   initializeAllConfigs();
+
+  // 3. Sincronizza i file personalizzati con i nuovi default
+  //    Aggiunge eventuali nuovi parametri mantenendo le personalizzazioni
+  syncAllConfigsWithDefaults();
 
   createWindow();
   setupAutoUpdater();
