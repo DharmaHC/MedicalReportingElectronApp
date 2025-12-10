@@ -345,11 +345,28 @@ function getOldImagesDir(): string {
 }
 
 /**
- * Su Windows, controlla anche la cartella utente (perUser) per la vecchia struttura
+ * Su Windows, controlla la cartella utente (perUser) per la vecchia struttura
+ * Restituisce sempre %APPDATA%\MedReportAndSign\config
  */
 function getOldConfigDirPerUser(): string | null {
   if (process.platform === 'win32') {
     return path.join(app.getPath('appData'), 'MedReportAndSign', 'config');
+  }
+  return null;
+}
+
+/**
+ * Su Windows, controlla la cartella condivisa (perMachine) per la vecchia struttura
+ * Restituisce sempre C:\ProgramData\MedReportAndSign\config
+ *
+ * IMPORTANTE: Questa funzione restituisce SEMPRE la posizione ProgramData,
+ * indipendentemente dal tipo di installazione corrente. Serve per migrare
+ * i file da una vecchia installazione perMachine a una nuova perUser.
+ */
+function getOldConfigDirPerMachine(): string | null {
+  if (process.platform === 'win32') {
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    return path.join(programData, 'MedReportAndSign', 'config');
   }
   return null;
 }
@@ -413,18 +430,28 @@ export function migrateOldConfigStructure(): boolean {
   let migrationPerformed = false;
   const oldDirs: Array<{ path: string; type: string }> = [];
 
-  // 1. Controlla la vecchia struttura perMachine (ProgramData)
-  const oldConfigDirMachine = getOldConfigDir();
-  if (fs.existsSync(oldConfigDirMachine)) {
+  // 1. Su Windows, controlla SEMPRE la cartella ProgramData (vecchia installazione perMachine)
+  //    Questo è importante per migrare da perMachine a perUser
+  const oldConfigDirMachine = getOldConfigDirPerMachine();
+  if (oldConfigDirMachine && fs.existsSync(oldConfigDirMachine)) {
     console.log(`\n📂 Trovata vecchia struttura (perMachine): ${oldConfigDirMachine}`);
-    oldDirs.push({ path: oldConfigDirMachine, type: 'perMachine' });
+    oldDirs.push({ path: oldConfigDirMachine, type: 'perMachine (ProgramData)' });
   }
 
-  // 2. Su Windows, controlla anche la struttura perUser (AppData)
+  // 2. Su Windows, controlla SEMPRE la cartella AppData (vecchia installazione perUser)
+  //    Questo è importante per migrare da perUser a perMachine o per upgrade perUser
   const oldConfigDirUser = getOldConfigDirPerUser();
-  if (oldConfigDirUser && fs.existsSync(oldConfigDirUser)) {
+  if (oldConfigDirUser && fs.existsSync(oldConfigDirUser) && oldConfigDirUser !== oldConfigDirMachine) {
     console.log(`\n📂 Trovata vecchia struttura (perUser): ${oldConfigDirUser}`);
-    oldDirs.push({ path: oldConfigDirUser, type: 'perUser' });
+    oldDirs.push({ path: oldConfigDirUser, type: 'perUser (AppData)' });
+  }
+
+  // 3. Controlla anche la posizione basata sull'installazione corrente (fallback)
+  const oldConfigDirCurrent = getOldConfigDir();
+  const alreadyChecked = oldDirs.some(d => d.path === oldConfigDirCurrent);
+  if (!alreadyChecked && fs.existsSync(oldConfigDirCurrent)) {
+    console.log(`\n📂 Trovata vecchia struttura (corrente): ${oldConfigDirCurrent}`);
+    oldDirs.push({ path: oldConfigDirCurrent, type: 'current' });
   }
 
   // Se non ci sono vecchie strutture, niente da migrare
@@ -700,6 +727,112 @@ export function saveConfigJson<T>(filename: string, data: T): boolean {
     console.error(`✗ Errore salvataggio ${filename}:`, err);
     return false;
   }
+}
+
+/**
+ * Sincronizza un singolo file di configurazione con i nuovi default
+ *
+ * Se il file personalizzato esiste ma manca di alcuni parametri presenti nel default,
+ * li aggiunge e salva il file aggiornato.
+ *
+ * @param filename Nome del file (es. "sign-settings.json")
+ * @returns true se il file è stato aggiornato, false se non necessario o errore
+ */
+function syncSingleConfigWithDefaults(filename: string): boolean {
+  try {
+    const defaultPath = path.join(getDefaultConfigDir(), filename);
+    const customPath = path.join(getCustomConfigDir(), filename);
+
+    // Se non esiste il file default, niente da fare
+    if (!fs.existsSync(defaultPath)) {
+      return false;
+    }
+
+    // Se non esiste il file personalizzato, niente da sincronizzare
+    if (!fs.existsSync(customPath)) {
+      return false;
+    }
+
+    // Carica entrambi i file
+    const defaultRaw = fs.readFileSync(defaultPath, 'utf8');
+    const defaultConfig = JSON.parse(defaultRaw);
+
+    const customRaw = fs.readFileSync(customPath, 'utf8');
+    const customConfig = JSON.parse(customRaw);
+
+    // Conta i parametri prima del merge
+    const defaultKeys = Object.keys(defaultConfig);
+    const customKeys = Object.keys(customConfig);
+
+    // Trova i parametri mancanti nel file personalizzato
+    const missingKeys = defaultKeys.filter(key => !(key in customConfig));
+
+    if (missingKeys.length === 0) {
+      console.log(`  ✓ ${filename}: già sincronizzato (${customKeys.length} parametri)`);
+      return false;
+    }
+
+    // Esegui il merge: default come base, custom sovrascrive
+    const merged = deepMerge(defaultConfig, customConfig);
+
+    // Salva il file aggiornato
+    const json = JSON.stringify(merged, null, 2);
+    fs.writeFileSync(customPath, json, 'utf8');
+
+    console.log(`  ✓ ${filename}: aggiunti ${missingKeys.length} nuovi parametri`);
+    console.log(`    Nuovi: ${missingKeys.join(', ')}`);
+
+    return true;
+  } catch (err) {
+    console.error(`  ✗ Errore sync ${filename}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Sincronizza TUTTI i file di configurazione personalizzati con i nuovi default
+ *
+ * Questa funzione:
+ * 1. Controlla ogni file personalizzato esistente
+ * 2. Lo confronta con il corrispondente default
+ * 3. Aggiunge eventuali nuovi parametri dal default
+ * 4. Salva il file aggiornato su disco
+ *
+ * IMPORTANTE: Preserva tutte le personalizzazioni esistenti!
+ * Solo i parametri MANCANTI vengono aggiunti dai default.
+ *
+ * @returns Numero di file aggiornati
+ */
+export function syncAllConfigsWithDefaults(): number {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔄 Sincronizzazione configurazioni con nuovi default');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  const configFiles = [
+    'sign-settings.json',
+    'company-ui-settings.json',
+    'company-footer-settings.json',
+    'api-config.json'
+  ];
+
+  let updatedCount = 0;
+
+  for (const filename of configFiles) {
+    if (syncSingleConfigWithDefaults(filename)) {
+      updatedCount++;
+    }
+  }
+
+  if (updatedCount > 0) {
+    console.log(`\n✅ ${updatedCount} file aggiornati con nuovi parametri`);
+    console.log(`📂 Cartella: ${getCustomConfigDir()}`);
+  } else {
+    console.log('\n✓ Tutti i file già sincronizzati');
+  }
+
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  return updatedCount;
 }
 
 /* ██████ GESTIONE IMMAGINI ██████ */
