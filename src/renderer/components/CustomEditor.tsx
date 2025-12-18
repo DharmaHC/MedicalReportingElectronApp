@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, forwardRef, useCallback } from 'react';
-import { Editor, EditorProps, EditorTools } from '@progress/kendo-react-editor';
+import { Editor, EditorProps, EditorTools, EditorMountEvent, ProseMirror } from '@progress/kendo-react-editor';
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
-import { TextSelection } from 'prosemirror-state';
-// import { arrowsTopBottomIcon } from '@progress/kendo-svg-icons';
+
+// Usa TextSelection da ProseMirror esposto da Kendo per compatibilità v9
+const { TextSelection } = ProseMirror;
 
 const ZOOM_STORAGE_KEY = 'medreport_editor_zoom';
 
@@ -142,14 +143,13 @@ const observer = new MutationObserver((mutations) => {
     return;
   }
 
-
   renderPageBreaks();
   if (useHighlight) {
-  // Evita loop disconnettendo temporaneamente l'observer
-  observer.disconnect();
+    // Evita loop disconnettendo temporaneamente l'observer
+    observer.disconnect();
     highlightHashes();
-  // Ricollega l'observer
-  observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+    // Ricollega l'observer
+    observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
   }
 });
 
@@ -192,11 +192,14 @@ useEffect(() => {
     if (e.key !== 'F3') return;
 
     e.preventDefault();
-    const view = editorViewRef.current;
-    if (!view) return;
+    e.stopPropagation();
 
-    const doc = view.state.doc;
-    const cursorPos = view.state.selection.from;
+    const view = editorViewRef.current;
+    if (!view || !view.state) return;
+
+    const { state } = view;
+    const { doc, selection } = state;
+    const cursorPos = selection.from;
 
     const hashes: number[] = [];
 
@@ -215,21 +218,25 @@ useEffect(() => {
 
     if (hashes.length === 0) return;
 
-    // Trova il prossimo hash dopo il cursore (o dopo l’ultimo visitato)
+    // Trova il prossimo hash dopo il cursore (o dopo l'ultimo visitato)
     const current = lastHashPosRef.current;
     const next = hashes.find(pos => (current !== null ? pos > current : pos > cursorPos));
 
     const targetPos = next !== undefined ? next : hashes[0]; // wrap-around
     lastHashPosRef.current = targetPos;
 
-    view.dispatch(
-      view.state.tr.setSelection(
-        TextSelection.create(doc, targetPos, targetPos + 1)
-      ).scrollIntoView()
-    );
+    // Crea la transazione con la nuova selezione
+    const tr = state.tr.setSelection(
+      TextSelection.create(doc, targetPos, targetPos + 1)
+    ).scrollIntoView();
 
-    // Delay focus con setTimeout per Kendo v9
-    setTimeout(() => view.focus(), 10);
+    // Dispatch della transazione
+    view.dispatch(tr);
+
+    // Focus usando requestAnimationFrame per sincronizzarsi con Kendo v9
+    requestAnimationFrame(() => {
+      view.focus();
+    });
   };
 
   document.addEventListener('keydown', handleKeyDown);
@@ -323,18 +330,34 @@ useEffect(() => {
     ]
   ];
 
+  // Callback onMount per catturare l'EditorView correttamente (Kendo v9)
+  const handleMount = (event: EditorMountEvent) => {
+    // Salva il riferimento all'EditorView
+    editorViewRef.current = event.viewProps.view;
+
+    // Chiama onMount del parent se presente
+    if (props.onMount) {
+      return props.onMount(event);
+    }
+    return undefined;
+  };
+
   return (
     <div ref={editorBoxRef}>
       <Editor
         ref={(node) => {
           if (typeof ref === 'function') ref(node);
           else if (ref) (ref as any).current = node;
-          editorViewRef.current = node?.view || node;
+          // Fallback per retrocompatibilità
+          if (!editorViewRef.current && node?.view) {
+            editorViewRef.current = node.view;
+          }
         }}
         {...props}
         tools={tools}
         defaultEditMode="div"
         onChange={handleEditorChange}
+        onMount={handleMount}
       />
     </div>
   );
