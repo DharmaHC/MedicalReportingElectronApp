@@ -227,7 +227,9 @@ useEffect(() => {
         TextSelection.create(doc, targetPos, targetPos + 1)
       ).scrollIntoView()
     );
-    view.focus();
+
+    // Delay focus con setTimeout per Kendo v9
+    setTimeout(() => view.focus(), 10);
   };
 
   document.addEventListener('keydown', handleKeyDown);
