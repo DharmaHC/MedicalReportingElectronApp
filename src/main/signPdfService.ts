@@ -55,24 +55,6 @@ export function loadSettings(): Settings {
 }
 
 /* █████████████████ COMPANY FOOTER SETTINGS █████████████████ */
-function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
-  // Fallback a valori di default se il file non esiste
-  const defaultSettings: Record<string, CompanyFooterSettings> = {
-    "DEFAULT": {
-      footerImageWidth: 160,
-      footerImageHeight: 32,
-      blankFooterHeight: 15,
-      yPosFooterImage: 15,
-      footerImageXPositionOffset: 0,
-      footerText: ""
-    }
-  };
-
-  return loadConfigJson<Record<string, CompanyFooterSettings>>(
-    'company-footer-settings.json',
-    defaultSettings
-  );
-}
 
 /**
  * Carica i settings di default (non personalizzati) per ottenere footerText originale
@@ -90,12 +72,52 @@ function loadDefaultFooterSettings(): Record<string, CompanyFooterSettings> {
   return {};
 }
 
+function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
+  // Fallback a valori di default se il file non esiste
+  const fallbackDefault: Record<string, CompanyFooterSettings> = {
+    "DEFAULT": {
+      footerImageWidth: 160,
+      footerImageHeight: 32,
+      blankFooterHeight: 15,
+      yPosFooterImage: 15,
+      footerImageXPositionOffset: 0,
+      footerText: ""
+    }
+  };
+
+  // Carica settings personalizzati (già con deep merge)
+  const personalizedSettings = loadConfigJson<Record<string, CompanyFooterSettings>>(
+    'company-footer-settings.json',
+    fallbackDefault
+  );
+
+  // Carica settings di default dall'installazione
+  const defaultSettings = loadDefaultFooterSettings();
+
+  // Per OGNI company nei default, verifica se footerText è vuoto nei personalizzati
+  // e in tal caso usa il valore di default
+  for (const companyKey of Object.keys(defaultSettings)) {
+    if (personalizedSettings[companyKey]) {
+      // La company esiste nei personalizzati, verifica footerText
+      const personalized = personalizedSettings[companyKey];
+      const defaultCompany = defaultSettings[companyKey];
+
+      if ((!personalized.footerText || personalized.footerText.trim() === '') && defaultCompany?.footerText) {
+        personalized.footerText = defaultCompany.footerText;
+        console.log(`📝 footerText vuoto per ${companyKey}, uso default: "${personalized.footerText}"`);
+      }
+    }
+  }
+
+  return personalizedSettings;
+}
+
 export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
   const allSettings = loadCompanyFooterSettings();
   const key = (companyId ?? '').trim().toUpperCase();
 
   // Cerca prima la company specifica, poi DEFAULT
-  const settings = allSettings[key] || allSettings["DEFAULT"] || {
+  return allSettings[key] || allSettings["DEFAULT"] || {
     footerImageWidth: 160,
     footerImageHeight: 32,
     blankFooterHeight: 15,
@@ -103,18 +125,6 @@ export function getCompanyFooterSettings(companyId?: string): CompanyFooterSetti
     footerImageXPositionOffset: 0,
     footerText: ""
   };
-
-  // ECCEZIONE: se footerText è vuoto o undefined, prendi dal file di default
-  if (!settings.footerText || settings.footerText.trim() === '') {
-    const defaultSettings = loadDefaultFooterSettings();
-    const defaultForCompany = defaultSettings[key] || defaultSettings["DEFAULT"];
-    if (defaultForCompany?.footerText) {
-      settings.footerText = defaultForCompany.footerText;
-      console.log(`📝 footerText vuoto per ${key}, uso default: "${settings.footerText}"`);
-    }
-  }
-
-  return settings;
 }
 
 /* █████████████████ LOG █████████████████ */
