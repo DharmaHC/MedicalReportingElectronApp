@@ -9,7 +9,7 @@ import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
 import { Settings, CompanyFooterSettings } from '../globals';
-import { loadConfigJson, getImagePath } from './configManager';
+import { loadConfigJson, getImagePath, getDefaultConfigDir } from './configManager';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
@@ -74,19 +74,47 @@ function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
   );
 }
 
+/**
+ * Carica i settings di default (non personalizzati) per ottenere footerText originale
+ */
+function loadDefaultFooterSettings(): Record<string, CompanyFooterSettings> {
+  try {
+    const defaultPath = path.join(getDefaultConfigDir(), 'company-footer-settings.json');
+    if (fs.existsSync(defaultPath)) {
+      const raw = fs.readFileSync(defaultPath, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Errore caricamento default footer settings:', err);
+  }
+  return {};
+}
+
 export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
   const allSettings = loadCompanyFooterSettings();
   const key = (companyId ?? '').trim().toUpperCase();
 
   // Cerca prima la company specifica, poi DEFAULT
-  return allSettings[key] || allSettings["DEFAULT"] || {
+  const settings = allSettings[key] || allSettings["DEFAULT"] || {
     footerImageWidth: 160,
     footerImageHeight: 32,
     blankFooterHeight: 15,
     yPosFooterImage: 15,
     footerImageXPositionOffset: 0,
-    footerText: "Aster Diagnostica Srl - P.I. 06191121000"
+    footerText: ""
   };
+
+  // ECCEZIONE: se footerText è vuoto o undefined, prendi dal file di default
+  if (!settings.footerText || settings.footerText.trim() === '') {
+    const defaultSettings = loadDefaultFooterSettings();
+    const defaultForCompany = defaultSettings[key] || defaultSettings["DEFAULT"];
+    if (defaultForCompany?.footerText) {
+      settings.footerText = defaultForCompany.footerText;
+      console.log(`📝 footerText vuoto per ${key}, uso default: "${settings.footerText}"`);
+    }
+  }
+
+  return settings;
 }
 
 /* █████████████████ LOG █████████████████ */
