@@ -96,6 +96,14 @@ declare global {
     },
     companyUISettings: {
       get: () => Promise<CompanyUISettings>;
+    },
+    appInfo: {
+      get: () => Promise<{
+        version: string;
+        installationType: 'perMachine' | 'perUser';
+        platform: string;
+        arch: string;
+      }>;
     }
   }
 }

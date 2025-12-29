@@ -9,7 +9,7 @@ import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
-import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults } from './configManager';
+import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
@@ -464,6 +464,16 @@ ipcMain.handle('appSettings:get', async () => {
 ipcMain.handle('appSettings:reload', async () => {
   settingsCache = null;
   return await loadSettingsFileCached();
+});
+
+// ------ APP INFO IPC ------
+ipcMain.handle('app:getInfo', async () => {
+  return {
+    version: app.getVersion(),
+    installationType: isPerMachineInstallation() ? 'perMachine' : 'perUser',
+    platform: process.platform,
+    arch: process.arch
+  };
 });
 
 // ------ COMPANY FOOTER SETTINGS IPC ------
