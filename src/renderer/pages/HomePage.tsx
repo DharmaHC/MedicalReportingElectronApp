@@ -41,7 +41,8 @@ const dispatch = useDispatch();
   const userName = useSelector((state: RootState) => state.auth.userName);
 
   // Verifica se l'utente è amministratore
-  const isAdmin = userName === "FRSRFL72R25H282U";
+  const adminUsers = ["FRSRFL72R25H282U", "GRRLCU88P05H501J"];
+  const isAdmin = adminUsers.includes(userName || "");
 
   // Stato per cambio password (Dialog)
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
@@ -148,6 +149,11 @@ const dispatch = useDispatch();
   // Naviga alla pagina di registrazione utente (solo per admin)
   const handleRegisterUser = () => {
     navigate("/register-user");
+  };
+
+  // Naviga alla pagina di rigenerazione PDF (solo per admin)
+  const handleRegeneratePdf = () => {
+    navigate("/regenerate-pdf");
   };
 
   // Helper per determinare il titolo in base al sesso
@@ -317,6 +323,7 @@ const dispatch = useDispatch();
                   onLogoutAndExit={handleLogoutAndExit}
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
+                  onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
                 />
               </div>
             </div>

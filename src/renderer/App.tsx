@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import HomePage from "./pages/HomePage";
 import EditorPage from "./pages/EditorPage";
 import RegisterUser from "./pages/RegisterUser";
+import RegeneratePdfPage from "./pages/RegeneratePdfPage";
 import PrescriptionEditorModal from "./components/PrescriptionEditorModal";
 
 import "@progress/kendo-theme-fluent/dist/all.css";
@@ -291,6 +292,7 @@ function AppWrapper() {
             <Route path="/" element={<HomePage />} />
             <Route path="/editor" element={<EditorPage />} />
             <Route path="/register-user" element={<RegisterUser />} />
+            <Route path="/regenerate-pdf" element={<RegeneratePdfPage />} />
           </Route>
         </Routes>
       </main>
