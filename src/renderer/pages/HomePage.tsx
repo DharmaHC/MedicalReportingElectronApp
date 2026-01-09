@@ -41,7 +41,8 @@ const dispatch = useDispatch();
   const userName = useSelector((state: RootState) => state.auth.userName);
 
   // Verifica se l'utente è amministratore
-  const isAdmin = userName === "FRSRFL72R25H282U";
+  const adminUsers = ["FRSRFL72R25H282U", "GRRLCU88P05H501J"];
+  const isAdmin = adminUsers.includes(userName || "");
 
   // Stato per cambio password (Dialog)
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
