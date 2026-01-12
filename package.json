@@ -85,7 +85,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MedReportAndSign"
+      "shortcutName": "MedReportAndSign",
+      "include": "resources/installer.nsh"
     },
     "mac": {
       "target": [
