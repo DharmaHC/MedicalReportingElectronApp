@@ -29,7 +29,7 @@ log.info('App starting...');
 // 🚀 MedReportAndSign - Version Info
 // ============================================================================
 console.log("=".repeat(80));
-console.log("🚀 MedReportAndSign v1.0.37");
+console.log(`🚀 MedReportAndSign v${app.getVersion()}`);
 console.log(`📱 Platform: ${process.platform} (${process.arch})`);
 console.log("✅ Cross-platform smartcard support (Windows & macOS)");
 console.log("✅ Bit4id Firma4NG / Keyfour drivers supported");
@@ -607,7 +607,7 @@ function createWindow() {
 
   // --- Preload path ---
   const preloadPath = isDevMode
-    ? path.join(process.cwd(), 'preload', 'index.js')
+    ? path.join(process.cwd(), 'renderer-dist', 'preload', 'index.js')
     : path.join(process.resourcesPath, 'preload', 'index.js');
 
   mainWindow = new BrowserWindow({
