@@ -9,7 +9,7 @@ import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
-import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults } from './configManager';
+import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
 
 // Inserisci il path corretto di SumatraPDF.exe
@@ -24,7 +24,7 @@ log.info('App starting...');
 // 🚀 MedReportAndSign - Version Info
 // ============================================================================
 console.log("=".repeat(80));
-console.log("🚀 MedReportAndSign v1.0.37");
+console.log(`🚀 MedReportAndSign v${app.getVersion()}`);
 console.log(`📱 Platform: ${process.platform} (${process.arch})`);
 console.log("✅ Cross-platform smartcard support (Windows & macOS)");
 console.log("✅ Bit4id Firma4NG / Keyfour drivers supported");
@@ -466,6 +466,16 @@ ipcMain.handle('appSettings:reload', async () => {
   return await loadSettingsFileCached();
 });
 
+// ------ APP INFO IPC ------
+ipcMain.handle('app:getInfo', async () => {
+  return {
+    version: app.getVersion(),
+    installationType: isPerMachineInstallation() ? 'perMachine' : 'perUser',
+    platform: process.platform,
+    arch: process.arch
+  };
+});
+
 // ------ COMPANY FOOTER SETTINGS IPC ------
 ipcMain.handle('get-company-footer-settings', async (_event, companyId: string) => {
   const { getCompanyFooterSettings } = require('./signPdfService');
@@ -592,7 +602,7 @@ function createWindow() {
 
   // --- Preload path ---
   const preloadPath = isDevMode
-    ? path.join(process.cwd(), 'preload', 'index.js')
+    ? path.join(process.cwd(), 'renderer-dist', 'preload', 'index.js')
     : path.join(process.resourcesPath, 'preload', 'index.js');
 
   mainWindow = new BrowserWindow({
