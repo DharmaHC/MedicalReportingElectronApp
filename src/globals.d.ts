@@ -1,5 +1,29 @@
 // src/globals.d.ts
 
+// Configurazione provider firma remota
+interface RemoteSignProviderConfig {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey?: string;
+  /** Token pre-generato (OpenAPI.com) */
+  token?: string;
+  clientId?: string;
+  clientSecret?: string;
+  /** URL OAuth per OpenAPI.com */
+  oauthUrl?: string;
+  /** Tipo certificato/firma OpenAPI: EU-QES_otp, EU-QES_automatic, EU-SES */
+  certificateType?: 'EU-QES_otp' | 'EU-QES_automatic' | 'EU-SES';
+}
+
+interface RemoteSignConfig {
+  defaultProvider: string;
+  sessionTimeoutMinutes: number;
+  aruba?: RemoteSignProviderConfig;
+  infocert?: RemoteSignProviderConfig;
+  namirial?: RemoteSignProviderConfig;
+  openapi?: RemoteSignProviderConfig;
+}
+
 interface Settings {
   yPosLogo: number;
   logoWidth: number;
@@ -28,6 +52,7 @@ interface Settings {
   highlightPlaceholder: boolean;
   signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
+  remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
 }
 
 interface CompanyFooterSettings {
@@ -96,8 +121,78 @@ declare global {
     },
     companyUISettings: {
       get: () => Promise<CompanyUISettings>;
+    },
+    appInfo: {
+      get: () => Promise<{
+        version: string;
+        installationType: 'perMachine' | 'perUser';
+        platform: string;
+        arch: string;
+      }>;
+    },
+    remoteSign: {
+      getAvailableProviders: () => Promise<Array<{ id: string; name: string; enabled: boolean }>>;
+      authenticate: (params: {
+        providerId: string;
+        username: string;
+        pin: string;
+        otp: string;
+        sessionMinutes?: number;
+      }) => Promise<{
+        success: boolean;
+        sessionId?: string;
+        expiresAt?: string;
+        signedBy?: string;
+        error?: string;
+      }>;
+      getSessionStatus: (params: { providerId: string }) => Promise<{
+        active: boolean;
+        expiresAt?: string;
+        remainingMinutes?: number;
+        signedCount?: number;
+      }>;
+      startBulkSign: (params: {
+        reports: Array<{
+          examinationId: number;
+          examResultId: number;
+          patientLastName: string;
+          patientFirstName: string;
+          companyId: string;
+        }>;
+        providerId: string;
+      }) => Promise<{
+        success: boolean;
+        results?: Array<{ examinationId: number; success: boolean; error?: string }>;
+        summary?: { total: number; successful: number; failed: number };
+        error?: string;
+      }>;
+      closeSession: (params: { providerId: string }) => Promise<{ success: boolean; error?: string }>;
+      onProgress: (callback: (progress: {
+        completed: number;
+        failed: number;
+        total: number;
+        currentPatient: string | null;
+      }) => void) => void;
+      onReportCompleted: (callback: (result: {
+        examinationId: number;
+        success: boolean;
+        error?: string;
+      }) => void) => void;
+      onCompleted: (callback: (result: {
+        total: number;
+        successful: number;
+        failed: number;
+      }) => void) => void;
+      removeAllListeners: () => void;
     }
   }
 }
 
-export { Settings, CompanyFooterSettings, CompanyUISettings, EmergencyWorkaround };
+export {
+  Settings,
+  CompanyFooterSettings,
+  CompanyUISettings,
+  EmergencyWorkaround,
+  RemoteSignProviderConfig,
+  RemoteSignConfig
+};

@@ -7,6 +7,7 @@ import {
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 
 import ProfileDropDown from "../components/ProfileDropDown";
+import BulkSignModal from "../components/BulkSignModal";
 
 import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
@@ -49,6 +50,9 @@ const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Stato per firma massiva remota
+  const [bulkSignModalVisible, setBulkSignModalVisible] = useState(false);
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -150,6 +154,16 @@ const dispatch = useDispatch();
   const handleRegisterUser = () => {
     navigate("/register-user");
   };
+
+  // ---- FUNZIONI FIRMA MASSIVA REMOTA ---------------------------
+  const handleOpenBulkSign = () => {
+    setBulkSignModalVisible(true);
+  };
+
+  const handleCloseBulkSign = () => {
+    setBulkSignModalVisible(false);
+  };
+  // ---- FINE FUNZIONI FIRMA MASSIVA REMOTA ----------------------
 
   // Helper per determinare il titolo in base al sesso
   const getDoctorTitle = (sex: string | null): string => {
@@ -318,6 +332,7 @@ const dispatch = useDispatch();
                   onLogoutAndExit={handleLogoutAndExit}
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
+                  onBulkSign={handleOpenBulkSign}
                 />
               </div>
             </div>
@@ -378,6 +393,14 @@ const dispatch = useDispatch();
             </button>
           </DialogActionsBar>
         </Dialog>
+      )}
+
+      {/* (5) Modal per FIRMA MASSIVA REMOTA */}
+      {bulkSignModalVisible && (
+        <BulkSignModal
+          visible={bulkSignModalVisible}
+          onClose={handleCloseBulkSign}
+        />
       )}
     </>
   );

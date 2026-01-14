@@ -18,6 +18,7 @@ import examinationReducer from "./examinationSlice";
 import loadingReducer from "./loadingSlice";
 import editorReducer from './editorSlice';
 import prescriptionReducer from './prescriptionSlice';
+import bulkSignReducer from './bulkSignSlice';
 
 const persistConfig = {
   key: "root",
@@ -34,6 +35,7 @@ const rootReducer = combineReducers({
   loading: loadingReducer,
   editor: editorReducer,
   prescription: prescriptionReducer,
+  bulkSign: bulkSignReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

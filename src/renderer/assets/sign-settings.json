@@ -35,5 +35,32 @@
   "tsaUrl": "https://freetsa.org/tsr",
 
   "useMRAS": true,
-  "showAppMenu": false
+  "showAppMenu": false,
+
+  "remoteSign": {
+    "defaultProvider": "ARUBA",
+    "sessionTimeoutMinutes": 45,
+    "aruba": {
+      "enabled": true,
+      "baseUrl": "https://arss.arubapec.it/ArubaRemoteSignService",
+      "apiKey": ""
+    },
+    "infocert": {
+      "enabled": true,
+      "baseUrl": "https://api.gosign.infocert.it",
+      "clientId": "",
+      "clientSecret": ""
+    },
+    "namirial": {
+      "enabled": true,
+      "baseUrl": "https://api.esignanywhere.net",
+      "apiKey": ""
+    },
+    "openapi": {
+      "enabled": true,
+      "baseUrl": "https://test.esignature.openapi.com",
+      "apiKey": "qdoyl25gc2wmqn5xqqgyzcty6lnuk0bu",
+      "certificateType": "EU-QES_otp"
+    }
+  }
 }

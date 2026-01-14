@@ -1,0 +1,337 @@
+/**
+ * BulkSignModal.css
+ * Stili per la modale di firma remota massiva
+ */
+
+/* Dialog principale */
+.bulk-sign-dialog .k-window-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Header: Provider e Sessione */
+.bulk-sign-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.provider-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.provider-section label {
+  font-weight: 600;
+  color: #334155;
+}
+
+.session-section {
+  display: flex;
+  align-items: center;
+}
+
+.session-active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #dcfce7;
+  border-radius: 20px;
+  color: #166534;
+}
+
+.session-active .k-svg-icon {
+  color: #22c55e;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.session-time {
+  font-size: 12px;
+  color: #15803d;
+}
+
+.session-inactive {
+  padding: 8px 16px;
+  background-color: #fef2f2;
+  border-radius: 20px;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+/* Filtri */
+.bulk-sign-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  background-color: #f1f5f9;
+  border-radius: 8px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
+/* Griglia */
+.bulk-sign-grid {
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.bulk-sign-grid .k-grid {
+  border: none;
+}
+
+.bulk-sign-grid .k-grid-header {
+  background-color: #f8fafc;
+}
+
+.bulk-sign-grid .k-grid-header th {
+  font-weight: 600;
+  color: #334155;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.bulk-sign-grid .k-grid-content tr {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.bulk-sign-grid .k-grid-content tr:hover {
+  background-color: #f1f5f9;
+}
+
+.bulk-sign-grid .k-grid-content tr.row-selected {
+  background-color: #dbeafe !important;
+}
+
+.bulk-sign-grid .k-grid-content tr.row-selected:hover {
+  background-color: #bfdbfe !important;
+}
+
+/* Loading e Error container */
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  gap: 16px;
+  color: #64748b;
+}
+
+.error-container {
+  color: #dc2626;
+}
+
+/* Stato referto */
+.report-state {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.report-state.state-draft {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.report-state.state-to-sign {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* Stato firma */
+.sign-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.sign-status.status-pending {
+  color: #94a3b8;
+}
+
+.sign-status.status-signing {
+  color: #3b82f6;
+}
+
+.sign-status.status-signed {
+  color: #22c55e;
+  font-weight: 500;
+}
+
+.sign-status.status-error {
+  color: #ef4444;
+  cursor: help;
+}
+
+/* Barra selezione */
+.bulk-sign-selection-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.selection-actions .k-button {
+  font-size: 13px;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selection-count {
+  font-weight: 600;
+  color: #334155;
+}
+
+.signed-count {
+  color: #22c55e;
+  font-weight: 500;
+}
+
+/* Progress bar */
+.bulk-sign-progress {
+  padding: 12px 16px;
+  background-color: #eff6ff;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+}
+
+.bulk-sign-progress .k-progressbar {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.progress-info .failed-count {
+  color: #ef4444;
+}
+
+/* Dialog actions */
+.bulk-sign-dialog .k-dialog-buttongroup {
+  padding: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Auth Dialog */
+.bulk-sign-auth-dialog .k-window-content {
+  padding: 20px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-form-group label {
+  font-weight: 500;
+  color: #334155;
+  font-size: 14px;
+}
+
+.auth-form-group small {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.auth-form-group .k-input {
+  width: 100%;
+}
+
+.auth-error {
+  padding: 12px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.auth-info {
+  padding: 12px;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .bulk-sign-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .bulk-sign-filters {
+    flex-direction: column;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-group .k-datepicker,
+  .filter-group .k-input,
+  .filter-group .k-dropdownlist {
+    flex: 1;
+  }
+}

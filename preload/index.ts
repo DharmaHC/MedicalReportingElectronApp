@@ -46,3 +46,80 @@ console.log("PRELOAD PARTITO!");
       ipcRenderer.on('download-progress', (_event, progress) => callback(progress)),
   });
 
+  // Espone API per informazioni app (versione, tipo installazione)
+  contextBridge.exposeInMainWorld('appInfo', {
+    get: () => ipcRenderer.invoke('app:getInfo'),
+  });
+
+  // ============================================================================
+  // API per Firma Remota Massiva
+  // ============================================================================
+  contextBridge.exposeInMainWorld('remoteSign', {
+    // Ottiene la lista dei provider disponibili
+    getAvailableProviders: () => ipcRenderer.invoke('remote-sign:get-providers'),
+
+    // Autentica e crea una sessione di firma
+    authenticate: (params: {
+      providerId: string;
+      username: string;
+      pin: string;
+      otp: string;
+      sessionMinutes?: number;
+    }) => ipcRenderer.invoke('remote-sign:authenticate', params),
+
+    // Ottiene lo stato della sessione corrente
+    getSessionStatus: (params: { providerId: string }) =>
+      ipcRenderer.invoke('remote-sign:get-session-status', params),
+
+    // Avvia la firma batch di più referti
+    startBulkSign: (params: {
+      reports: Array<{
+        examinationId: number;
+        examResultId: number;
+        patientLastName: string;
+        patientFirstName: string;
+        companyId: string;
+      }>;
+      providerId: string;
+    }) => ipcRenderer.invoke('remote-sign:bulk-sign', params),
+
+    // Chiude la sessione corrente
+    closeSession: (params: { providerId: string }) =>
+      ipcRenderer.invoke('remote-sign:close-session', params),
+
+    // Event listeners per progresso firma
+    onProgress: (callback: (progress: {
+      completed: number;
+      failed: number;
+      total: number;
+      currentPatient: string | null;
+    }) => void) => {
+      ipcRenderer.on('remote-sign:progress', (_event, progress) => callback(progress));
+    },
+
+    // Event listener per singolo referto completato
+    onReportCompleted: (callback: (result: {
+      examinationId: number;
+      success: boolean;
+      error?: string;
+    }) => void) => {
+      ipcRenderer.on('remote-sign:report-completed', (_event, result) => callback(result));
+    },
+
+    // Event listener per completamento batch
+    onCompleted: (callback: (result: {
+      total: number;
+      successful: number;
+      failed: number;
+    }) => void) => {
+      ipcRenderer.on('remote-sign:completed', (_event, result) => callback(result));
+    },
+
+    // Rimuove tutti i listener (cleanup)
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('remote-sign:progress');
+      ipcRenderer.removeAllListeners('remote-sign:report-completed');
+      ipcRenderer.removeAllListeners('remote-sign:completed');
+    }
+  });
+
