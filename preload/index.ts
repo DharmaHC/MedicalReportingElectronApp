@@ -51,11 +51,6 @@ console.log("PRELOAD PARTITO!");
       ipcRenderer.on('download-progress', (_event, progress) => callback(progress)),
   });
 
-  // Espone API per informazioni app (versione, tipo installazione)
-  contextBridge.exposeInMainWorld('appInfo', {
-    get: () => ipcRenderer.invoke('app:getInfo'),
-  });
-
   // ============================================================================
   // API per Firma Remota Massiva
   // ============================================================================
