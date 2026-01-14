@@ -7,6 +7,7 @@ import {
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 
 import ProfileDropDown from "../components/ProfileDropDown";
+import BulkSignModal from "../components/BulkSignModal";
 
 import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
@@ -49,6 +50,9 @@ const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Stato per firma massiva remota
+  const [bulkSignModalVisible, setBulkSignModalVisible] = useState(false);
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -154,6 +158,16 @@ const dispatch = useDispatch();
   // Naviga alla pagina di rigenerazione PDF (solo per admin)
   const handleRegeneratePdf = () => {
     navigate("/regenerate-pdf");
+  };
+
+  // Apre il modale per la firma massiva remota
+  const handleOpenBulkSign = () => {
+    setBulkSignModalVisible(true);
+  };
+
+  // Chiude il modale firma massiva
+  const handleCloseBulkSign = () => {
+    setBulkSignModalVisible(false);
   };
 
   // Helper per determinare il titolo in base al sesso
@@ -321,6 +335,7 @@ const dispatch = useDispatch();
                   onLogout={handleLogout}
                   onChangePassword={handleOpenChangePassword}
                   onLogoutAndExit={handleLogoutAndExit}
+                  onBulkSign={handleOpenBulkSign}
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
                   onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
@@ -384,6 +399,14 @@ const dispatch = useDispatch();
             </button>
           </DialogActionsBar>
         </Dialog>
+      )}
+
+      {/* Modale Firma Massiva Remota */}
+      {bulkSignModalVisible && (
+        <BulkSignModal
+          visible={bulkSignModalVisible}
+          onClose={handleCloseBulkSign}
+        />
       )}
     </>
   );

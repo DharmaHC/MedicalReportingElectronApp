@@ -11,6 +11,11 @@ import log from 'electron-log';
 import { execFile } from 'child_process';
 import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
+import {
+  initializeRemoteSignProviders,
+  registerRemoteSignIpcHandlers,
+  cleanupRemoteSign
+} from './remoteSign/remoteSignIpcHandlers';
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -745,11 +750,23 @@ app.whenReady().then(() => {
   //    Aggiunge eventuali nuovi parametri mantenendo le personalizzazioni
   syncAllConfigsWithDefaults();
 
+  // 4. Inizializza i provider di firma remota e registra gli IPC handlers
+  const settings = loadGlobalSettings();
+  if (settings.remoteSign) {
+    initializeRemoteSignProviders(settings.remoteSign);
+  }
+  registerRemoteSignIpcHandlers();
+
   createWindow();
   setupAutoUpdater();
 });
 
 // ---------------- CLOSE BEHAVIOR ---------------
+app.on('before-quit', async () => {
+  // Cleanup delle sessioni di firma remota
+  await cleanupRemoteSign();
+});
+
 app.on('window-all-closed', () => {
   // Su macOS le app rimangono attive anche quando tutte le finestre sono chiuse
   if (process.platform !== 'darwin') {
