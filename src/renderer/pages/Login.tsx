@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Form, Field, FormElement } from "@progress/kendo-react-form";
 import { Input, Checkbox } from "@progress/kendo-react-inputs";
@@ -46,6 +46,21 @@ const Login = () => {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
+  // App info (versione e tipo installazione)
+  const [appInfo, setAppInfo] = useState<{
+    version: string;
+    installationType: 'perMachine' | 'perUser';
+  } | null>(null);
+
+  useEffect(() => {
+    // Carica informazioni app all'avvio
+    window.appInfo?.get().then(info => {
+      setAppInfo(info);
+    }).catch(err => {
+      console.error('Errore caricamento app info:', err);
+    });
+  }, []);
 
 
   const dispatch = useDispatch();
@@ -409,6 +424,20 @@ return (<>
           )}
         />
       </div>
+		{/* Info versione */}
+      {appInfo && (
+        <div style={{
+          position: "fixed",
+          bottom: 10,
+          left: 10,
+          fontSize: "11px",
+          color: "#888",
+          fontFamily: "monospace"
+        }}>
+          v{appInfo.version} | {appInfo.installationType === 'perMachine' ? 'Sistema' : 'Utente'}
+        </div>
+      )}
+
 		{/* Notifica globale */}
 		<NotificationGroup style={{ right: 10, bottom: 10, zIndex: 9999, position: "fixed" }}>
 		  {notification.type && (

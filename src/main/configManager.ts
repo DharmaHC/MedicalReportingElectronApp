@@ -35,7 +35,7 @@ export function getDefaultConfigDir(): string {
  *
  * @returns true se perMachine, false se perUser
  */
-function isPerMachineInstallation(): boolean {
+export function isPerMachineInstallation(): boolean {
   if (process.platform !== 'win32') {
     return false; // Non applicabile su altri OS
   }

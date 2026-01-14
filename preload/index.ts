@@ -39,6 +39,11 @@ console.log("PRELOAD PARTITO!");
     get: () => ipcRenderer.invoke('get-company-ui-settings'),
   });
 
+  // Espone API per informazioni app (versione, tipo installazione)
+  contextBridge.exposeInMainWorld('appInfo', {
+    get: () => ipcRenderer.invoke('app:getInfo'),
+  });
+
   contextBridge.exposeInMainWorld('electronAPI', {
     onUpdateAvailable: (callback: (info: any) => void) =>
       ipcRenderer.on('update-available', (_event, info) => callback(info)),
