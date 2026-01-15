@@ -25,6 +25,7 @@ import {
   resetExaminationState,
   clearSelectedMoreExams
 } from "../store/examinationSlice";
+import { openModal as openBulkSignModal } from "../store/bulkSignSlice";
 import { RootState } from "../store";
 import { url_doctors_id, url_changePassword } from "../utility/urlLib"; // <== Assicurati di importare url_changePassword
 import { setFilters } from "../store/filtersSlice";
@@ -50,9 +51,6 @@ const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // Stato per firma massiva remota
-  const [bulkSignModalVisible, setBulkSignModalVisible] = useState(false);
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -162,12 +160,7 @@ const dispatch = useDispatch();
 
   // Apre il modale per la firma massiva remota
   const handleOpenBulkSign = () => {
-    setBulkSignModalVisible(true);
-  };
-
-  // Chiude il modale firma massiva
-  const handleCloseBulkSign = () => {
-    setBulkSignModalVisible(false);
+    dispatch(openBulkSignModal());
   };
 
   // Helper per determinare il titolo in base al sesso
@@ -401,13 +394,8 @@ const dispatch = useDispatch();
         </Dialog>
       )}
 
-      {/* Modale Firma Massiva Remota */}
-      {bulkSignModalVisible && (
-        <BulkSignModal
-          visible={bulkSignModalVisible}
-          onClose={handleCloseBulkSign}
-        />
-      )}
+      {/* Modale Firma Massiva Remota (gestito via Redux) */}
+      <BulkSignModal />
     </>
   );
 };

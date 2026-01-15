@@ -36,8 +36,19 @@ function AppWrapper() {
   useEffect(() => {
     const loadUISettings = async () => {
       try {
-        // Usa IPC diretto come per company-footer-settings (più affidabile)
-        const settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
+        let settings: CompanyUISettings;
+
+        // In dev mode senza Electron, carica direttamente dal file assets
+        if (!window.electron?.ipcRenderer) {
+          console.log("🔧 Dev mode browser-only: caricamento settings da assets");
+          // Con publicDir: 'assets', i file sono serviti alla root
+          const response = await fetch('/company-ui-settings.json');
+          if (!response.ok) throw new Error('Failed to load settings');
+          settings = await response.json();
+        } else {
+          // Usa IPC diretto come per company-footer-settings (più affidabile)
+          settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
+        }
         setCompanyUISettings(settings);
 
         // ⚠️ IMPORTANTE: Verifica che apiBaseUrl sia configurato

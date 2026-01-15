@@ -5,6 +5,7 @@ import path from 'node:path'
 export default defineConfig({
   root: 'src/renderer',
   base: './',
+  publicDir: 'assets',  // Serve assets folder as static files
   plugins: [react()],
   resolve: {
     alias: [
@@ -19,7 +20,34 @@ export default defineConfig({
   server: {
     port: 5173,
     host: 'localhost',
-    strictPort: true
+    strictPort: true,
+    proxy: {
+      // Proxy per API Aster (test) - DEVE essere prima di prod per evitare match errato
+      '/proxy-test': {
+        target: 'https://medicalreportingapitest.asterdiagnostica.it',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/proxy-test/, '/api'),
+        secure: false
+      },
+      // Proxy per API Aster (produzione)
+      '/proxy-prod': {
+        target: 'https://medicalreportingapi.asterdiagnostica.it',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/proxy-prod/, '/api'),
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('[PROXY] Forwarding:', req.method, req.url, '-> ', options.target + proxyReq.path);
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            console.log('[PROXY] Response:', proxyRes.statusCode, req.url);
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('[PROXY] Error:', err.message);
+          });
+        }
+      }
+    }
   },
     build: {
     outDir: path.resolve(process.cwd(), 'renderer-dist/renderer'),
