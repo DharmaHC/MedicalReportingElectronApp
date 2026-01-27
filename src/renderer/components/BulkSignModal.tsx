@@ -77,7 +77,7 @@ const BulkSignModal: React.FC = () => {
     successMessage
   } = useSelector((state: RootState) => state.bulkSign);
 
-  const { doctorCode, token } = useSelector((state: RootState) => state.auth);
+  const { doctorCode, token, userId } = useSelector((state: RootState) => state.auth);
 
   // Conteggi
   const selectedCount = useMemo(() => reports.filter(r => r.selected).length, [reports]);
@@ -103,10 +103,10 @@ const BulkSignModal: React.FC = () => {
 
   // Carica referti quando cambia filtro o modal si apre
   useEffect(() => {
-    if (isModalOpen && doctorCode && token) {
-      dispatch(fetchReportsToSign({ doctorCode, token }));
+    if (isModalOpen && doctorCode && token && userId) {
+      dispatch(fetchReportsToSign({ doctorCode, token, userId }));
     }
-  }, [isModalOpen, doctorCode, token, filters, dispatch]);
+  }, [isModalOpen, doctorCode, token, userId, filters, dispatch]);
 
   // Polling stato sessione
   useEffect(() => {
@@ -286,6 +286,24 @@ const BulkSignModal: React.FC = () => {
     return (
       <td>
         <span className={`report-state ${stateClass}`}>{stateText}</span>
+      </td>
+    );
+  }, []);
+
+  // Nome esame (con indicatore per referti composti)
+  const ExamNameCell = useCallback((props: GridCellProps) => {
+    const item = props.dataItem as ReportToSign;
+
+    return (
+      <td title={item.examNames?.join('\n') || item.examName}>
+        {item.isComposite && (
+          <span className="composite-indicator" title={`Referto composto: ${item.linkedResultIds.length} esami`}>
+            📋
+          </span>
+        )}
+        <span className={item.isComposite ? 'exam-name-composite' : ''}>
+          {item.examName}
+        </span>
       </td>
     );
   }, []);
@@ -471,7 +489,8 @@ const BulkSignModal: React.FC = () => {
               <GridColumn
                 field="examName"
                 title="Esame"
-                width={200}
+                width={250}
+                cell={ExamNameCell}
               />
               <GridColumn
                 field="examinationDate"

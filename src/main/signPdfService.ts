@@ -9,7 +9,7 @@ import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
 import { Settings, CompanyFooterSettings } from '../globals';
-import { loadConfigJson, getImagePath } from './configManager';
+import { loadConfigJson, getImagePath, getDefaultConfigDir } from './configManager';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
@@ -55,9 +55,26 @@ export function loadSettings(): Settings {
 }
 
 /* █████████████████ COMPANY FOOTER SETTINGS █████████████████ */
+
+/**
+ * Carica i settings di default (non personalizzati) per ottenere footerText originale
+ */
+function loadDefaultFooterSettings(): Record<string, CompanyFooterSettings> {
+  try {
+    const defaultPath = path.join(getDefaultConfigDir(), 'company-footer-settings.json');
+    if (fs.existsSync(defaultPath)) {
+      const raw = fs.readFileSync(defaultPath, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Errore caricamento default footer settings:', err);
+  }
+  return {};
+}
+
 function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
   // Fallback a valori di default se il file non esiste
-  const defaultSettings: Record<string, CompanyFooterSettings> = {
+  const fallbackDefault: Record<string, CompanyFooterSettings> = {
     "DEFAULT": {
       footerImageWidth: 160,
       footerImageHeight: 32,
@@ -68,10 +85,31 @@ function loadCompanyFooterSettings(): Record<string, CompanyFooterSettings> {
     }
   };
 
-  return loadConfigJson<Record<string, CompanyFooterSettings>>(
+  // Carica settings personalizzati (già con deep merge)
+  const personalizedSettings = loadConfigJson<Record<string, CompanyFooterSettings>>(
     'company-footer-settings.json',
-    defaultSettings
+    fallbackDefault
   );
+
+  // Carica settings di default dall'installazione
+  const defaultSettings = loadDefaultFooterSettings();
+
+  // Per OGNI company nei default, verifica se footerText è vuoto nei personalizzati
+  // e in tal caso usa il valore di default
+  for (const companyKey of Object.keys(defaultSettings)) {
+    if (personalizedSettings[companyKey]) {
+      // La company esiste nei personalizzati, verifica footerText
+      const personalized = personalizedSettings[companyKey];
+      const defaultCompany = defaultSettings[companyKey];
+
+      if ((!personalized.footerText || personalized.footerText.trim() === '') && defaultCompany?.footerText) {
+        personalized.footerText = defaultCompany.footerText;
+        console.log(`📝 footerText vuoto per ${companyKey}, uso default: "${personalized.footerText}"`);
+      }
+    }
+  }
+
+  return personalizedSettings;
 }
 
 export function getCompanyFooterSettings(companyId?: string): CompanyFooterSettings {
@@ -85,7 +123,7 @@ export function getCompanyFooterSettings(companyId?: string): CompanyFooterSetti
     blankFooterHeight: 15,
     yPosFooterImage: 15,
     footerImageXPositionOffset: 0,
-    footerText: "Aster Diagnostica Srl - P.I. 06191121000"
+    footerText: ""
   };
 }
 

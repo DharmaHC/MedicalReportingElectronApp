@@ -25,6 +25,7 @@ import {
   resetExaminationState,
   clearSelectedMoreExams
 } from "../store/examinationSlice";
+import { openModal as openBulkSignModal } from "../store/bulkSignSlice";
 import { RootState } from "../store";
 import { url_doctors_id, url_changePassword } from "../utility/urlLib"; // <== Assicurati di importare url_changePassword
 import { setFilters } from "../store/filtersSlice";
@@ -50,9 +51,6 @@ const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // Stato per firma massiva remota
-  const [bulkSignModalVisible, setBulkSignModalVisible] = useState(false);
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -155,15 +153,15 @@ const dispatch = useDispatch();
     navigate("/register-user");
   };
 
-  // ---- FUNZIONI FIRMA MASSIVA REMOTA ---------------------------
-  const handleOpenBulkSign = () => {
-    setBulkSignModalVisible(true);
+  // Naviga alla pagina di rigenerazione PDF (solo per admin)
+  const handleRegeneratePdf = () => {
+    navigate("/regenerate-pdf");
   };
 
-  const handleCloseBulkSign = () => {
-    setBulkSignModalVisible(false);
+  // Apre il modale per la firma massiva remota
+  const handleOpenBulkSign = () => {
+    dispatch(openBulkSignModal());
   };
-  // ---- FINE FUNZIONI FIRMA MASSIVA REMOTA ----------------------
 
   // Helper per determinare il titolo in base al sesso
   const getDoctorTitle = (sex: string | null): string => {
@@ -330,9 +328,10 @@ const dispatch = useDispatch();
                   onLogout={handleLogout}
                   onChangePassword={handleOpenChangePassword}
                   onLogoutAndExit={handleLogoutAndExit}
+                  onBulkSign={handleOpenBulkSign}
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
-                  onBulkSign={handleOpenBulkSign}
+                  onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
                 />
               </div>
             </div>
@@ -395,13 +394,8 @@ const dispatch = useDispatch();
         </Dialog>
       )}
 
-      {/* (5) Modal per FIRMA MASSIVA REMOTA */}
-      {bulkSignModalVisible && (
-        <BulkSignModal
-          visible={bulkSignModalVisible}
-          onClose={handleCloseBulkSign}
-        />
-      )}
+      {/* Modale Firma Massiva Remota (gestito via Redux) */}
+      <BulkSignModal />
     </>
   );
 };

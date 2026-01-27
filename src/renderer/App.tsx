@@ -7,6 +7,8 @@ import { persistor } from "./store";
 import Login from "./pages/Login";
 import HomePage from "./pages/HomePage";
 import EditorPage from "./pages/EditorPage";
+import RegisterUser from "./pages/RegisterUser";
+import RegeneratePdfPage from "./pages/RegeneratePdfPage";
 import PrescriptionEditorModal from "./components/PrescriptionEditorModal";
 
 import "@progress/kendo-theme-fluent/dist/all.css";
@@ -34,8 +36,19 @@ function AppWrapper() {
   useEffect(() => {
     const loadUISettings = async () => {
       try {
-        // Usa IPC diretto come per company-footer-settings (più affidabile)
-        const settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
+        let settings: CompanyUISettings;
+
+        // In dev mode senza Electron, carica direttamente dal file assets
+        if (!window.electron?.ipcRenderer) {
+          console.log("🔧 Dev mode browser-only: caricamento settings da assets");
+          // Con publicDir: 'assets', i file sono serviti alla root
+          const response = await fetch('/company-ui-settings.json');
+          if (!response.ok) throw new Error('Failed to load settings');
+          settings = await response.json();
+        } else {
+          // Usa IPC diretto come per company-footer-settings (più affidabile)
+          settings = await window.electron.ipcRenderer.invoke('get-company-ui-settings');
+        }
         setCompanyUISettings(settings);
 
         // ⚠️ IMPORTANTE: Verifica che apiBaseUrl sia configurato
@@ -289,6 +302,8 @@ function AppWrapper() {
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/editor" element={<EditorPage />} />
+            <Route path="/register-user" element={<RegisterUser />} />
+            <Route path="/regenerate-pdf" element={<RegeneratePdfPage />} />
           </Route>
         </Routes>
       </main>

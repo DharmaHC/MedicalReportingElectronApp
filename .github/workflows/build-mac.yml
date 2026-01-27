@@ -1,0 +1,82 @@
+name: Build macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      sign_app:
+        description: 'Enable code signing (requires Apple Developer credentials)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm run postinstall
+          npm list @electron/notarize || npm install @electron/notarize --save-dev
+
+      - name: Activate Kendo UI License
+        run: |
+          if [ -n "${{ secrets.KENDO_UI_LICENSE }}" ]; then
+            echo "🔑 Activating Kendo UI license..."
+            echo "${{ secrets.KENDO_UI_LICENSE }}" | npx kendo-ui-license activate
+            echo "✅ Kendo UI license activated"
+          else
+            echo "⚠️ KENDO_UI_LICENSE secret not set - building without license (will show warnings)"
+          fi
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build macOS app (without signing)
+        if: ${{ !inputs.sign_app }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --mac --publish never
+
+      - name: Build macOS app (with signing)
+        if: ${{ inputs.sign_app }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            MACOS_INSTALLATION.md
+            INSTALLAZIONE_MAC_RAPIDA.md
+            launch-macos.sh
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -143,14 +143,13 @@ const observer = new MutationObserver((mutations) => {
     return;
   }
 
-
   renderPageBreaks();
   if (useHighlight) {
-  // Evita loop disconnettendo temporaneamente l'observer
-  observer.disconnect();
+    // Evita loop disconnettendo temporaneamente l'observer
+    observer.disconnect();
     highlightHashes();
-  // Ricollega l'observer
-  observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+    // Ricollega l'observer
+    observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
   }
 });
 

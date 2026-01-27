@@ -1,19 +1,19 @@
 {
-  "apiBaseUrl": "http://172.16.18.50:8090/api/",
+  "apiBaseUrl": "https://medicalreportingapi.asterdiagnostica.it/api/",
   "header": {
     "logo": {
-      "url": "https://www.pantamedica.it/wp-content/uploads/2019/09/logo_pantamedica-web-1.png",
-      "link": "https://www.pantamedica.it/",
-      "alt": "Logo Pantamedica"
+      "url": "https://www.asterdiagnostica.it/images/logo.png",
+      "link": "http://www.asterdiagnostica.it/",
+      "alt": "Logo Aster"
     },
     "title": {
       "text": "Refertazione Medica",
-      "color": "rgb(77, 178, 236)",
+      "color": "rgb(34, 154, 97)",
       "fontSize": "30px"
     }
   },
   "footer": {
-    "copyright": "Pantamedica 2025",
+    "copyright": "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
     "poweredBy": {
       "text": "Powered by",
       "link": "https://www.dharmahealthcare.net",
@@ -24,7 +24,7 @@
     "enabled": false,
     "bypassPin": false,
     "bypassSignature": false,
-    "overrideDoctorName": "",
+    "overrideDoctorName": null,
     "notes": "WORKAROUND EMERGENZA - Attivare SOLO per recupero referti corrotti. DISATTIVARE immediatamente dopo l'uso!"
   },
   "logipacsServer": {

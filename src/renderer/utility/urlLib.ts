@@ -1,10 +1,46 @@
 // URL base viene caricato da company-ui-settings.json all'avvio dell'applicazione
 let url_base: string | null = null;
+let original_url_base: string | null = null;
+
+// Rileva se siamo in dev mode (localhost - richiede proxy per CORS)
+// NOTA: Anche in Electron, se il renderer è servito da localhost:5173 (Vite dev),
+// CORS è attivo e serve il proxy. In produzione (file://) non serve.
+const isDevMode = (): boolean => {
+  return typeof window !== 'undefined' &&
+    window.location.hostname === 'localhost';
+};
+
+// Converte URL remoto in URL proxy per dev mode
+const toProxyUrl = (url: string): string => {
+  // In produzione (file://) non serve proxy
+  if (!isDevMode()) return url;
+
+  // Mappa degli URL remoti ai proxy locali
+  // NOTA: proxy-test e proxy-prod evitano collisioni di prefisso
+  const proxyMap: Record<string, string> = {
+    'https://medicalreportingapi.asterdiagnostica.it/api/': '/proxy-prod/',
+    'https://medicalreportingapitest.asterdiagnostica.it/api/': '/proxy-test/'
+  };
+
+  for (const [remote, local] of Object.entries(proxyMap)) {
+    if (url.startsWith(remote)) {
+      const proxyUrl = url.replace(remote, local);
+      console.log(`🔄 [DEV PROXY] ${url} -> ${proxyUrl}`);
+      return proxyUrl;
+    }
+  }
+
+  return url;
+};
 
 // Funzione per impostare l'URL base dalle settings
 export const setApiBaseUrl = (baseUrl: string) => {
-  url_base = baseUrl;
+  original_url_base = baseUrl;
+  url_base = toProxyUrl(baseUrl);
   console.log("✓ API Base URL configurato:", url_base);
+  if (isDevMode()) {
+    console.log("🔧 Dev mode (localhost) - usando proxy per CORS bypass");
+  }
 };
 
 // Funzione per ottenere l'URL base corrente (con validazione)
