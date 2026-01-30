@@ -1,0 +1,490 @@
+/**
+ * SignProvidersConfigModal.css
+ * Stili per la modale di configurazione provider firma remota
+ */
+
+.sign-providers-config-modal .k-dialog {
+  max-height: 90vh;
+}
+
+.sign-providers-config-modal .k-tabstrip {
+  height: calc(100% - 60px);
+}
+
+.sign-providers-config-modal .k-tabstrip-content {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: calc(100vh - 250px);
+}
+
+/* OpenAPI Tab */
+.openapi-tab {
+  position: relative;
+}
+
+.openapi-tab .loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* Config Section */
+.config-section {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.config-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+}
+
+.config-field .k-input,
+.config-field .k-dropdownlist {
+  width: 100%;
+}
+
+.config-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+/* Admin Sections */
+.admin-section {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 8px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.action-buttons .k-button {
+  font-size: 13px;
+}
+
+/* Grid dentro sezioni */
+.admin-section .k-grid {
+  font-size: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.admin-section .k-grid-header {
+  background: #f1f3f5;
+}
+
+.admin-section .k-grid td,
+.admin-section .k-grid th {
+  padding: 6px 8px;
+}
+
+/* Verify Result */
+.verify-result {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.verify-result pre {
+  margin: 0;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Test Sign Section */
+.test-sign-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.test-sign-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.test-sign-row .k-input {
+  max-width: 200px;
+}
+
+/* Certificate Registration Form */
+.cert-registration-form {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.cert-registration-form h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #0369a1;
+}
+
+.cert-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.cert-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cert-form-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.cert-form-field .k-input {
+  width: 100%;
+}
+
+.cert-form-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.cert-form-note {
+  margin: 12px 0 0 0;
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}
+
+@media (max-width: 800px) {
+  .cert-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Placeholder tabs */
+.provider-tab-placeholder {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.provider-tab-placeholder h3 {
+  margin: 0 0 16px 0;
+  color: #333;
+}
+
+.provider-tab-placeholder p {
+  margin: 0;
+  font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sign-providers-config-modal .k-dialog {
+    width: 95vw !important;
+  }
+}
+
+/* ============================================================================
+   NAMIRIAL TAB STYLES
+   ============================================================================ */
+
+.namirial-tab {
+  position: relative;
+}
+
+.namirial-tab .loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.namirial-tab .config-info {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Status Section */
+.namirial-tab .status-section {
+  margin-bottom: 16px;
+}
+
+.namirial-tab .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.namirial-tab .status-badge.status-configured {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.namirial-tab .status-badge .status-type {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* Form Grid */
+.namirial-tab .namirial-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.namirial-tab .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.namirial-tab .form-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.namirial-tab .form-field small {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.namirial-tab .form-field .k-input,
+.namirial-tab .form-field .k-dropdownlist {
+  width: 100%;
+}
+
+/* Password Input Wrapper */
+.namirial-tab .password-input-wrapper {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.namirial-tab .password-input-wrapper .k-input {
+  flex: 1;
+}
+
+.namirial-tab .password-input-wrapper .k-button {
+  padding: 6px;
+}
+
+/* Form Actions */
+.namirial-tab .form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Info Section */
+.namirial-tab .info-section {
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.namirial-tab .info-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #854d0e;
+}
+
+.namirial-tab .info-section ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.namirial-tab .info-section li {
+  font-size: 12px;
+  color: #713f12;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.namirial-tab .info-section li:last-child {
+  margin-bottom: 0;
+}
+
+.namirial-tab .info-section li strong {
+  color: #854d0e;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+  .namirial-tab .namirial-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .namirial-tab .form-actions {
+    flex-direction: column;
+  }
+
+  .namirial-tab .form-actions .k-button {
+    width: 100%;
+  }
+}
+
+/* ============================================================================
+   ENDPOINT CONFIGURATION (SaaS vs On-Premises)
+   ============================================================================ */
+
+.endpoint-config-section {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+}
+
+.endpoint-config-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #166534;
+  font-weight: 600;
+}
+
+.endpoint-toggle-container {
+  margin-top: 8px;
+}
+
+.endpoint-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.endpoint-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 200px;
+}
+
+.endpoint-option:hover {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.endpoint-option.selected {
+  border-color: #22c55e;
+  background: #dcfce7;
+}
+
+.endpoint-option input[type="radio"] {
+  margin-top: 2px;
+  accent-color: #22c55e;
+}
+
+.endpoint-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.endpoint-option-content strong {
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.endpoint-option-content small {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.endpoint-current-url code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .endpoint-options {
+    flex-direction: column;
+  }
+
+  .endpoint-option {
+    min-width: auto;
+  }
+}

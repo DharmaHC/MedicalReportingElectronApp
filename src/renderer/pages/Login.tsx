@@ -20,6 +20,11 @@ import {
   setUserCN,
   setIsTechnician,
   setTechnicianCode,
+  setSignatureType,
+  setRemoteSignUsername,
+  setRemoteSignProvider,
+  setHasRemoteSignPassword,
+  setHasRemoteSignPin,
 } from "../store/authSlice";
 import "./Login.css";
 import { useNavigate } from "react-router-dom";
@@ -212,11 +217,27 @@ const Login = () => {
     		const printReportWhenFinished = !!result.printReportWhenFinished;
     		const userCN = result.userCN;
 
+        // Campi per firma remota
+        // Normalizza a lowercase perché il backend C# potrebbe restituire 'Automatic'/'Otp'
+        const signatureType = result.signatureType?.toLowerCase() as 'otp' | 'automatic' | null;
+        const remoteSignUsername = result.remoteSignUsername;
+        const remoteSignProvider = result.remoteSignProvider;
+        const hasRemoteSignPassword = !!result.hasRemoteSignPassword;
+        const hasRemoteSignPin = !!result.hasRemoteSignPin;
+
         dispatch(setUserId(userId));
         dispatch(setDoctorCode(doctorCode));
         dispatch(setDoctorFullName(doctorFullName));
         dispatch(setprintReportWhenFinished(printReportWhenFinished));
         dispatch(setUserCN(userCN));
+
+        // Salva preferenze firma remota
+        dispatch(setSignatureType(signatureType));
+        dispatch(setRemoteSignUsername(remoteSignUsername));
+        dispatch(setRemoteSignProvider(remoteSignProvider));
+        dispatch(setHasRemoteSignPassword(hasRemoteSignPassword));
+        dispatch(setHasRemoteSignPin(hasRemoteSignPin));
+
         if (doctorCode) {
           fetchDoctorSignatureInfo(doctorCode.trim());
         }

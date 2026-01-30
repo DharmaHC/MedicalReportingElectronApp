@@ -2,20 +2,21 @@
 import { app, BrowserWindow, Menu, MenuItem, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import isDev from 'electron-is-dev';
-import { signPdfService } from './signPdfService';
+import { signPdfService, decoratePdfOnly, addSignatureNoticeToBuffer } from './signPdfService';
 import os from 'os';
 import path from 'path';
 import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
-import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation } from './configManager';
+import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation, migrateNamirialUrl } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
 import {
   initializeRemoteSignProviders,
   registerRemoteSignIpcHandlers,
   cleanupRemoteSign
 } from './remoteSign/remoteSignIpcHandlers';
+import { registerRemoteSignAdminHandlers } from './remoteSign/remoteSignAdminIpcHandlers';
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -533,6 +534,16 @@ ipcMain.handle('sign-pdf', async (_e, req) => {
   return signPdfService(req);
 });
 
+// ------ DECORATE PDF (senza firma) per "Salva da Firmare" ------
+ipcMain.handle('decorate-pdf', async (_e, req) => {
+  return decoratePdfOnly(req);
+});
+
+// ------ ADD SIGNATURE NOTICE (aggiunge dicitura firma) ------
+ipcMain.handle('add-signature-notice', async (_e, req) => {
+  return addSignatureNoticeToBuffer(req);
+});
+
 // ------ PDF SIGN IPC ------
 ipcMain.on('print-pdf-native', async (event, pdfBase64: string) => {
   try {
@@ -750,12 +761,24 @@ app.whenReady().then(() => {
   //    Aggiunge eventuali nuovi parametri mantenendo le personalizzazioni
   syncAllConfigsWithDefaults();
 
+  // 3.1 Migrazione URL Namirial (da eSignAnyWhere errato a SWS corretto)
+  migrateNamirialUrl();
+
   // 4. Inizializza i provider di firma remota e registra gli IPC handlers
   const settings = loadGlobalSettings();
   if (settings.remoteSign) {
     initializeRemoteSignProviders(settings.remoteSign);
   }
   registerRemoteSignIpcHandlers();
+
+  // Registra gli handler admin con error handling
+  try {
+    log.info('[Main] Chiamata registerRemoteSignAdminHandlers...');
+    registerRemoteSignAdminHandlers();
+    log.info('[Main] registerRemoteSignAdminHandlers completata');
+  } catch (err: any) {
+    log.error('[Main] ERRORE in registerRemoteSignAdminHandlers:', err.message, err.stack);
+  }
 
   createWindow();
   setupAutoUpdater();

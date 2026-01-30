@@ -835,6 +835,74 @@ export function syncAllConfigsWithDefaults(): number {
   return updatedCount;
 }
 
+/**
+ * Migrazione: corregge URL Namirial errati nei file di configurazione.
+ * eSignAnyWhere (api.esignanywhere.net) è un prodotto DIVERSO da Namirial SWS.
+ * L'URL corretto per firma remota è sws.firmacerta.it.
+ */
+export function migrateNamirialUrl(): boolean {
+  const customPath = path.join(getCustomConfigDir(), 'sign-settings.json');
+
+  if (!fs.existsSync(customPath)) {
+    return false;
+  }
+
+  try {
+    const raw = fs.readFileSync(customPath, 'utf8');
+    const settings = JSON.parse(raw);
+
+    // Controlla se l'URL Namirial è quello errato (eSignAnyWhere)
+    const currentUrl = settings?.remoteSign?.namirial?.baseUrl || '';
+    const wrongUrls = [
+      'api.esignanywhere.net',
+      'esignanywhere.net',
+      'esignanywhere.com'
+    ];
+
+    const isWrongUrl = wrongUrls.some(wrong => currentUrl.includes(wrong));
+
+    let needsSave = false;
+
+    if (isWrongUrl) {
+      console.log('🔧 Migrazione URL Namirial: correzione URL errato');
+      console.log(`   Vecchio: ${currentUrl}`);
+
+      // Correggi l'URL
+      if (!settings.remoteSign) settings.remoteSign = {};
+      if (!settings.remoteSign.namirial) settings.remoteSign.namirial = {};
+
+      settings.remoteSign.namirial.baseUrl = 'https://sws.firmacerta.it/SignEngineWeb';
+
+      console.log(`   Nuovo: ${settings.remoteSign.namirial.baseUrl}`);
+      needsSave = true;
+    }
+
+    // Aggiungi opzioni proxy se mancanti
+    if (settings.remoteSign?.namirial) {
+      if (settings.remoteSign.namirial.proxyUrl === undefined) {
+        settings.remoteSign.namirial.proxyUrl = '';
+        console.log('   Aggiunto: proxyUrl (vuoto = usa proxy sistema)');
+        needsSave = true;
+      }
+      if (settings.remoteSign.namirial.noProxy === undefined) {
+        settings.remoteSign.namirial.noProxy = false;
+        console.log('   Aggiunto: noProxy (false = usa proxy se configurato)');
+        needsSave = true;
+      }
+    }
+
+    if (needsSave) {
+      fs.writeFileSync(customPath, JSON.stringify(settings, null, 2), 'utf8');
+      console.log('✅ Configurazione Namirial aggiornata!');
+      return true;
+    }
+  } catch (err) {
+    console.error('Errore migrazione URL Namirial:', err);
+  }
+
+  return false;
+}
+
 /* ██████ GESTIONE IMMAGINI ██████ */
 
 /**

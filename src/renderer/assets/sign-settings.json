@@ -38,7 +38,7 @@
   "showAppMenu": false,
 
   "remoteSign": {
-    "defaultProvider": "ARUBA",
+    "defaultProvider": "NAMIRIAL",
     "sessionTimeoutMinutes": 45,
     "aruba": {
       "enabled": true,
@@ -53,8 +53,22 @@
     },
     "namirial": {
       "enabled": true,
-      "baseUrl": "https://api.esignanywhere.net",
-      "apiKey": ""
+      "baseUrl": "https://sws-companynamesaas.test.namirialtsp.com/SignEngineWeb",
+      "clientCertPath": "D:/Lavoro/Sviluppo/MedicalReportingAPP/MedReportAndSign/MedReportAndSign/Documentazione/Namirial/sws_saas_COMPANYNAMESaaS_test.p12",
+      "clientCertPassword": "V9x^2G0e6*",
+      "proxyUrl": "",
+      "noProxy": true,
+      "onPremiseBaseUrl": "http://20.13.149.101:8080/SignEngineWeb",
+      "useOnPremise": false
+    },
+    "laziocrea": {
+      "enabled": true,
+      "baseUrl": "https://gwapi.laziocrea.it/firmaweb",
+      "oauthUrl": "https://qiam.regione.lazio.it/oauth2/token",
+      "clientId": "",
+      "clientSecret": "",
+      "scope": "openid",
+      "environment": "collaudo"
     },
     "openapi": {
       "enabled": true,

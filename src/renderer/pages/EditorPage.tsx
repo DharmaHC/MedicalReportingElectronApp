@@ -1678,6 +1678,130 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     }
   };
 
+  // ============================================================================
+  // SALVA DA FIRMARE - per firma massiva remota
+  // Salva il referto con PDF decorato (logo/footer) ma senza firma digitale.
+  // Il PDF verrà firmato successivamente tramite la funzione di firma massiva.
+  // ============================================================================
+  const handleSaveForLaterSigning = async () => {
+    setIsProcessing(true);
+    setIsDraftOperation(false);
+
+    try {
+      // 1. Genera i dati del report (RTF e PDF)
+      const reportData = await generateReportData(true, false); // rtfNeedsToBeStored=true, isSigningProcess=false
+
+      if (!reportData?.pdfContent || !reportData?.rtfContent) {
+        setErrorMessage("Impossibile generare i dati del report per il salvataggio.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // 2. Decora il PDF (logo, footer) senza firma e senza dicitura
+      console.log("📝 Salva da Firmare: Decorazione PDF in corso...");
+      const decorateResponse = await (window as any).nativeSign.decoratePdf({
+        pdfBase64: reportData.pdfContent,
+        companyId: companyId,
+        footerText: null
+      });
+
+      if (!decorateResponse?.decoratedPdfBase64) {
+        setErrorMessage("Errore durante la decorazione del PDF.");
+        setIsProcessing(false);
+        return;
+      }
+
+      console.log("✓ PDF decorato con successo");
+
+      // 3. Prepara i dati per l'API
+      const deduplicatedMoreExams = selectedMoreExams.filter(
+        (exam, index, array) => {
+          return (
+            array.findIndex(
+              (e) =>
+                e.examId === exam.examId &&
+                e.examVersion === exam.examVersion &&
+                e.subExamId === exam.subExamId &&
+                e.examResultId === exam.examResultId
+            ) === index
+          );
+        }
+      );
+      const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
+        examId: exam.examId,
+        examVersion: exam.examVersion,
+        subExamId: exam.subExamId,
+        examResultId: exam.examResultId,
+      }));
+
+      const body = {
+        pdfBase64: decorateResponse.decoratedPdfBase64,
+        rtfContent: reportData.rtfContent,
+        examinationId: Number(selectedExaminationId),
+        doctorCode: doctorCode,
+        companyId: companyId,
+        isPdfSigned: false,
+        isReportFinalized: false,
+        LinkedResultsList: linkedResultsList,
+        isSavingDraft: false,
+        SaveForLaterSigning: true // Flag per salvare come "Da Firmare"
+      };
+
+      console.log("📤 Salva da Firmare API Call:", {
+        examinationId: body.examinationId,
+        SaveForLaterSigning: body.SaveForLaterSigning,
+        LinkedResultsListCount: linkedResultsList.length,
+        LinkedResultsList: linkedResultsList
+      });
+
+      // Verifica che ci sia almeno un esame selezionato
+      if (linkedResultsList.length === 0) {
+        setErrorMessage("Errore: nessun esame selezionato. Impossibile salvare il referto.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // 4. Chiama l'API
+      const response = await fetch(url_processReport(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        console.log("✅ Referto salvato come 'Da Firmare' con successo");
+        setErrorMessage(null);
+        setCachedReportData(null);
+        setIsModified(false);
+
+        // Stessa logica di "Termina e Invia": stampa se l'opzione è attiva
+        if (printReportWhenFinished) {
+          // Usa il PDF decorato per la stampa (non firmato ma con logo/footer)
+          handlePrintReferto(decorateResponse.decoratedPdfBase64);
+        } else {
+          // Se non stampa, naviga direttamente alla homepage
+          dispatch(clearSelectedMoreExams());
+          dispatch(resetExaminationState());
+          dispatch(clearRegistrations());
+          closeViewer();
+          navigate("/", { state: { reload: true } });
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({ title: "Errore sconosciuto" }));
+        console.error("Errore durante il salvataggio:", errorData);
+        setErrorMessage(`Errore API (${response.status}): ${errorData.title || "Dettagli non disponibili."}`);
+      }
+    } catch (error: any) {
+      console.error("Errore durante Salva da Firmare:", error);
+      setErrorMessage(`Errore: ${error.message || "Impossibile completare l'operazione."}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
     // Chiama l'API finale per processare il report (salvataggio bozza o finalizzazione).
   const callProcessReportApi = async (
     signedPdfBase64: string | null, // PDF firmato in Base64, o PDF originale se non firmato/bozza.
@@ -2308,6 +2432,20 @@ const handleResultClick = async (result: any) => {
               >
                 Termina e Invia
               </Button>
+
+              {/* Mostra "Salva da Firmare" solo se il medico è abilitato alla firma digitale */}
+              {allowMedicalReportDigitalSignature && (
+                <Button
+                  svgIcon={saveIcon}
+                  onClick={handleSaveForLaterSigning}
+                  disabled={readOnly}
+                  className="margin-buttons-scar"
+                  style={{ backgroundColor: '#ffb74d', color: 'white' }}
+                  title="Salva il referto per firmarlo successivamente con la Firma Massiva Remota"
+                >
+                  Salva da Firmare
+                </Button>
+              )}
 
               {/* Area CheckBox */}
               <div style={{

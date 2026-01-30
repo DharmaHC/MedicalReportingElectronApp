@@ -14,6 +14,17 @@ console.log("PRELOAD PARTITO!");
     userCN?: string
   }) => ipcRenderer.invoke('sign-pdf', req),
   verifyPin: (pin: string) => ipcRenderer.invoke('verify-pin', pin),
+  // Decora PDF senza firma (per "Salva da Firmare")
+  decoratePdf: (req: {
+    pdfBase64: string,
+    companyId?: string,
+    footerText?: string
+  }) => ipcRenderer.invoke('decorate-pdf', req),
+  // Aggiunge dicitura firma a PDF già decorato
+  addSignatureNotice: (req: {
+    pdfBase64: string,
+    signedByName: string
+  }) => ipcRenderer.invoke('add-signature-notice', req),
 });
 
 
@@ -62,10 +73,18 @@ console.log("PRELOAD PARTITO!");
     authenticate: (params: {
       providerId: string;
       username: string;
+      password?: string;  // Password certificato (Namirial la richiede separata dal PIN)
       pin: string;
       otp: string;
       sessionMinutes?: number;
+      isAutomatic?: boolean; // true per firma automatica senza OTP
     }) => ipcRenderer.invoke('remote-sign:authenticate', params),
+
+    // Recupera le credenziali salvate per firma automatica (password decriptata dal backend)
+    getStoredCredentials: (params: {
+      token: string;
+      apiBaseUrl: string;
+    }) => ipcRenderer.invoke('remote-sign:get-stored-credentials', params),
 
     // Ottiene lo stato della sessione corrente
     getSessionStatus: (params: { providerId: string }) =>
@@ -74,18 +93,37 @@ console.log("PRELOAD PARTITO!");
     // Avvia la firma batch di più referti
     startBulkSign: (params: {
       reports: Array<{
+        digitalReportId: string;  // GUID da DigitalSignedReports
         examinationId: number;
-        examResultId: number;
+        linkedResultIds: number[];
         patientLastName: string;
         patientFirstName: string;
         companyId: string;
+        doctorCode: string;
       }>;
       providerId: string;
+      token: string;
+      apiBaseUrl: string;
+      signedByName: string;  // Nome firmatario per dicitura firma
     }) => ipcRenderer.invoke('remote-sign:bulk-sign', params),
 
     // Chiude la sessione corrente
     closeSession: (params: { providerId: string }) =>
       ipcRenderer.invoke('remote-sign:close-session', params),
+
+    // --- Supporto Namirial SaaS/On-Premises ---
+
+    // Ottiene informazioni sull'endpoint Namirial corrente
+    getNamirialEndpointInfo: () =>
+      ipcRenderer.invoke('remote-sign:get-namirial-endpoint-info'),
+
+    // Cambia endpoint Namirial (SaaS <-> On-Premises)
+    switchNamirialEndpoint: (params: { useOnPremise: boolean }) =>
+      ipcRenderer.invoke('remote-sign:switch-namirial-endpoint', params),
+
+    // Salva configurazione endpoint Namirial (persiste in sign-settings.json)
+    saveNamirialEndpointConfig: (params: { useOnPremise: boolean }) =>
+      ipcRenderer.invoke('remote-sign:save-namirial-endpoint-config', params),
 
     // Event listeners per progresso firma
     onProgress: (callback: (progress: {
@@ -100,6 +138,7 @@ console.log("PRELOAD PARTITO!");
     // Event listener per singolo referto completato
     onReportCompleted: (callback: (result: {
       examinationId: number;
+      digitalReportId: string;
       success: boolean;
       error?: string;
     }) => void) => {
@@ -122,4 +161,44 @@ console.log("PRELOAD PARTITO!");
       ipcRenderer.removeAllListeners('remote-sign:completed');
     }
   });
+
+  // ============================================================================
+  // API per Amministrazione Provider Firma Remota (solo admin)
+  // ============================================================================
+  console.log('[PRELOAD] Registering remoteSignAdmin API...');
+  contextBridge.exposeInMainWorld('remoteSignAdmin', {
+    // --- Configurazione OpenAPI ---
+    getOpenApiConfig: () => ipcRenderer.invoke('remote-sign-admin:get-openapi-config'),
+    saveOpenApiConfig: (config: { baseUrl: string; apiKey: string; token: string; certificateType: string }) =>
+      ipcRenderer.invoke('remote-sign-admin:save-openapi-config', config),
+
+    // --- Certificati ---
+    openApiGetCertificates: () => ipcRenderer.invoke('remote-sign-admin:openapi-get-certificates'),
+    openApiRegisterCertificate: (params: {
+      certificateOwner: string;
+      customReference?: string;
+    }) => ipcRenderer.invoke('remote-sign-admin:openapi-register-certificate', params),
+    openApiPatchCertificate: (params: { certificateId: string; updates: any }) =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-patch-certificate', params),
+
+    // --- Firme ---
+    openApiGetSignatures: () => ipcRenderer.invoke('remote-sign-admin:openapi-get-signatures'),
+    openApiDeleteSignature: (params: { signatureId: string }) =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-delete-signature', params),
+
+    // --- Verifica ---
+    openApiVerifyDocument: (params: { documentBase64: string; documentName: string }) =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-verify-document', params),
+
+    // --- Test Firma ---
+    openApiTestSignOtp: (params: { otp: string }) =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-test-sign-otp', params),
+    openApiTestSignAutomatic: () =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-test-sign-automatic'),
+    openApiTestEseal: () =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-test-eseal'),
+    openApiTestSes: () =>
+      ipcRenderer.invoke('remote-sign-admin:openapi-test-ses'),
+  });
+  console.log('[PRELOAD] remoteSignAdmin API registered!');
 

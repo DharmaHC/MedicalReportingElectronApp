@@ -8,6 +8,7 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 
 import ProfileDropDown from "../components/ProfileDropDown";
 import BulkSignModal from "../components/BulkSignModal";
+import SignProvidersConfigModal from "../components/SignProvidersConfigModal";
 
 import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
@@ -51,6 +52,9 @@ const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Stato per configurazione provider firma (solo admin)
+  const [providersConfigVisible, setProvidersConfigVisible] = useState(false);
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -161,6 +165,11 @@ const dispatch = useDispatch();
   // Apre il modale per la firma massiva remota
   const handleOpenBulkSign = () => {
     dispatch(openBulkSignModal());
+  };
+
+  // Apre la configurazione dei provider di firma (solo admin)
+  const handleOpenProvidersConfig = () => {
+    setProvidersConfigVisible(true);
   };
 
   // Helper per determinare il titolo in base al sesso
@@ -332,6 +341,7 @@ const dispatch = useDispatch();
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
                   onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
+                  onConfigureProviders={isAdmin ? handleOpenProvidersConfig : undefined}
                 />
               </div>
             </div>
@@ -396,6 +406,12 @@ const dispatch = useDispatch();
 
       {/* Modale Firma Massiva Remota (gestito via Redux) */}
       <BulkSignModal />
+
+      {/* Modale Configurazione Provider Firma (solo admin) */}
+      <SignProvidersConfigModal
+        isOpen={providersConfigVisible}
+        onClose={() => setProvidersConfigVisible(false)}
+      />
     </>
   );
 };
