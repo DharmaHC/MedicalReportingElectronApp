@@ -215,6 +215,77 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
   }
 }
 
+/**
+ * Decora il PDF senza firma e senza dicitura di firma.
+ * Usato per "Salva da Firmare" nella firma massiva remota.
+ * Il PDF viene decorato con logo e footer, ma senza firma digitale.
+ * La dicitura di firma verrà aggiunta in seguito durante la firma massiva.
+ */
+export interface DecoratePdfRequest {
+  pdfBase64: string;
+  companyId?: string;
+  footerText?: string;
+}
+
+export interface DecoratePdfResponse {
+  decoratedPdfBase64: string;
+}
+
+export async function decoratePdfOnly(req: DecoratePdfRequest): Promise<DecoratePdfResponse> {
+  const currentSettings = loadSettings();
+
+  try {
+    console.log('[decoratePdfOnly] Inizio decorazione PDF senza firma');
+
+    let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
+
+    // Decora PDF con logo/footer (stessa funzione usata da signPdfService)
+    pdfBuf = await decoratePdf(pdfBuf, req as SignPdfRequest, currentSettings);
+
+    console.log('[decoratePdfOnly] PDF decorato con successo');
+
+    return {
+      decoratedPdfBase64: pdfBuf.toString('base64')
+    };
+  } catch (e: any) {
+    console.error('[decoratePdfOnly] ERROR:', e.stack || e.message || e);
+    throw new Error(`Errore durante la decorazione del PDF: ${e.message || e}`);
+  }
+}
+
+/**
+ * Aggiunge la dicitura di firma a un PDF già decorato.
+ * Usato durante la firma massiva remota.
+ */
+export interface AddSignatureNoticeRequest {
+  pdfBase64: string;
+  signedByName: string;
+}
+
+export interface AddSignatureNoticeResponse {
+  pdfWithNoticeBase64: string;
+}
+
+export async function addSignatureNoticeToBuffer(req: AddSignatureNoticeRequest): Promise<AddSignatureNoticeResponse> {
+  const currentSettings = loadSettings();
+
+  try {
+    console.log('[addSignatureNoticeToBuffer] Aggiunta dicitura firma');
+
+    let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
+    pdfBuf = await addSignatureNotice(pdfBuf, req.signedByName, currentSettings);
+
+    console.log('[addSignatureNoticeToBuffer] Dicitura aggiunta con successo');
+
+    return {
+      pdfWithNoticeBase64: pdfBuf.toString('base64')
+    };
+  } catch (e: any) {
+    console.error('[addSignatureNoticeToBuffer] ERROR:', e.stack || e.message || e);
+    throw new Error(`Errore aggiunta dicitura firma: ${e.message || e}`);
+  }
+}
+
 /* ██████ DECORATE PDF (logo, footer, ecc.) ██████ */
 async function coverFooterWithWhite(doc: PDFDocument, footerHeight: number) {
   const pages = doc.getPages();

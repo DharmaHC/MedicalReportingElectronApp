@@ -135,14 +135,25 @@ declare global {
       authenticate: (params: {
         providerId: string;
         username: string;
+        password?: string;  // Password certificato (Namirial la richiede separata dal PIN)
         pin: string;
         otp: string;
         sessionMinutes?: number;
+        isAutomatic?: boolean; // true per firma automatica senza OTP
       }) => Promise<{
         success: boolean;
         sessionId?: string;
         expiresAt?: string;
         signedBy?: string;
+        error?: string;
+      }>;
+      getStoredCredentials: (params: {
+        token: string;
+        apiBaseUrl: string;
+      }) => Promise<{
+        success: boolean;
+        password?: string;
+        pin?: string;  // PIN separato per Namirial
         error?: string;
       }>;
       getSessionStatus: (params: { providerId: string }) => Promise<{
@@ -153,20 +164,48 @@ declare global {
       }>;
       startBulkSign: (params: {
         reports: Array<{
+          digitalReportId: string;  // GUID da DigitalSignedReports
           examinationId: number;
-          examResultId: number;
+          linkedResultIds: number[];
           patientLastName: string;
           patientFirstName: string;
           companyId: string;
+          doctorCode: string;
         }>;
         providerId: string;
+        token: string;
+        apiBaseUrl: string;
+        signedByName: string;  // Nome firmatario per dicitura firma
       }) => Promise<{
         success: boolean;
-        results?: Array<{ examinationId: number; success: boolean; error?: string }>;
+        results?: Array<{ examinationId: number; digitalReportId: string; success: boolean; error?: string }>;
         summary?: { total: number; successful: number; failed: number };
         error?: string;
       }>;
       closeSession: (params: { providerId: string }) => Promise<{ success: boolean; error?: string }>;
+
+      // --- Supporto Namirial SaaS/On-Premises ---
+      getNamirialEndpointInfo: () => Promise<{
+        success: boolean;
+        isOnPremise?: boolean;
+        baseUrl?: string;
+        hasSaaS?: boolean;
+        hasOnPremise?: boolean;
+        error?: string;
+      }>;
+      switchNamirialEndpoint: (params: { useOnPremise: boolean }) => Promise<{
+        success: boolean;
+        isOnPremise?: boolean;
+        baseUrl?: string;
+        hasSaaS?: boolean;
+        hasOnPremise?: boolean;
+        error?: string;
+      }>;
+      saveNamirialEndpointConfig: (params: { useOnPremise: boolean }) => Promise<{
+        success: boolean;
+        error?: string;
+      }>;
+
       onProgress: (callback: (progress: {
         completed: number;
         failed: number;
@@ -175,6 +214,7 @@ declare global {
       }) => void) => void;
       onReportCompleted: (callback: (result: {
         examinationId: number;
+        digitalReportId: string;
         success: boolean;
         error?: string;
       }) => void) => void;

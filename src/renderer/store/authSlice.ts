@@ -18,6 +18,16 @@ interface AuthState {
   isTechnician: boolean;
   /** ➜ Codice identificativo del tecnico (username) */
   technicianCode: string | null;
+  /** ➜ Tipo di firma remota: 'otp' (richiede OTP) o 'automatic' (senza OTP) */
+  signatureType: 'otp' | 'automatic' | null;
+  /** ➜ Username del certificato di firma remota */
+  remoteSignUsername: string | null;
+  /** ➜ Provider di firma remota (OPENAPI, ARUBA, etc.) */
+  remoteSignProvider: string | null;
+  /** ➜ Indica se la password di firma è configurata nel DB */
+  hasRemoteSignPassword: boolean;
+  /** ➜ Indica se il PIN di firma è configurato nel DB (Namirial richiede password + PIN separati) */
+  hasRemoteSignPin: boolean;
 }
 
 const initialState: AuthState = {
@@ -34,6 +44,11 @@ const initialState: AuthState = {
   userCN: null,
   isTechnician: false,
   technicianCode: null,
+  signatureType: null,
+  remoteSignUsername: null,
+  remoteSignProvider: null,
+  hasRemoteSignPassword: false,
+  hasRemoteSignPin: false,
 };
 
 const authSlice = createSlice({
@@ -55,6 +70,11 @@ const authSlice = createSlice({
       state.printReportWhenFinished = false;
       state.isTechnician = false;
       state.technicianCode = null;
+      state.signatureType = null;
+      state.remoteSignUsername = null;
+      state.remoteSignProvider = null;
+      state.hasRemoteSignPassword = false;
+      state.hasRemoteSignPin = false;
     },
     setToken(state, action: PayloadAction<string | null>) {
       state.token = action.payload;
@@ -86,6 +106,21 @@ const authSlice = createSlice({
     setTechnicianCode(state, action: PayloadAction<string | null>) {
       state.technicianCode = action.payload;
     },
+    setSignatureType(state, action: PayloadAction<'otp' | 'automatic' | null>) {
+      state.signatureType = action.payload;
+    },
+    setRemoteSignUsername(state, action: PayloadAction<string | null>) {
+      state.remoteSignUsername = action.payload;
+    },
+    setRemoteSignProvider(state, action: PayloadAction<string | null>) {
+      state.remoteSignProvider = action.payload;
+    },
+    setHasRemoteSignPassword(state, action: PayloadAction<boolean>) {
+      state.hasRemoteSignPassword = action.payload;
+    },
+    setHasRemoteSignPin(state, action: PayloadAction<boolean>) {
+      state.hasRemoteSignPin = action.payload;
+    },
   },
 });
 
@@ -102,6 +137,11 @@ export const {
   setUserCN,
   setIsTechnician,
   setTechnicianCode,
+  setSignatureType,
+  setRemoteSignUsername,
+  setRemoteSignProvider,
+  setHasRemoteSignPassword,
+  setHasRemoteSignPin,
 } = authSlice.actions;
 
 export default authSlice.reducer;

@@ -949,7 +949,7 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       2: "In Accettazione",
       3: "Accettato",
       4: "In Esecuzione",
-      5: "Da Terminare",
+      5: "Da Firmare",
       6: "Bozza",
       7: "Da Firmare",
       8: "Refertato",
@@ -966,11 +966,14 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       statusText = "Da Refertare";
       cellStyle.backgroundColor = "lightblue";
     } else if (examResultStateId === 5 && resultInsertDate != null) {
-      statusText = "Da Terminare";
-      cellStyle.backgroundColor = "orange";
+      statusText = "Da Firmare";
+      cellStyle.backgroundColor = "#ffb74d";
     } else if (examResultStateId === 6 && resultInsertDate != null) {
       statusText = "Bozza";
       cellStyle.backgroundColor = "lightgreen";
+    } else if (examResultStateId === 7 && resultInsertDate != null) {
+      statusText = "Da Firmare";
+      cellStyle.backgroundColor = "#ffb74d";
     } else if (examResultStateId === 8 && resultInsertDate != null) {
       statusText = "Refertato";
       cellStyle.backgroundColor = "green";

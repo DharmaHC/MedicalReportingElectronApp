@@ -12,6 +12,7 @@ import {
   userIcon,
   arrowRotateCwIcon,
   pencilIcon,
+  wrenchIcon,
 } from "@progress/kendo-svg-icons";
 import { SvgIcon } from "@progress/kendo-react-common";
 
@@ -22,6 +23,7 @@ interface ProfileDropDownProps {
   onRegisterUser?: () => void; // Opzionale, solo per admin
   onRegeneratePdf?: () => void; // Opzionale, solo per admin - rigenerazione PDF
   onBulkSign?: () => void; // Firma massiva remota
+  onConfigureProviders?: () => void; // Configurazione provider firma - solo admin
   isAdmin?: boolean; // Flag per mostrare opzioni admin
 }
 
@@ -42,6 +44,7 @@ const ProfileDropDown: React.FC<ProfileDropDownProps> = ({
   onRegisterUser,
   onRegeneratePdf,
   onBulkSign,
+  onConfigureProviders,
   isAdmin = false,
 }) => {
   // Costruisco dinamicamente gli items in base a isAdmin
@@ -50,6 +53,7 @@ const ProfileDropDown: React.FC<ProfileDropDownProps> = ({
     ...(onBulkSign ? [{ id: "bulkSign", text: "Firma Massiva Remota", icon: pencilIcon }] : []),
     ...(isAdmin && onRegisterUser ? [{ id: "registerUser", text: "Registra Nuovo Utente", icon: userIcon }] : []),
     ...(isAdmin && onRegeneratePdf ? [{ id: "regeneratePdf", text: "Rigenera PDF Referti", icon: arrowRotateCwIcon }] : []),
+    ...(isAdmin && onConfigureProviders ? [{ id: "configureProviders", text: "Config. Provider Firma", icon: wrenchIcon }] : []),
     { id: "logout", text: "Logout", icon: logoutIcon },
     { id: "logoutAndExit", text: "Logout ed Esci", icon: xIcon },
   ];
@@ -63,6 +67,8 @@ const ProfileDropDown: React.FC<ProfileDropDownProps> = ({
       onRegisterUser();
     } else if (event.item?.id === "regeneratePdf" && onRegeneratePdf) {
       onRegeneratePdf();
+    } else if (event.item?.id === "configureProviders" && onConfigureProviders) {
+      onConfigureProviders();
     } else if (event.item?.id === "logout") {
       onLogout();
     } else if (event.item?.id === "logoutAndExit") {

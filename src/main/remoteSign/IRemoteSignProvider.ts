@@ -13,7 +13,9 @@
 export interface RemoteSignCredentials {
   /** Username o User ID del titolare del certificato */
   username: string;
-  /** PIN del certificato di firma */
+  /** Password di accesso al certificato (Namirial la richiede separata dal PIN) */
+  password?: string;
+  /** PIN del certificato di firma (per alcuni provider coincide con la password) */
   pin: string;
   /** One Time Password (richiesto solo per la prima autenticazione) */
   otp?: string;
@@ -164,13 +166,60 @@ export interface InfoCertProviderConfig extends ProviderConfig {
 }
 
 /**
- * Configurazione specifica Namirial
+ * Configurazione specifica Namirial SWS
+ *
+ * SWS supporta due modalità di deployment:
+ * - SaaS: richiede mTLS con certificato client (.p12)
+ * - On-Premises: connessione diretta HTTP/HTTPS senza mTLS
+ *
+ * Il certificato per SaaS viene fornito da Namirial in formato .p12 o .jks
  */
 export interface NamirialProviderConfig extends ProviderConfig {
-  /** API Key */
+  /** API Key (legacy, non usato per SWS SaaS) */
   apiKey?: string;
-  /** Organization ID */
+  /** Organization ID (legacy, non usato per SWS SaaS) */
   organizationId?: string;
+  /**
+   * Path al certificato client per mTLS (formato .p12 o .pfx)
+   * Richiesto per SWS SaaS, non usato per On-Premises
+   */
+  clientCertPath?: string;
+  /** Password del certificato client */
+  clientCertPassword?: string;
+  /** URL proxy (opzionale) */
+  proxyUrl?: string;
+  /** Se true, bypassa qualsiasi proxy di sistema */
+  noProxy?: boolean;
+
+  // ---- Supporto On-Premises ----
+
+  /**
+   * URL base del server SWS On-Premises (es. http://192.168.1.100:8080/SignEngineWeb)
+   * Se configurato, permette di scegliere tra SaaS e On-Premises
+   */
+  onPremiseBaseUrl?: string;
+  /**
+   * Se true, usa l'endpoint On-Premises invece di SaaS
+   * Default: false (usa SaaS)
+   */
+  useOnPremise?: boolean;
+}
+
+/**
+ * Configurazione specifica LAZIOcrea FirmaWeb
+ * Wrapper REST sopra Namirial SWS con autenticazione OAuth2
+ */
+export interface LAZIOcreaProviderConfig extends ProviderConfig {
+  /** Client ID per OAuth2 (obbligatorio) */
+  clientId: string;
+  /** Client Secret per OAuth2 (obbligatorio) */
+  clientSecret: string;
+  /** URL OAuth2 (default: https://qiam.regione.lazio.it/oauth2/token) */
+  oauthUrl?: string;
+  /** Scope OAuth2 (default: openid) */
+  scope?: string;
+  /** Ambiente: 'collaudo' | 'produzione' */
+  environment?: 'collaudo' | 'produzione';
 }
 
 /**

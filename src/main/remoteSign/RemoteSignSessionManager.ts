@@ -58,6 +58,8 @@ export interface CreateSessionOptions {
   maxSignatures?: number;
   /** Auto-refresh della sessione prima della scadenza */
   autoRefresh?: boolean;
+  /** Indica se è una firma automatica (senza OTP) */
+  isAutomatic?: boolean;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   ArubaProviderConfig,
   InfoCertProviderConfig,
   NamirialProviderConfig,
+  LAZIOcreaProviderConfig,
   OpenApiProviderConfig,
   RemoteSignError
 } from './IRemoteSignProvider';
@@ -35,6 +36,7 @@ export interface RemoteSignProvidersConfig {
   aruba?: ArubaProviderConfig & { enabled?: boolean };
   infocert?: InfoCertProviderConfig & { enabled?: boolean };
   namirial?: NamirialProviderConfig & { enabled?: boolean };
+  laziocrea?: LAZIOcreaProviderConfig & { enabled?: boolean };
   openapi?: OpenApiProviderConfig & { enabled?: boolean };
 }
 

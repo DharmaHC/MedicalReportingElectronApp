@@ -55,6 +55,19 @@ export const getApiBaseUrl = (): string => {
   return url_base;
 };
 
+// Funzione per ottenere l'URL base ORIGINALE (senza proxy)
+// Usare per le chiamate IPC al main process che non passano per il browser
+export const getOriginalApiBaseUrl = (): string => {
+  if (!original_url_base) {
+    throw new Error(
+      "⚠️ ERRORE CONFIGURAZIONE: URL API non configurato!\n" +
+      "Verifica che il file company-ui-settings.json contenga il campo 'apiBaseUrl'.\n" +
+      "Percorso: C:\\ProgramData\\MedReportAndSign\\config\\company-ui-settings.json"
+    );
+  }
+  return original_url_base;
+};
+
 // Helper per costruire URL in modo sicuro
 const buildUrl = (endpoint: string): string => {
   return getApiBaseUrl() + endpoint;
@@ -91,6 +104,12 @@ export const url_getPatientReportsNoPdf = (): string => buildUrl("ExamResults/Ge
 export const url_getPatientReport = (): string => buildUrl("ExamResults/GetPatientPdfResult");
 export const url_getPatientSignedReport = (): string => buildUrl("ExamResults/GetPatientSignedReport");
 export const url_DeletePatientPdfReport = (): string => buildUrl("ExamResults/DeletePatientPdfReport");
+
+// Firma Massiva Remota - nuove API
+export const url_getReportsToSign = (): string => buildUrl("ExamResults/GetReportsToSign");
+export const url_getUnsignedPdf = (id: string): string => buildUrl(`ExamResults/GetUnsignedPdf/${id}`);
+export const url_updateSignedReport = (): string => buildUrl("ExamResults/UpdateSignedReport");
+
 export const url_changePassword = (): string => buildUrl("Account/changePassword");
 export const url_passwordForgot = (): string => buildUrl("Account/forgotPasswordForm");
 export const url_registerUser = (): string => buildUrl("Account/register");
