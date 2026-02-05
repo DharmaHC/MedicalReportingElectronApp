@@ -172,39 +172,48 @@ const BulkSignModal: React.FC = () => {
     return () => clearInterval(interval);
   }, [session.active, selectedProviderId, dispatch]);
 
-  // Listener eventi IPC per progresso firma
+  // Listener eventi IPC per progresso firma (con cleanup esplicito per evitare memory leak)
   useEffect(() => {
     if (!isModalOpen) return;
 
     const remoteSign = (window as any).remoteSign;
     if (!remoteSign) return;
 
-    // Listener progresso
-    remoteSign.onProgress?.((progress: any) => {
+    // Rimuovi eventuali listener precedenti prima di registrarne di nuovi
+    remoteSign.removeAllListeners?.();
+
+    // Listener progresso - definito come funzione nominata per tracciabilità
+    const handleProgress = (progress: any) => {
       dispatch(updateSignProgress({
         completed: progress.completed || 0,
         failed: progress.failed || 0,
         currentPatient: progress.currentPatient || null
       }));
-    });
+    };
 
     // Listener singolo referto completato
-    remoteSign.onReportCompleted?.((result: any) => {
+    const handleReportCompleted = (result: any) => {
       dispatch(updateReportSignStatus({
         examinationId: result.examinationId,
         status: result.success ? 'signed' : 'error',
         errorMessage: result.error
       }));
-    });
+    };
 
     // Listener completamento batch
-    remoteSign.onCompleted?.((result: any) => {
+    const handleCompleted = (result: any) => {
       dispatch(finishSigning({
         successCount: result.successful || 0,
         failCount: result.failed || 0
       }));
-    });
+    };
 
+    // Registra i listener
+    remoteSign.onProgress?.(handleProgress);
+    remoteSign.onReportCompleted?.(handleReportCompleted);
+    remoteSign.onCompleted?.(handleCompleted);
+
+    // Cleanup: rimuovi tutti i listener quando il componente si smonta o isModalOpen cambia
     return () => {
       remoteSign.removeAllListeners?.();
     };

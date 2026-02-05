@@ -57,6 +57,7 @@ const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
 
   const editorBoxRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<any>(null);
+  const mutationObserverRef = useRef<MutationObserver | null>(null);
 
   const [useHighlight, setUseHighlight] = useState<boolean>(false);
   const [rowsPerPage, setReportrowsPerPage] = useState<number>(30);
@@ -133,30 +134,43 @@ const renderPageBreaks = useCallback(() => {
 
     renderPageBreaks();
 
-const observer = new MutationObserver((mutations) => {
-  const overlay = proseMirror.querySelector('.page-break-overlay-layer');
-  if (
-    mutations.some(m =>
-      (overlay && (m.target === overlay || overlay.contains(m.target as Node)))
-    )
-  ) {
-    return;
-  }
+    // Disconnetti l'observer precedente se esiste (evita memory leak da observer multipli)
+    if (mutationObserverRef.current) {
+      mutationObserverRef.current.disconnect();
+      mutationObserverRef.current = null;
+    }
 
-  renderPageBreaks();
-  if (useHighlight) {
-    // Evita loop disconnettendo temporaneamente l'observer
-    observer.disconnect();
-    highlightHashes();
-    // Ricollega l'observer
+    const observer = new MutationObserver((mutations) => {
+      const overlay = proseMirror.querySelector('.page-break-overlay-layer');
+      if (
+        mutations.some(m =>
+          (overlay && (m.target === overlay || overlay.contains(m.target as Node)))
+        )
+      ) {
+        return;
+      }
+
+      renderPageBreaks();
+      if (useHighlight) {
+        // Evita loop disconnettendo temporaneamente l'observer
+        observer.disconnect();
+        highlightHashes();
+        // Ricollega l'observer
+        observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
+      }
+    });
+
+    // Salva il riferimento per cleanup
+    mutationObserverRef.current = observer;
     observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
-  }
-});
 
     window.addEventListener('resize', renderPageBreaks);
 
     return () => {
-      observer.disconnect();
+      if (mutationObserverRef.current) {
+        mutationObserverRef.current.disconnect();
+        mutationObserverRef.current = null;
+      }
       window.removeEventListener('resize', renderPageBreaks);
       let overlay = proseMirror.querySelector('.page-break-overlay-layer') as HTMLElement | null;
       if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
