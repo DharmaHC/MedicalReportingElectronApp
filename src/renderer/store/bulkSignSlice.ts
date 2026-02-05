@@ -23,7 +23,7 @@ export interface SignProvider {
 }
 
 /**
- * Referto da firmare (proveniente da DigitalSignedReports con ExaminationState=7)
+ * Referto (proveniente da DigitalSignedReports)
  */
 export interface ReportToSign {
   /** GUID del record in DigitalSignedReports */
@@ -48,9 +48,11 @@ export interface ReportToSign {
   doctorDisplayName: string;
   /** ID azienda per footer */
   companyId: string;
+  /** Stato del referto nel DB: 6=Bozza, 7=Da Firmare, 8=Firmato */
+  examinationState: number;
   /** Se selezionato per firma */
   selected: boolean;
-  /** Stato firma */
+  /** Stato firma (UI) */
   signStatus: 'pending' | 'signing' | 'signed' | 'error';
   /** Messaggio errore */
   errorMessage?: string;
@@ -84,7 +86,7 @@ export interface ReportFilters {
   dateFrom: string | null;
   dateTo: string | null;
   patientName: string;
-  status: 'all' | 'draft' | 'toSign';
+  status: 'all' | 'draft' | 'toSign' | 'signed';
 }
 
 /**
@@ -179,12 +181,12 @@ export const fetchReportsToSign = createAsyncThunk<
     try {
       const { filters } = getState().bulkSign;
 
-      // Date di default: ultimo mese se non specificate
+      // Date di default: ultimi 15 giorni se non specificate
       const today = new Date();
-      const oneMonthAgo = new Date(today);
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      const fifteenDaysAgo = new Date(today);
+      fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-      const fromDate = filters.dateFrom || oneMonthAgo.toISOString().split('T')[0];
+      const fromDate = filters.dateFrom || fifteenDaysAgo.toISOString().split('T')[0];
       const toDate = filters.dateTo || today.toISOString().split('T')[0];
 
       // Costruisci query params per GetReportsToSign
@@ -198,6 +200,26 @@ export const fetchReportsToSign = createAsyncThunk<
         if (parts.length > 0) params.append('lastName', parts[0]);
         if (parts.length > 1) params.append('firstName', parts.slice(1).join(' '));
       }
+
+      // Determina gli stati da includere in base al filtro
+      // Stati: 6=Bozza, 7=Da Firmare, 8=Firmato
+      let states: number[];
+      switch (filters.status) {
+        case 'draft':
+          states = [6];
+          break;
+        case 'toSign':
+          states = [7];
+          break;
+        case 'signed':
+          states = [8];
+          break;
+        case 'all':
+        default:
+          states = [6, 7, 8];  // Include anche i firmati
+          break;
+      }
+      params.append('states', states.join(','));
 
       const url = `${url_getReportsToSign()}?${params.toString()}`;
 
@@ -247,6 +269,7 @@ export const fetchReportsToSign = createAsyncThunk<
           doctorCode: r.doctorCode || '',
           doctorDisplayName: r.doctorDisplayName || r.doctorCode || '',
           companyId: r.companyWebSite || 'ASTER',
+          examinationState: r.examinationState || 7,
           selected: false,
           signStatus: 'pending' as const,
           errorMessage: undefined

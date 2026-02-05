@@ -54,8 +54,20 @@ import './BulkSignModal.css';
 const STATUS_OPTIONS = [
   { text: 'Tutti', value: 'all' },
   { text: 'Bozze', value: 'draft' },
-  { text: 'Da Firmare', value: 'toSign' }
+  { text: 'Da Firmare', value: 'toSign' },
+  { text: 'Firmati', value: 'signed' }
 ];
+
+// Funzione per ottenere date di default (ultimi 15 giorni)
+const getDefaultDateRange = () => {
+  const today = new Date();
+  const fifteenDaysAgo = new Date(today);
+  fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+  return {
+    dateFrom: fifteenDaysAgo.toISOString().split('T')[0],
+    dateTo: today.toISOString().split('T')[0]
+  };
+};
 
 /**
  * Componente principale della modale firma massiva
@@ -119,6 +131,14 @@ const BulkSignModal: React.FC = () => {
       dispatch(fetchAvailableProviders());
     }
   }, [isModalOpen, availableProviders.length, dispatch]);
+
+  // Imposta date di default (ultimi 15 giorni) quando la modal si apre per la prima volta
+  useEffect(() => {
+    if (isModalOpen && !filters.dateFrom && !filters.dateTo) {
+      const { dateFrom, dateTo } = getDefaultDateRange();
+      dispatch(setFilters({ dateFrom, dateTo }));
+    }
+  }, [isModalOpen, filters.dateFrom, filters.dateTo, dispatch]);
 
   // Carica referti quando cambia filtro o modal si apre
   useEffect(() => {
@@ -563,6 +583,37 @@ const BulkSignModal: React.FC = () => {
     );
   }, []);
 
+  // Stato referto nel DB (6=Bozza, 7=Da Firmare, 8=Firmato)
+  const StateCell = useCallback((props: GridCellProps) => {
+    const item = props.dataItem as ReportToSign;
+
+    let text = '';
+    let className = 'examination-state';
+
+    switch (item.examinationState) {
+      case 6:
+        text = 'Bozza';
+        className += ' state-draft';
+        break;
+      case 7:
+        text = 'Da Firmare';
+        className += ' state-to-sign';
+        break;
+      case 8:
+        text = 'Firmato';
+        className += ' state-signed';
+        break;
+      default:
+        text = `Stato ${item.examinationState}`;
+    }
+
+    return (
+      <td>
+        <span className={className}>{text}</span>
+      </td>
+    );
+  }, []);
+
   // =========================================================================
   // RENDER
   // =========================================================================
@@ -713,6 +764,12 @@ const BulkSignModal: React.FC = () => {
                 title="Data Salvataggio"
                 width={130}
                 cell={DateCell}
+              />
+              <GridColumn
+                field="examinationState"
+                title="Stato"
+                width={100}
+                cell={StateCell}
               />
               <GridColumn
                 field="doctorDisplayName"

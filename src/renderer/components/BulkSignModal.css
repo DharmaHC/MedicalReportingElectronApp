@@ -195,6 +195,30 @@
   cursor: help;
 }
 
+/* Stato referto nel DB (Bozza/Da Firmare/Firmato) */
+.examination-state {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.examination-state.state-draft {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.examination-state.state-to-sign {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.examination-state.state-signed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
 /* Barra selezione */
 .bulk-sign-selection-bar {
   display: flex;
