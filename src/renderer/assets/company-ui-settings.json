@@ -1,5 +1,5 @@
 {
-  "apiBaseUrl": "https://medicalreportingapi.asterdiagnostica.it/api/",
+  "apiBaseUrl": "https://medicalreportingapitest.asterdiagnostica.it/api/",
   "header": {
     "logo": {
       "url": "https://www.asterdiagnostica.it/images/logo.png",

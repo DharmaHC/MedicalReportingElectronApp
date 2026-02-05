@@ -6,6 +6,32 @@
 Var InstallationType
 
 !macro preInit
+  ; Forza chiusura MedReport se in esecuzione (workaround bug NSIS detection)
+  nsExec::ExecToStack 'taskkill /F /IM "MedReport.exe" /T'
+  Pop $0 ; exit code
+  Pop $1 ; output
+
+  ; Pulisce chiavi registro residue che impediscono reinstallazione
+  ; HKEY_CURRENT_USER
+  DeleteRegKey HKCU "Software\MedReport"
+  DeleteRegKey HKCU "Software\medreportandsign"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
+
+  ; HKEY_LOCAL_MACHINE (richiede admin, fallisce silenziosamente se non admin)
+  DeleteRegKey HKLM "SOFTWARE\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\medreportandsign"
+  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
+
+  ; Windows 7 / 64-bit (Wow6432Node per app 32-bit su OS 64-bit)
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\medreportandsign"
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
+  DeleteRegKey HKCU "Software\Wow6432Node\MedReport"
+  DeleteRegKey HKCU "Software\Wow6432Node\medreportandsign"
+
   StrCpy $InstallationType "standard"
 !macroend
 

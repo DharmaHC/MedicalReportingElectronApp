@@ -277,6 +277,22 @@ const logToFile = (msg: string, details?: any) => {
   
   const pinDialogResolver = useRef<((value: string | null) => void) | null>(null);
 
+  // Refs per cleanup dei Blob URL (evita memory leak)
+  const pdfUrlRef = useRef<string | null>(null);
+  const cachedPdfBlobUrlRef = useRef<string | null>(null);
+
+  // Cleanup dei Blob URL quando il componente viene smontato
+  useEffect(() => {
+    return () => {
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+      }
+      if (cachedPdfBlobUrlRef.current) {
+        URL.revokeObjectURL(cachedPdfBlobUrlRef.current);
+      }
+    };
+  }, []);
+
   // Recupera in modo sicuro il PIN dell'utente per la firma digitale.
   async function getSessionPin(): Promise<string | null> {
     // ⚠️ BYPASS TEMPORANEO - Salta il controllo PIN ⚠️
@@ -966,7 +982,14 @@ const renderPinDialog = () =>
               rtfContent: responseRtfContent, // RTF dalla risposta.
               pdfContent: pdfContent,         // PDF Base64 dalla risposta.
             };
-            setCachedReportData(newReportData); // Aggiorna la cache.
+            // Revoca il vecchio blob URL prima di aggiornare la cache (evita memory leak)
+            setCachedReportData(prevData => {
+              if (prevData?.pdfBlobUrl) {
+                URL.revokeObjectURL(prevData.pdfBlobUrl);
+              }
+              return newReportData;
+            });
+            cachedPdfBlobUrlRef.current = pdfBlobUrl; // Aggiorna il ref per cleanup on unmount
             setIsModified(false); // Resetta il flag di modifica dopo la generazione.
             return newReportData;
           } else {
@@ -992,9 +1015,14 @@ const renderPinDialog = () =>
   const previewPDF = async () => {
     const reportData = await generateReportData(false, false); // Genera i dati (non per store, non per firma).
     if (reportData?.pdfContent) {
+      // Revoca il vecchio blob URL prima di crearne uno nuovo (evita memory leak)
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+      }
       const pdfBlob = base64ToBlob(reportData.pdfContent, "application/pdf");
       const pdfBlobUrl = URL.createObjectURL(pdfBlob);
- 
+      pdfUrlRef.current = pdfBlobUrl; // Aggiorna il ref per cleanup
+
       const isDebug = window.location.href.startsWith("http://localhost");
       if (isDebug) {
           console.log("DEBUG MODE: delay preview render di 600ms");
@@ -2046,6 +2074,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     if (pdfUrl) {
       URL.revokeObjectURL(pdfUrl);
     }
+    pdfUrlRef.current = null; // Aggiorna il ref
     setPdfUrl(null);
   };
 
@@ -2540,7 +2569,7 @@ const handleResultClick = async (result: any) => {
       )}
 
       {/* Componente per l'Anteprima del PDF */}
-      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={() => setPdfUrl(null)} />}
+      {pdfUrl && <PdfPreview pdfUrl={pdfUrl} onClose={handleClosePdfPreview} />}
 
 
       {/* Modale per la Visualizzazione dei Referti Precedenti */}

@@ -582,6 +582,12 @@ export function registerRemoteSignIpcHandlers(): void {
 
         log.info(`[RemoteSign] PDF firmato salvato con successo`);
 
+        // Cleanup esplicito delle stringhe base64 per favorire il garbage collection (evita memory leak)
+        // @ts-ignore - assegnazione a null intenzionale per rilascio memoria
+        pdfBase64 = null;
+        // @ts-ignore
+        saveBody.signedPdfBase64 = null;
+
         completed++;
 
         // Notifica singolo referto completato
