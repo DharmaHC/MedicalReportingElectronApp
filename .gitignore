@@ -97,3 +97,18 @@ out/
 .claude/
 .vscode/
 ~$*.docx
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Visual Studio
+**/.vs/
+
+# Windows artifacts
+Thumbs.db
+nul
+
+# Temp files
+console.txt
+assets_backup_temp6/

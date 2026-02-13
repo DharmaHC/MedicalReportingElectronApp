@@ -75,7 +75,7 @@ const renderPageBreaks = useCallback(() => {
   const editorBox = editorBoxRef.current;
   if (!editorBox) return;
 
-      editorBox.style.height = '76%';
+      editorBox.style.height = '100%';
 
       const content = editorBox.querySelector('.k-editor-content') as HTMLElement | null;
   if (!content) return;

@@ -17,6 +17,12 @@ import {
   cleanupRemoteSign
 } from './remoteSign/remoteSignIpcHandlers';
 import { registerRemoteSignAdminHandlers } from './remoteSign/remoteSignAdminIpcHandlers';
+import { registerSpeechToTextIpcHandlers } from './speechToText/speechToTextIpcHandlers';
+import { registerWpfEditorIpcHandlers, stopWpfEditor } from './wpfEditor';
+
+// Disabilita accelerazione hardware GPU per permettere alle finestre WPF child
+// (embedded via SetParent/WS_CHILD) di renderizzare sopra il contenuto Chromium
+app.disableHardwareAcceleration();
 
 // Inserisci il path corretto di SumatraPDF.exe
 const SUMATRA_PATH = 'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe'; // <-- Cambia qui!
@@ -73,7 +79,12 @@ const DEFAULT_SETTINGS: Settings = {
   useMRAS: true,
   showAppMenu: false,
   signatureTextLine1: "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
-  signatureTextLine2: "{signedBy} in data: {date}"
+  signatureTextLine2: "{signedBy} in data: {date}",
+  speechToText: {
+    enabled: false,
+    model: 'ggml-small.bin',
+    language: 'it'
+  }
 };
 
 /**
@@ -780,6 +791,21 @@ app.whenReady().then(() => {
     log.error('[Main] ERRORE in registerRemoteSignAdminHandlers:', err.message, err.stack);
   }
 
+  // Registra gli handler speech-to-text (dettatura vocale locale)
+  try {
+    registerSpeechToTextIpcHandlers();
+  } catch (err: any) {
+    log.error('[Main] ERRORE registrazione speech-to-text:', err.message, err.stack);
+  }
+
+  // Registra gli handler per l'editor WPF RadRichTextBox
+  try {
+    registerWpfEditorIpcHandlers();
+    log.info('[Main] WPF Editor IPC handlers registrati');
+  } catch (err: any) {
+    log.error('[Main] ERRORE registrazione WPF Editor:', err.message, err.stack);
+  }
+
   createWindow();
   setupAutoUpdater();
 });
@@ -788,6 +814,8 @@ app.whenReady().then(() => {
 app.on('before-quit', async () => {
   // Cleanup delle sessioni di firma remota
   await cleanupRemoteSign();
+  // Termina il processo WPF editor
+  stopWpfEditor();
 });
 
 app.on('window-all-closed', () => {

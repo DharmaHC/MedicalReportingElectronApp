@@ -1,0 +1,37 @@
+{
+  "apiBaseUrl": "https://medicalreportingapi.asterdiagnostica.it/api/",
+  "header": {
+    "logo": {
+      "url": "https://www.asterdiagnostica.it/images/logo.png",
+      "link": "http://www.asterdiagnostica.it/",
+      "alt": "Logo Aster"
+    },
+    "title": {
+      "text": "Refertazione Medica",
+      "color": "rgb(34, 154, 97)",
+      "fontSize": "30px"
+    }
+  },
+  "footer": {
+    "copyright": "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+    "poweredBy": {
+      "text": "Powered by",
+      "link": "https://www.dharmahealthcare.net",
+      "name": "Dharma Healthcare"
+    }
+  },
+  "emergencyWorkaround": {
+    "enabled": false,
+    "bypassPin": false,
+    "bypassSignature": false,
+    "overrideDoctorName": null,
+    "notes": "⚠️ WORKAROUND EMERGENZA - Attivare SOLO per recupero referti corrotti. DISATTIVARE immediatamente dopo l'uso!"
+  },
+  "logipacsServer": {
+    "baseUrl": "http://172.16.18.52/LPW/Display",
+    "username": "radiologia",
+    "password": "radiologia"
+  },
+  "useExternalIdSystem": false,
+  "dicomImageSystemName": "RemoteEye"
+}

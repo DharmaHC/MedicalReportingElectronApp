@@ -95,8 +95,10 @@ export const url_singleReport_Word = (): string => buildUrl("ExamResults/GetSing
 export const url_singleReportHTML = (): string => buildUrl("ExamResults/GetSingleReportTemplateHTML");
 export const url_GetPatientRTFHtmlResult = (): string => buildUrl("ExamResults/GetPatientRtfHtmlResult");
 export const url_send_singleReportHTML = (): string => buildUrl("ExamResults/SendReportResultHTML");
+export const url_send_singleReportHTML_v2 = (): string => buildUrl("ExamResults/SendReportResultHTMLv2");
 export const url_linkedReportTemplatesHTML = (): string => buildUrl("ExamResults/GetLinkedReportTemplatesHTML");
 export const url_processReport = (): string => buildUrl("ExamResults/ProcessRtfAndPdfReport");
+export const url_getCompiledRtfTemplate = (): string => buildUrl("ExamResults/GetCompiledRtfTemplate");
 export const url_getPredefinedTexts = (): string => buildUrl("Doctors/getPredefinedTexts");
 export const url_insertPdfAttachment = (): string => buildUrl("ExamResults/InsertPdfAttachment");
 export const url_getPatientReports = (): string => buildUrl("ExamResults/GetPatientReports"); // retro compatibilità

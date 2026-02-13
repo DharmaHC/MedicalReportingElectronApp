@@ -60,6 +60,11 @@
       {
         "from": "src/renderer/assets/",
         "to": "assets"
+      },
+      {
+        "from": "whisper-bin/",
+        "to": "whisper",
+        "filter": ["**/*"]
       }
     ],
     "asar": true,

@@ -592,7 +592,7 @@ const BulkSignModal: React.FC = () => {
     );
   }, []);
 
-  // Stato referto nel DB (6=Bozza, 7=Da Firmare, 8=Firmato)
+  // Stato referto nel DB: 2=Bozza, 5=Firmato, 7=Da Firmare
   const StateCell = useCallback((props: GridCellProps) => {
     const item = props.dataItem as ReportToSign;
 
@@ -600,7 +600,7 @@ const BulkSignModal: React.FC = () => {
     let className = 'examination-state';
 
     switch (item.examinationState) {
-      case 6:
+      case 2:
         text = 'Bozza';
         className += ' state-draft';
         break;
@@ -608,7 +608,7 @@ const BulkSignModal: React.FC = () => {
         text = 'Da Firmare';
         className += ' state-to-sign';
         break;
-      case 8:
+      case 5:
         text = 'Firmato';
         className += ' state-signed';
         break;

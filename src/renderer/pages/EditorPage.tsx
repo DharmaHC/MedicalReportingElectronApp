@@ -12,7 +12,6 @@ import { TextSelection, Plugin } from "prosemirror-state";
 import { Button } from "@progress/kendo-react-buttons";
 import { PDFDocument, rgb } from "pdf-lib";
 import {
-  volumeUpIcon,
   cancelIcon,
   imageIcon,
   eyeIcon,
@@ -25,13 +24,16 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ListView } from "@progress/kendo-react-listview";
 import labels from "../utility/label";
+import InlineDictationButton from "../components/InlineDictationButton";
 import "./EditorPage.css";
 import {
   url_send_singleReportHTML,
+  url_send_singleReportHTML_v2,
   url_processReport,
   url_getPredefinedTexts,
   url_getPatientReportsNoPdf,
-  url_getPatientSignedReport
+  url_getPatientSignedReport,
+  url_getCompiledRtfTemplate
 } from "../utility/urlLib";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { RootState } from "../store";
@@ -128,6 +130,11 @@ function EditorPage() {
 
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(true);
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
+  const [useV2Assembly, setUseV2Assembly] = useState<boolean>(true);
+  const [useWpfEditor, setUseWpfEditor] = useState<boolean>(false);
+  const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
+  const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
+  const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
 
   const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
   const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
@@ -184,6 +191,7 @@ const logToFile = (msg: string, details?: any) => {
         setreportPageWidth(settings.reportPageWidth ?? 25);
         setreportPageHeight(settings.reportPageHeight ?? 1.5);
         setBlankFooterHeight(settings.blankFooterHeight ?? 30);
+        setSpeechToTextEnabled(settings.speechToText?.enabled ?? false);
       });
     }, []);
 
@@ -411,6 +419,8 @@ const renderPinDialog = () =>
   // Stati del componente
   const [isDialogVisible, setIsDialogVisible] = useState(false); // Controlla la visibilità del dialogo per la dettatura.
   const [dictationText, setDictationText] = useState(""); // Testo inserito nel dialogo di dettatura.
+  const [speechToTextEnabled, setSpeechToTextEnabled] = useState(false); // Feature toggle dettatura vocale Whisper
+  const [isDictationModalOpen, setIsDictationModalOpen] = useState(false); // Dettatura con revisione (InlineDictationButton)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null); // URL del Blob PDF per il componente PdfPreview.
   // const [rtfContent, setRtfContent] = useState<string | null>(null); // Rimosso: Lo stato RTF non era utilizzato, gestito tramite cachedReportData.
   const [errorMessage, setErrorMessage] = useState<string | null>(null); // Messaggio di errore da visualizzare all'utente.
@@ -431,27 +441,63 @@ const renderPinDialog = () =>
     (state: RootState) => state.auth.printReportWhenFinished // Preferenza utente per stampare il referto dopo la finalizzazione.
   );
 
-  // Plugin Prosemirror per applicare stili fissi ai paragrafi nell'editor.
-  // Forza font, dimensione e margini per garantire uniformità.
+  // Plugin Prosemirror per applicare stili ai paragrafi nell'editor.
+  // - Forza solo font-family e spaziatura verticale
+  // - Preserva font-size e text-align originali dal template
+  // - Rimuove margin-left negativi (non hanno senso nell'editor senza section margins RTF)
+  // Il backend v2 riapplica l'indentazione dal template in fase di assemblaggio.
   const paragraphStylerPlugin = new Plugin({
     appendTransaction(transactions, oldState, newState) {
       const docChanged = transactions.some(tr => tr.docChanged);
       if (!docChanged) {
-        return null; // Nessuna modifica al documento, non fare nulla.
+        return null;
       }
-      const tr = newState.tr; // Inizia una nuova transazione basata sul nuovo stato.
+      const tr = newState.tr;
       let somethingChanged = false;
       newState.doc.descendants((node, pos) => {
-        if (node.type.name === "paragraph") { // Applica solo ai nodi di tipo paragrafo.
-          const newStyle = 'font-family: "Times New Roman"; font-size: 16px; margin-top:0px; margin-bottom:0px; line-height:100%;';
-          tr.setNodeMarkup(pos, undefined, { // Imposta gli attributi del nodo (sovrascrive lo stile esistente).
-            ...node.attrs,
-            style: newStyle
-          });
-          somethingChanged = true;
+        if (node.type.name === "paragraph") {
+          const currentStyle: string = node.attrs?.style || "";
+          // Preserva font-size originale dal template (se presente)
+          const fontSizeMatch = currentStyle.match(/font-size:\s*[\d.]+px/);
+          // Preserva text-align (justify, center, right)
+          const textAlignMatch = currentStyle.match(/text-align:\s*\w+/);
+
+          const parts = [
+            'font-family: "Times New Roman"',
+            fontSizeMatch ? fontSizeMatch[0] : 'font-size: 16px',
+            'margin-top: 0px',
+            'margin-bottom: 0px',
+            'line-height: 100%'
+          ];
+          if (textAlignMatch) parts.push(textAlignMatch[0]);
+          const newStyle = parts.join("; ") + ";";
+
+          if (currentStyle !== newStyle) {
+            tr.setNodeMarkup(pos, undefined, {
+              ...node.attrs,
+              style: newStyle
+            });
+            somethingChanged = true;
+          }
+        }
+        // Rimuovi margin-left negativo dalle tabelle (non ha senso nell'editor senza section margins)
+        if (node.type.name === "table" && node.attrs?.style) {
+          const currentStyle: string = node.attrs.style;
+          if (currentStyle.includes("margin-left")) {
+            const cleanedStyle = currentStyle
+              .replace(/margin-left:\s*-[\d.]+px;?\s*/g, "")
+              .trim();
+            if (cleanedStyle !== currentStyle) {
+              tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                style: cleanedStyle || undefined
+              });
+              somethingChanged = true;
+            }
+          }
         }
       });
-      return somethingChanged ? tr : null; // Restituisce la transazione se sono state apportate modifiche.
+      return somethingChanged ? tr : null;
     }
   });
 
@@ -590,8 +636,14 @@ const renderPinDialog = () =>
     handlePhraseClick(item.text);
   };
 
-  // Inserisce la frase selezionata nell'editor.
+  // Inserisce la frase selezionata nell'editor (ProseMirror o WPF).
   const handlePhraseClick = (phrase: string) => {
+    // Se il WPF editor è attivo, inserisci lì
+    if (useWpfEditor && wpfEditorReady) {
+      window.wpfEditor.insertText(phrase).catch(console.error);
+      return;
+    }
+
     if (!editorRef.current?.view) return;
     const view = editorRef.current.view;
     view.focus();
@@ -949,10 +1001,14 @@ const renderPinDialog = () =>
         examResultId: exam.examResultId,
       }));
 
+      const reportUrl = useV2Assembly
+        ? url_send_singleReportHTML_v2()
+        : url_send_singleReportHTML();
+
       try {
         // Chiamata API per inviare l'HTML e ricevere PDF/RTF.
         const response = await fetch(
-          `${url_send_singleReportHTML()}?${queryParams.toString()}`,
+          `${reportUrl}?${queryParams.toString()}`,
           {
             method: "POST",
             headers: {
@@ -1035,6 +1091,189 @@ const renderPinDialog = () =>
       setErrorMessage("Impossibile generare l'anteprima del PDF.");
     }
   };
+
+  // Rigenera l'anteprima automaticamente quando si cambia il toggle v1/v2
+  const v2InitialRender = useRef(true);
+  useEffect(() => {
+    if (v2InitialRender.current) {
+      v2InitialRender.current = false;
+      return;
+    }
+    // Rigenera solo se c'e' gia' un'anteprima attiva
+    if (pdfUrl) {
+      previewPDF();
+    }
+  }, [useV2Assembly]);
+
+  // === WPF Editor: avvio processo e caricamento RTF ===
+  useEffect(() => {
+    if (!useWpfEditor) {
+      // Se disabilitato, ferma il processo WPF
+      if (wpfEditorReady) {
+        window.wpfEditor?.stop().catch(console.error);
+        setWpfEditorReady(false);
+        setWpfEditorStatus("");
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const startWpf = async () => {
+      try {
+        setWpfEditorStatus("Avvio editor WPF...");
+
+        // 1. Avvia il processo WPF (attende READY)
+        await window.wpfEditor.start();
+        if (cancelled) return;
+
+        // 1b. Incorpora la finestra WPF come figlia della finestra Electron
+        await window.wpfEditor.setParent();
+        if (cancelled) return;
+
+        setWpfEditorStatus("Processo WPF avviato, caricamento RTF...");
+
+        // 2. Fetch del template RTF compilato dal backend
+        const deduplicatedMoreExams = selectedMoreExams.filter(
+          (exam, index, array) =>
+            array.findIndex(
+              (e) =>
+                e.examId === exam.examId &&
+                e.examVersion === exam.examVersion &&
+                e.subExamId === exam.subExamId &&
+                e.examResultId === exam.examResultId
+            ) === index
+        );
+
+        const queryParams = new URLSearchParams({
+          doctorCode: doctorCode?.trim() ?? "",
+          examinationId: selectedExaminationId || "",
+        });
+
+        const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
+          examId: exam.examId,
+          examVersion: exam.examVersion,
+          subExamId: exam.subExamId,
+          examResultId: exam.examResultId,
+        }));
+
+        const response = await fetch(
+          `${url_getCompiledRtfTemplate()}?${queryParams.toString()}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(linkedResultsList),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Errore API: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        // 3. Carica RTF nel processo WPF
+        await window.wpfEditor.loadRtf(data.rtfContent);
+        if (cancelled) return;
+
+        // 4. Posiziona e mostra la finestra WPF nell'area dell'editor
+        // Child window: coordinate relative alla client area della BrowserWindow (physical pixels)
+        const editorArea = wpfEditorAreaRef.current;
+        if (editorArea) {
+          const rect = editorArea.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+          await window.wpfEditor.setBounds({
+            x: Math.round(rect.left * dpr),
+            y: Math.round(rect.top * dpr),
+            width: Math.round(rect.width * dpr),
+            height: Math.round(rect.height * dpr),
+          });
+        }
+        await window.wpfEditor.show();
+        if (cancelled) return;
+
+        setWpfEditorReady(true);
+        setWpfEditorStatus("Editor WPF attivo");
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error("[WPF Editor] Errore avvio:", err);
+          setWpfEditorStatus(`Errore: ${err.message}`);
+          setWpfEditorReady(false);
+        }
+      }
+    };
+
+    startWpf();
+
+    return () => {
+      cancelled = true;
+      window.wpfEditor?.hide().catch(console.error);
+    };
+  }, [useWpfEditor]);
+
+  // WPF: override previewPDF per usare il PDF esportato dal WPF editor
+  const previewPdfWpf = async () => {
+    if (!wpfEditorReady) return;
+    try {
+      setWpfEditorStatus("Generazione anteprima PDF da WPF...");
+      const pdfBase64 = await window.wpfEditor.getPdf();
+      const pdfBlob = new Blob(
+        [Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))],
+        { type: "application/pdf" }
+      );
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      // Nascondi WPF prima di mostrare l'anteprima (il PDF overlay finisce sotto il WPF child window)
+      await window.wpfEditor.hide();
+      setPdfUrl(blobUrl);
+      setWpfEditorStatus("Editor WPF attivo - anteprima generata");
+    } catch (err: any) {
+      console.error("[WPF Editor] Errore generazione PDF:", err);
+      setWpfEditorStatus(`Errore PDF: ${err.message}`);
+    }
+  };
+
+  // WPF: nascondi/mostra l'editor quando si aprono/chiudono modali o anteprima
+  // (Win32 child windows renderizzano sempre sopra il contenuto Chromium)
+  useEffect(() => {
+    if (!useWpfEditor || !wpfEditorReady) return;
+    const anyModalOpen = !!pdfUrl || isModalVisible || isCancelDialogVisible || isProcessing || isDialogVisible || isDictationModalOpen;
+    if (anyModalOpen) {
+      window.wpfEditor?.hide().catch(console.error);
+    } else {
+      window.wpfEditor?.show().catch(console.error);
+    }
+  }, [useWpfEditor, wpfEditorReady, pdfUrl, isModalVisible, isCancelDialogVisible, isProcessing, isDialogVisible, isDictationModalOpen]);
+
+  // WPF: sincronizza i bounds quando la finestra viene ridimensionata
+  useEffect(() => {
+    if (!useWpfEditor || !wpfEditorReady) return;
+    const el = wpfEditorAreaRef.current;
+    if (!el) return;
+
+    const updateBounds = () => {
+      const rect = el.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      window.wpfEditor?.setBounds({
+        x: Math.round(rect.left * dpr),
+        y: Math.round(rect.top * dpr),
+        width: Math.round(rect.width * dpr),
+        height: Math.round(rect.height * dpr),
+      }).catch(console.error);
+    };
+
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(el);
+    window.addEventListener('resize', updateBounds);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateBounds);
+    };
+  }, [useWpfEditor, wpfEditorReady]);
 
   // Tipi per la gestione del viewer RemotEye.
   type ViewerMode = "openOnly" | "clearAndLoad" | "add" | "exit";
@@ -1659,8 +1898,8 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     const embeddedPage = await pdfDoc.embedPage(oldPage);
 
     newPage.drawPage(embeddedPage, {
-      x: 0,
-      y: 65
+      x: marginLeft,
+      y: marginTop > 0 ? marginTop : 65
     });
 
     // 8. Rimuovi la vecchia pagina (ora si trova a i+1)
@@ -2078,27 +2317,23 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     setPdfUrl(null);
   };
 
-  // Apre il dialogo per la dettatura.
-  const handleDictationClick = () => {
-    setIsDialogVisible(true);
-  };
-
-  // Chiude il dialogo per la dettatura.
+  // Chiude il dialogo per la dettatura legacy.
   const handleCloseDialog = () => {
     setIsDialogVisible(false);
   };
 
-  // Salva il testo dal dialogo di dettatura inserendolo nell'editor.
+  // Salva il testo dal dialogo di dettatura legacy inserendolo nell'editor.
   const handleSave = () => {
-    if (editorRef.current && editorRef.current.view) {
+    if (useWpfEditor && wpfEditorReady) {
+      window.wpfEditor.insertText(dictationText).catch(console.error);
+    } else if (editorRef.current && editorRef.current.view) {
       editorRef.current.view.focus();
       editorRef.current.view.dispatch(
         editorRef.current.view.state.tr.insertText(dictationText)
       );
-      // setIsModified sarà gestito dal plugin.
     }
     setIsDialogVisible(false);
-    setDictationText(""); // Pulisce il campo di testo della dettatura.
+    setDictationText("");
   };
 
   // Funzione per renderizzare un item nella ListView dei referti precedenti.
@@ -2353,9 +2588,39 @@ const handleResultClick = async (result: any) => {
                 </div>
               </div>
             )}
+          {/* Barra stato editor WPF */}
+          {useWpfEditor && (
+            <div style={{
+              padding: "8px 12px",
+              backgroundColor: wpfEditorReady ? "#e8f5e9" : "#fff3e0",
+              borderBottom: "1px solid #ccc",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: "50%",
+                backgroundColor: wpfEditorReady ? "#4caf50" : "#ff9800",
+                display: "inline-block"
+              }} />
+              <span>{wpfEditorStatus}</span>
+            </div>
+          )}
+          {/* Area editor: il div con ref serve per posizionare il WPF child window */}
+          <div ref={wpfEditorAreaRef} style={{ flex: 1, minHeight: 0, position: "relative" }}>
+          <div style={useWpfEditor ? { visibility: "hidden", height: "100%" } : { height: "100%" }}>
           <CustomEditor
             ref={editorRef}
-            defaultContent={location.state?.htmlContent || "<p></p><p></p><p></p>"}
+            defaultContent={(() => {
+              const raw = location.state?.htmlContent || "<p></p><p></p><p></p>";
+              // Rimuovi margin-left negativo dalle tabelle (non ha senso nell'editor senza section margins RTF).
+              // Il plugin lo fa sui docChanged, ma il defaultContent non genera docChanged al mount.
+              return raw.replace(/<table([^>]*?)style="([^"]*?)"/gi, (_match: string, before: string, style: string) => {
+                const cleaned = style.replace(/margin-left:\s*-[\d.]+px;?\s*/g, "").trim();
+                return `<table${before}style="${cleaned}"`;
+              });
+            })()}
             onMount={handleEditorMount}
             onPasteHtml={handlePasteHtml}
             onChange={(e) => setIsModified(true)}
@@ -2372,20 +2637,22 @@ const handleResultClick = async (result: any) => {
               [OrderedList, UnorderedList],
               [Undo, Redo], [ViewHtml],
             ]}
-																
+
           />
+          </div>
+          </div>
           {/* Area Pulsanti Azione */}
           <div className="borderedbottom-div">
 
             <div>		 
-              <Button
-                svgIcon={volumeUpIcon}
-                onClick={handleDictationClick}
-                style={{ display: "none" }}
-                title="Avvia Dettatura Vocale"
-              >
-                Dettatura
-              </Button>
+              <InlineDictationButton
+                editorRef={editorRef}
+                enabled={speechToTextEnabled}
+                onInsertText={useWpfEditor && wpfEditorReady
+                  ? (text: string) => window.wpfEditor.insertText(text).catch(console.error)
+                  : undefined}
+                onDictationModalChange={setIsDictationModalOpen}
+              />
               <Button
                 svgIcon={imageIcon}
                 onClick={openCurrentStudy}
@@ -2404,7 +2671,7 @@ const handleResultClick = async (result: any) => {
               </Button>
               <Button
                 svgIcon={eyeIcon}
-                onClick={previewPDF}
+                onClick={useWpfEditor && wpfEditorReady ? previewPdfWpf : previewPDF}
                 className="margin-buttons-scar"
                 title="Visualizza anteprima del referto in PDF"
               >
@@ -2489,6 +2756,16 @@ const handleResultClick = async (result: any) => {
                   checked={printSignedPdf}
                   label="Stampa referto firmato quando termini (se disponibile)"
                   onChange={e => setPrintSignedPdf(e.value)}
+                />
+                <Checkbox
+                  checked={useV2Assembly}
+                  label="Usa motore PDF v2 (Document Model)"
+                  onChange={e => setUseV2Assembly(e.value)}
+                />
+                <Checkbox
+                  checked={useWpfEditor}
+                  label="Usa editor WPF nativo (RTF)"
+                  onChange={e => setUseWpfEditor(e.value)}
                 />
                 <Checkbox
                   style={{ display: "none" }}
