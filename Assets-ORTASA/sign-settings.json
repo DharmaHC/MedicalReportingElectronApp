@@ -1,0 +1,39 @@
+{
+  "yPosLogo":                0,
+  "logoWidth":               0,
+  "logoHeight":              0,
+
+  "yPosFooterImage":           0,
+  "footerImageWidth":        0,
+  "footerImageHeight":       0,
+  "footerImageXPositionOffset": 0,
+
+  "footerTextFontFamily":    "Times New Roman",
+  "footerTextPointFromBottom": 20,
+  "footerTextFontSize":      8,
+
+  "footerCompanyDataPointFromBottom": 0,
+  "footerCompanyDataMultiline": true,
+  "blankFooterHeight": 50,
+
+  "signatureTextLine1": "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
+  "signatureTextLine2": "{signedBy} in data: {date}",
+
+  "printSignedPdfIfAvailable": true,
+
+  "reportPageWidth": 210,
+  "reportPageHeight": 297,
+
+  "editorZoomDefault": 1.3,
+
+  "rowsPerPage": 30,
+  "highlightPlaceholder": false,
+
+  "pkcs11Lib": "C:\\Windows\\System32\\bit4xpki.dll",
+  "cspSlotIndex": 0,
+  "remoteSignUrl": "https://mio-server-remote-sign.example.com/sign",
+  "tsaUrl": "https://freetsa.org/tsr",
+
+  "useMRAS": true,
+  "showAppMenu": false
+}

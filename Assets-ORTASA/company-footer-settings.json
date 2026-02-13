@@ -1,0 +1,48 @@
+{
+  "ORTASA": {
+    "footerText": "",
+    "footerImageWidth": 0,
+    "footerImageHeight": 0,
+    "blankFooterHeight": 50,
+    "yPosFooterImage": 0,
+    "footerImageXPositionOffset": 0
+  },
+  "DEFAULT": {
+    "footerText": "",
+    "footerImageWidth": 160,
+    "footerImageHeight": 32,
+    "blankFooterHeight": 15,
+    "yPosFooterImage": 15,
+    "footerImageXPositionOffset": 0
+  },
+  "ASTER": {
+    "footerText": "Aster Diagnostica Srl - P.I. e C.F. 06191121000",
+    "footerImageWidth": 160,
+    "footerImageHeight": 32,
+    "blankFooterHeight": 25,
+    "yPosFooterImage": 0,
+    "footerImageXPositionOffset": 0
+  },
+  "RAD": {
+    "footerText": "Radiologia Mostacciano Srl - P. I. 01321781005 - C.F. 04891080584",
+    "footerImageWidth": 160,
+    "footerImageHeight": 32,
+    "blankFooterHeight": 25,
+    "yPosFooterImage": 0,
+    "footerImageXPositionOffset": 0
+  },
+  "HEALTHWAY": {
+    "footerImageWidth": 300,
+    "footerImageHeight": 34,
+    "blankFooterHeight": 25,
+    "yPosFooterImage": 5,
+    "footerImageXPositionOffset": 0
+  },
+  "CIN": {
+    "footerImageWidth": 200,
+    "footerImageHeight": 40,
+    "blankFooterHeight": 50,
+    "yPosFooterImage": 12,
+    "footerImageXPositionOffset": 0
+  }
+}

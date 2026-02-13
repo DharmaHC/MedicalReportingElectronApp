@@ -202,3 +202,44 @@ console.log("PRELOAD PARTITO!");
   });
   console.log('[PRELOAD] remoteSignAdmin API registered!');
 
+  // ============================================================================
+  // API per Speech-to-Text (Dettatura Vocale locale con Whisper)
+  // ============================================================================
+  contextBridge.exposeInMainWorld('speechToText', {
+    getStatus: () => ipcRenderer.invoke('speech-to-text:get-status'),
+    downloadModel: () => ipcRenderer.invoke('speech-to-text:download-model'),
+    transcribe: (audioBuffer: ArrayBuffer) => ipcRenderer.invoke('speech-to-text:transcribe', audioBuffer),
+    onDownloadProgress: (callback: (progress: {
+      percent: number;
+      downloadedBytes: number;
+      totalBytes: number;
+    }) => void) => {
+      ipcRenderer.on('speech-to-text:download-progress', (_event: any, progress: any) => callback(progress));
+    },
+    removeDownloadProgressListener: () => {
+      ipcRenderer.removeAllListeners('speech-to-text:download-progress');
+    },
+  });
+  console.log('[PRELOAD] speechToText API registered!');
+
+  // ============================================================================
+  // API per WPF RadRichTextBox Editor (editor RTF nativo)
+  // ============================================================================
+  contextBridge.exposeInMainWorld('wpfEditor', {
+    start: () => ipcRenderer.invoke('wpf-editor:start'),
+    loadRtf: (rtfBase64: string) => ipcRenderer.invoke('wpf-editor:load-rtf', rtfBase64),
+    getRtf: () => ipcRenderer.invoke('wpf-editor:get-rtf'),
+    getPdf: () => ipcRenderer.invoke('wpf-editor:get-pdf'),
+    show: () => ipcRenderer.invoke('wpf-editor:show'),
+    hide: () => ipcRenderer.invoke('wpf-editor:hide'),
+    setBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('wpf-editor:set-bounds', bounds),
+    isReady: () => ipcRenderer.invoke('wpf-editor:is-ready'),
+    setParent: () => ipcRenderer.invoke('wpf-editor:set-parent'),
+    insertText: (text: string) => ipcRenderer.invoke('wpf-editor:insert-text', text),
+    setZoom: (zoomPercent: number) => ipcRenderer.invoke('wpf-editor:set-zoom', zoomPercent),
+    focus: () => ipcRenderer.invoke('wpf-editor:focus'),
+    stop: () => ipcRenderer.invoke('wpf-editor:stop'),
+  });
+  console.log('[PRELOAD] wpfEditor API registered!');
+

@@ -1,0 +1,79 @@
+/* InlineDictationButton.css */
+
+.inline-dictation-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+/* Bottone principale */
+.inline-dictation-btn.listening {
+  background-color: #e53935 !important;
+  border-color: #e53935 !important;
+  color: #fff !important;
+  animation: inline-pulse 1.5s ease-in-out infinite;
+}
+
+.inline-dictation-btn.listening:hover {
+  background-color: #c62828 !important;
+  border-color: #c62828 !important;
+}
+
+@keyframes inline-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(229, 57, 53, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0); }
+}
+
+/* Bottone secondario (modal) */
+.inline-dictation-modal-btn {
+  min-width: 28px !important;
+  padding: 2px 4px !important;
+}
+
+/* Spinner processing inline */
+.inline-dictation-processing {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.inline-dictation-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: inline-spin 0.8s linear infinite;
+}
+
+@keyframes inline-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Indicatore listening (pallino rosso pulsante) */
+.inline-dictation-listening-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e53935;
+  margin-left: 4px;
+  animation: inline-blink 1s ease-in-out infinite;
+}
+
+@keyframes inline-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Errore inline */
+.inline-dictation-error {
+  font-size: 11px;
+  color: #d32f2f;
+  margin-left: 6px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

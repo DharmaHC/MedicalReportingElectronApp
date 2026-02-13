@@ -15,7 +15,9 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
-        'electron', 'child_process', 'fs', 'path', 'pkcs11js', 'asn1js', 'pkijs', 'crypto', 'electron-log', 'electron-updater'
+        'electron', 'child_process', 'fs', 'path', 'os', 'net', 'http', 'https', 'events', 'stream', 'url', 'util', 'zlib', 'crypto', 'tls',
+        'pkcs11js', 'asn1js', 'pkijs', 'electron-log', 'electron-updater',
+        'soap', 'formidable'
       ],
       output: { entryFileNames: 'index.js' }
     }

@@ -24,6 +24,12 @@ interface RemoteSignConfig {
   openapi?: RemoteSignProviderConfig;
 }
 
+interface SpeechToTextConfig {
+  enabled: boolean;
+  model: string;       // e.g. 'ggml-small.bin'
+  language: string;    // e.g. 'it'
+}
+
 interface Settings {
   yPosLogo: number;
   logoWidth: number;
@@ -53,6 +59,7 @@ interface Settings {
   signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
+  speechToText?: SpeechToTextConfig; // Configurazione dettatura vocale locale (Whisper)
 }
 
 interface CompanyFooterSettings {
@@ -224,6 +231,44 @@ declare global {
         failed: number;
       }) => void) => void;
       removeAllListeners: () => void;
+    },
+    wpfEditor: {
+      start: () => Promise<boolean>;
+      loadRtf: (rtfBase64: string) => Promise<boolean>;
+      getRtf: () => Promise<string>;
+      getPdf: () => Promise<string>;
+      show: () => Promise<boolean>;
+      hide: () => Promise<boolean>;
+      setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+      isReady: () => Promise<boolean>;
+      setParent: () => Promise<boolean>;
+      insertText: (text: string) => Promise<boolean>;
+      setZoom: (zoomPercent: number) => Promise<boolean>;
+      focus: () => Promise<boolean>;
+      stop: () => Promise<boolean>;
+    },
+    speechToText: {
+      getStatus: () => Promise<{
+        enabled: boolean;
+        binaryAvailable: boolean;
+        modelDownloaded: boolean;
+        modelName?: string;
+        language?: string;
+        error?: string;
+      }>;
+      downloadModel: () => Promise<{ success: boolean; error?: string }>;
+      transcribe: (audioBuffer: ArrayBuffer) => Promise<{
+        success: boolean;
+        text?: string;
+        error?: string;
+        durationMs?: number;
+      }>;
+      onDownloadProgress: (callback: (progress: {
+        percent: number;
+        downloadedBytes: number;
+        totalBytes: number;
+      }) => void) => void;
+      removeDownloadProgressListener: () => void;
     }
   }
 }
@@ -234,5 +279,6 @@ export {
   CompanyUISettings,
   EmergencyWorkaround,
   RemoteSignProviderConfig,
-  RemoteSignConfig
+  RemoteSignConfig,
+  SpeechToTextConfig
 };

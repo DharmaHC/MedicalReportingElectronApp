@@ -48,7 +48,7 @@ export interface ReportToSign {
   doctorDisplayName: string;
   /** ID azienda per footer */
   companyId: string;
-  /** Stato del referto nel DB: 6=Bozza, 7=Da Firmare, 8=Firmato */
+  /** Stato del referto nel DB: 2=Bozza, 5=Firmato, 7=Da Firmare */
   examinationState: number;
   /** Se selezionato per firma */
   selected: boolean;
@@ -169,7 +169,7 @@ const initialState: BulkSignState = {
 
 /**
  * Carica i referti da firmare dal backend.
- * Usa la nuova API GetReportsToSign che query DigitalSignedReports con ExaminationState=7.
+ * Usa la nuova API GetReportsToSign che query DigitalSignedReports con ExaminationState=2 (In Lavorazione/Bozza).
  */
 export const fetchReportsToSign = createAsyncThunk<
   ReportToSign[],
@@ -202,21 +202,21 @@ export const fetchReportsToSign = createAsyncThunk<
       }
 
       // Determina gli stati da includere in base al filtro
-      // Stati: 6=Bozza, 7=Da Firmare, 8=Firmato
+      // Stati DigitalSignedReports: 2=Bozza (legacy), 5=Firmato, 7=Da Firmare (SaveForLaterSigning)
       let states: number[];
       switch (filters.status) {
         case 'draft':
-          states = [6];
+          states = [2];  // Bozza (legacy Health.NET)
           break;
         case 'toSign':
-          states = [7];
+          states = [2, 7];  // Bozze (2) + Da Firmare (7)
           break;
         case 'signed':
-          states = [8];
+          states = [5];  // Firmato
           break;
         case 'all':
         default:
-          states = [6, 7, 8];  // Include anche i firmati
+          states = [2, 5, 7];  // Include tutti
           break;
       }
       params.append('states', states.join(','));
@@ -269,7 +269,7 @@ export const fetchReportsToSign = createAsyncThunk<
           doctorCode: r.doctorCode || '',
           doctorDisplayName: r.doctorDisplayName || r.doctorCode || '',
           companyId: r.companyWebSite || 'ASTER',
-          examinationState: r.examinationState || 7,
+          examinationState: r.examinationState || 2,
           selected: false,
           signStatus: 'pending' as const,
           errorMessage: undefined

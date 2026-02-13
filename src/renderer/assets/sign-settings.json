@@ -76,5 +76,11 @@
       "apiKey": "qdoyl25gc2wmqn5xqqgyzcty6lnuk0bu",
       "certificateType": "EU-QES_otp"
     }
+  },
+
+  "speechToText": {
+    "enabled": false,
+    "model": "ggml-small.bin",
+    "language": "it"
   }
 }
