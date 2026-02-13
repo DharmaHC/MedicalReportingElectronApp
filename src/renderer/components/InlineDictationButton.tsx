@@ -87,7 +87,6 @@ const InlineDictationButton: React.FC<InlineDictationButtonProps> = ({ editorRef
   const { isListening, isProcessing, start, stop } = useInlineDictation({
     onTranscribed: handleTranscribed,
     onError: handleError,
-    chunkIntervalMs: 1500,
   });
 
   const handleToggle = useCallback(async () => {
