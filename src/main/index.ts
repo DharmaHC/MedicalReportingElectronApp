@@ -709,6 +709,9 @@ function setupAutoUpdater() {
     return;
   }
 
+  autoUpdater.channel = 'win7';
+  log.info(`AutoUpdater configurato per il canale: ${autoUpdater.channel}`);
+
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('checking-for-update', () => {

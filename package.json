@@ -1,7 +1,7 @@
 {
   "name": "medreportandsign",
-  "productName": "MedReport",
-  "version": "1.0.49",
+  "productName": "MedReportAndSign",
+  "version": "1.0.50",
   "description": "Applicazione Electron per la refertazione medica con firma digitale",
   "author": "Dharma Healthcare <info@dharmahealthcare.net>",
   "license": "MIT",
@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "net.dharmahealthcare.medreportandsign",
-    "productName": "MedReport",
+    "productName": "MedReportAndSign",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
@@ -36,7 +36,8 @@
       {
         "provider": "github",
         "owner": "DharmaHC",
-        "repo": "MedicalReportingElectronApp"
+        "repo": "MedicalReportingElectronApp",
+        "channel": "win7"
       }
     ],
     "files": [
@@ -64,7 +65,9 @@
       {
         "from": "whisper-bin/",
         "to": "whisper",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asar": true,
@@ -80,7 +83,7 @@
           ]
         }
       ],
-      "artifactName": "MedReport-Setup-${version}.exe"
+      "artifactName": "MedReportAndSign-Setup-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
@@ -89,7 +92,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MedReport",
+      "shortcutName": "MedReportAndSign",
       "include": "resources/installer.nsh"
     },
     "mac": {

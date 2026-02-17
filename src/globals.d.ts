@@ -234,18 +234,56 @@ declare global {
     },
     wpfEditor: {
       start: () => Promise<boolean>;
+      attach: (params: { sessionId: string }) => Promise<{
+        state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+        isReady: boolean;
+        isVisible: boolean;
+        activeSessions: number;
+        reason?: string;
+      }>;
+      detach: (params: { sessionId: string }) => Promise<{
+        state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+        isReady: boolean;
+        isVisible: boolean;
+        activeSessions: number;
+        reason?: string;
+      }>;
+      getStatus: () => Promise<{
+        state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+        isReady: boolean;
+        isVisible: boolean;
+        activeSessions: number;
+        reason?: string;
+      }>;
       loadRtf: (rtfBase64: string) => Promise<boolean>;
       getRtf: () => Promise<string>;
       getPdf: () => Promise<string>;
+      isDirty: () => Promise<boolean>;
       show: () => Promise<boolean>;
       hide: () => Promise<boolean>;
-      setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+      setBounds: (bounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        viewportWidth?: number;
+        viewportHeight?: number;
+        viewportDpr?: number;
+      }) => Promise<boolean>;
       isReady: () => Promise<boolean>;
       setParent: () => Promise<boolean>;
       insertText: (text: string) => Promise<boolean>;
       setZoom: (zoomPercent: number) => Promise<boolean>;
       focus: () => Promise<boolean>;
       stop: () => Promise<boolean>;
+      onStatus: (callback: (status: {
+        state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+        isReady: boolean;
+        isVisible: boolean;
+        activeSessions: number;
+        reason?: string;
+      }) => void) => void;
+      removeStatusListeners: () => void;
     },
     speechToText: {
       getStatus: () => Promise<{
