@@ -33,5 +33,6 @@
     "password": "radiologia"
   },
   "useExternalIdSystem": false,
-  "dicomImageSystemName": "RemoteEye"
+  "dicomImageSystemName": "RemoteEye",
+  "zoomFactor": 1.0
 }

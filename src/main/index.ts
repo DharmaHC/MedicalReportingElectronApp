@@ -534,7 +534,8 @@ ipcMain.handle('get-company-ui-settings', async () => {
       username: "radiologia",
       password: "radiologia"
     },
-    useExternalIdSystem: false
+    useExternalIdSystem: false,
+    zoomFactor: 1.0
   };
 
   return loadConfigJson<CompanyUISettings>('company-ui-settings.json', defaultSettings);
@@ -668,6 +669,14 @@ function createWindow() {
   // Espone i settings nella console del browser quando la pagina è caricata
   mainWindow.webContents.on('did-finish-load', () => {
     logSettingsToConsole(mainWindow);
+
+    // Applica zoom generale dall'impostazione company-ui-settings
+    const uiSettings = loadConfigJson<CompanyUISettings>('company-ui-settings.json', { zoomFactor: 1.0 } as CompanyUISettings);
+    const zoom = uiSettings.zoomFactor;
+    if (zoom && zoom > 0 && mainWindow) {
+      mainWindow.webContents.setZoomFactor(zoom);
+      console.log(`[ZOOM] Zoom factor applicato: ${zoom} (${Math.round(zoom * 100)}%)`);
+    }
   });
 
   // Intercetta la richiesta di chiusura della finestra
