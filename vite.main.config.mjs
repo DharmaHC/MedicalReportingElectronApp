@@ -5,7 +5,7 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'renderer-dist/main',
-    emptyOutDir: false,
+    emptyOutDir: true,
     target: 'node20',
     sourcemap: 'inline',
     minify: false,

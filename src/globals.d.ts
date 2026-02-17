@@ -109,6 +109,7 @@ interface CompanyUISettings {
   };
   useExternalIdSystem?: boolean; // Se true, usa ExternalPatientId e ExternalAccessionNumber per RemotEye
   dicomImageSystemName?: "RemoteEye" | "RemoteEyeLite" | "Other"; // Sistema di visualizzazione immagini DICOM da utilizzare
+  zoomFactor?: number; // Zoom generale dell'applicazione (1.0 = 100%, 1.25 = 125%, 0.8 = 80%)
 }
 
 declare global {
