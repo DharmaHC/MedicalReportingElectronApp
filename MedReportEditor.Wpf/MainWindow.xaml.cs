@@ -59,6 +59,9 @@ namespace MedReportEditor.Wpf
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
 
@@ -547,26 +550,68 @@ namespace MedReportEditor.Wpf
             });
         }
 
+        /// <summary>
+        /// Riceve coordinate CSS pixel (relative al viewport di Electron) e posiziona
+        /// la finestra WPF calcolando le coordinate schermo fisiche localmente.
+        ///
+        /// Approccio:
+        /// 1. ClientToScreen(parentHwnd, {0,0}) → origine fisica della client-area del parent
+        ///    (per il punto {0,0} non c'è ambiguità di DPI cross-process)
+        /// 2. GetDpiForWindow(parentHwnd) → DPI del monitor su cui si trova Electron
+        /// 3. physOffset = cssOffset * (dpi / 96) → conversione CSS→physical locale
+        /// 4. MoveWindow con coordinate schermo assolute
+        ///
+        /// Questo evita ClientToScreen con offset non-zero cross-process, che può
+        /// fallire su setup multi-monitor con DPI diversi per differenze di
+        /// DPI-awareness context tra Electron (V1) e WPF .NET 8 (V2).
+        /// </summary>
         private void SetBounds(JsonElement root)
         {
             Dispatcher.Invoke(() =>
             {
-                int x = root.TryGetProperty("x", out var xv) ? (int)xv.GetDouble() : 0;
-                int y = root.TryGetProperty("y", out var yv) ? (int)yv.GetDouble() : 0;
-                int w = root.TryGetProperty("width", out var wv) ? (int)wv.GetDouble() : 800;
-                int h = root.TryGetProperty("height", out var hv) ? (int)hv.GetDouble() : 600;
+                double x = root.TryGetProperty("x", out var xv) ? xv.GetDouble() : 0;
+                double y = root.TryGetProperty("y", out var yv) ? yv.GetDouble() : 0;
+                double w = root.TryGetProperty("width", out var wv) ? wv.GetDouble() : 800;
+                double h = root.TryGetProperty("height", out var hv) ? hv.GetDouble() : 600;
+                bool absolute = root.TryGetProperty("absolute", out var av) && av.GetBoolean();
 
-                if (_isOverlay && _parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                if (absolute)
                 {
-                    // Converti da coordinate relative alla client-area di Electron
-                    // a coordinate schermo assolute
-                    var pt = new POINT { X = x, Y = y };
-                    ClientToScreen(_parentHwnd, ref pt);
-                    MoveWindow(_myHwnd, pt.X, pt.Y, w, h, true);
+                    // Coordinate DIP assolute sullo schermo, calcolate da Electron come
+                    // contentBounds + CSS offset. WPF per-monitor V2 gestisce la
+                    // conversione DPI internamente tramite Left/Top/Width/Height.
+                    Left = x;
+                    Top = y;
+                    Width = w;
+                    Height = h;
+                }
+                else if (_parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                {
+                    // Overlay con parent noto: converti origine client del parent in DIP schermo
+                    // e applica offset CSS direttamente in DIP. Evita MoveWindow in pixel fisici,
+                    // che su setup multi-monitor/DPI misti può introdurre offset sistematici.
+                    var origin = new POINT { X = 0, Y = 0 };
+                    ClientToScreen(_parentHwnd, ref origin);
+
+                    double sf = 1.0;
+                    try
+                    {
+                        uint dpi = GetDpiForWindow(_parentHwnd);
+                        if (dpi > 0) sf = dpi / 96.0;
+                    }
+                    catch (EntryPointNotFoundException) { }
+
+                    double originDipX = origin.X / sf;
+                    double originDipY = origin.Y / sf;
+
+                    Left = originDipX + x;
+                    Top = originDipY + y;
+                    Width = w;
+                    Height = h;
                 }
                 else if (_myHwnd != IntPtr.Zero)
                 {
-                    MoveWindow(_myHwnd, x, y, w, h, true);
+                    MoveWindow(_myHwnd, (int)x, (int)y, (int)w, (int)h, true);
                 }
                 else
                 {

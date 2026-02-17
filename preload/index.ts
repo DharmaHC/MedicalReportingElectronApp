@@ -227,12 +227,24 @@ console.log("PRELOAD PARTITO!");
   // ============================================================================
   contextBridge.exposeInMainWorld('wpfEditor', {
     start: () => ipcRenderer.invoke('wpf-editor:start'),
+    attach: (params: { sessionId: string }) => ipcRenderer.invoke('wpf-editor:attach', params),
+    detach: (params: { sessionId: string }) => ipcRenderer.invoke('wpf-editor:detach', params),
+    getStatus: () => ipcRenderer.invoke('wpf-editor:get-status'),
     loadRtf: (rtfBase64: string) => ipcRenderer.invoke('wpf-editor:load-rtf', rtfBase64),
     getRtf: () => ipcRenderer.invoke('wpf-editor:get-rtf'),
     getPdf: () => ipcRenderer.invoke('wpf-editor:get-pdf'),
+    isDirty: () => ipcRenderer.invoke('wpf-editor:is-dirty'),
     show: () => ipcRenderer.invoke('wpf-editor:show'),
     hide: () => ipcRenderer.invoke('wpf-editor:hide'),
-    setBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
+    setBounds: (bounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      viewportWidth?: number;
+      viewportHeight?: number;
+      viewportDpr?: number;
+    }) =>
       ipcRenderer.invoke('wpf-editor:set-bounds', bounds),
     isReady: () => ipcRenderer.invoke('wpf-editor:is-ready'),
     setParent: () => ipcRenderer.invoke('wpf-editor:set-parent'),
@@ -240,6 +252,17 @@ console.log("PRELOAD PARTITO!");
     setZoom: (zoomPercent: number) => ipcRenderer.invoke('wpf-editor:set-zoom', zoomPercent),
     focus: () => ipcRenderer.invoke('wpf-editor:focus'),
     stop: () => ipcRenderer.invoke('wpf-editor:stop'),
+    onStatus: (callback: (status: {
+      state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+      isReady: boolean;
+      isVisible: boolean;
+      activeSessions: number;
+      reason?: string;
+    }) => void) => {
+      ipcRenderer.on('wpf-editor:status', (_event, status) => callback(status));
+    },
+    removeStatusListeners: () => {
+      ipcRenderer.removeAllListeners('wpf-editor:status');
+    },
   });
   console.log('[PRELOAD] wpfEditor API registered!');
-

@@ -260,9 +260,9 @@ const PrestazioniRisultati = () => {
           }
         );
         if (response.ok) {
-          const htmlContent = await response.text();
-          // Passiamo readOnly
-          navigate("/editor", { state: { htmlContent, readOnly, openedByOtherDoctor } });
+          const data = await response.json();
+          // Passiamo readOnly e requiresRtfEditor
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor } });
         } else {
           console.error("Failed to fetch existing report");
         }
@@ -289,9 +289,8 @@ const PrestazioniRisultati = () => {
           }
         );
         if (response.ok) {
-          const htmlContent = await response.text();
-          // Passiamo readOnly
-          navigate("/editor", { state: { htmlContent, readOnly } });
+          const data = await response.json();
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, requiresRtfEditor: data.requiresRtfEditor } });
         } else {
           console.error("Failed to fetch report template");
         }
@@ -348,8 +347,8 @@ const PrestazioniRisultati = () => {
           }
         );
         if (response.ok) {
-          const htmlContent = await response.text();
-          navigate("/editor", { state: { htmlContent, readOnly, openedByOtherDoctor } });
+          const data = await response.json();
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor } });
         } else {
           console.error("Failed to fetch existing reports");
         }
@@ -384,8 +383,8 @@ const PrestazioniRisultati = () => {
         );
 
         if (response.ok) {
-          const htmlContent = await response.text();
-          navigate("/editor", { state: { htmlContent, readOnly } });
+          const data = await response.json();
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, requiresRtfEditor: data.requiresRtfEditor } });
         } else {
           console.error("Failed to fetch report templates");
         }

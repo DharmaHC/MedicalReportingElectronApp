@@ -135,6 +135,18 @@ function EditorPage() {
   const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
   const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
+  const wpfSessionIdRef = useRef<string | null>(null);
+
+  const getWpfAnchorRect = (): DOMRect | null => {
+    const area = wpfEditorAreaRef.current;
+    if (!area) return null;
+    // Anchor al container dedicato WPF: mantiene allineamento verticale corretto
+    // con status bar e layout pagina.
+    const rect = area.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  };
 
   const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
   const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
@@ -145,6 +157,7 @@ function EditorPage() {
 
   // In component scope:
 const userName = useSelector((state: RootState) => state.auth.userName);
+const canUseUnsafeWpfToggle = (userName ?? "").trim().toUpperCase() === "FRSRFL72R25H282U";
 
 // Funzione di log (ora sincronica, più semplice)
 const logToFile = (msg: string, details?: any) => {
@@ -421,6 +434,7 @@ const renderPinDialog = () =>
   const [dictationText, setDictationText] = useState(""); // Testo inserito nel dialogo di dettatura.
   const [speechToTextEnabled, setSpeechToTextEnabled] = useState(false); // Feature toggle dettatura vocale Whisper
   const [isDictationModalOpen, setIsDictationModalOpen] = useState(false); // Dettatura con revisione (InlineDictationButton)
+  const [isNativePrintPreviewOpen, setIsNativePrintPreviewOpen] = useState(false); // Modale anteprima stampa creata via DOM imperativo
   const [pdfUrl, setPdfUrl] = useState<string | null>(null); // URL del Blob PDF per il componente PdfPreview.
   // const [rtfContent, setRtfContent] = useState<string | null>(null); // Rimosso: Lo stato RTF non era utilizzato, gestito tramite cachedReportData.
   const [errorMessage, setErrorMessage] = useState<string | null>(null); // Messaggio di errore da visualizzare all'utente.
@@ -435,6 +449,14 @@ const renderPinDialog = () =>
   const [isDraftOperation, setIsDraftOperation] = useState(false); // Flag per indicare se l'operazione corrente è un salvataggio bozza.
   const readOnly = location.state?.readOnly === true; // Determina se l'editor è in modalità sola lettura (es. referto già finalizzato).
   const openedByOtherDoctor = location.state?.openedByOtherDoctor === true; // Indica se il referto è stato refertato da un altro medico (anche in bozza).
+  const requiresRtfEditor = location.state?.requiresRtfEditor === true; // Template contiene tabelle/immagini → editor WPF
+
+  // Auto-attiva editor WPF se il template richiede RTF nativo
+  useEffect(() => {
+    if (requiresRtfEditor && !useWpfEditor) {
+      setUseWpfEditor(true);
+    }
+  }, [requiresRtfEditor]);
 
   // Selettori Redux per accedere a parti dello stato globale.
   const printReportWhenFinished = useSelector(
@@ -640,7 +662,7 @@ const renderPinDialog = () =>
   const handlePhraseClick = (phrase: string) => {
     // Se il WPF editor è attivo, inserisci lì
     if (useWpfEditor && wpfEditorReady) {
-      window.wpfEditor.insertText(phrase).catch(console.error);
+      window.wpfEditor.insertText(phrase).then(() => setIsModified(true)).catch(console.error);
       return;
     }
 
@@ -927,10 +949,48 @@ const renderPinDialog = () =>
     rtfNeedsToBeStored: boolean = false, // Indica se l'RTF deve essere memorizzato (es. salvataggio finale).
     isSigningProcess: boolean = false   // Indica se la generazione è parte di un processo di firma.
   ): Promise<ReportData | null> => {
+    // WPF Editor path: ottieni RTF e PDF direttamente dall'editor WPF
+    if (useWpfEditor && wpfEditorReady) {
+      try {
+        if (!isModified && cachedReportData) {
+          const wpfDirty = await window.wpfEditor.isDirty().catch(() => true);
+          if (!wpfDirty) {
+            return cachedReportData;
+          }
+        }
+
+        const rtfBase64: string = await window.wpfEditor.getRtf();
+        const pdfBase64: string = await window.wpfEditor.getPdf();
+        const pdfBlob = new Blob(
+          [Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))],
+          { type: "application/pdf" }
+        );
+        const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+
+        const newReportData: ReportData = {
+          pdfBlobUrl,
+          rtfContent: rtfBase64,
+          pdfContent: pdfBase64,
+        };
+        setCachedReportData(prevData => {
+          if (prevData?.pdfBlobUrl) URL.revokeObjectURL(prevData.pdfBlobUrl);
+          return newReportData;
+        });
+        cachedPdfBlobUrlRef.current = pdfBlobUrl;
+        setIsModified(false);
+        return newReportData;
+      } catch (err: any) {
+        console.error("[WPF Editor] Errore generazione report data:", err);
+        setErrorMessage(`Errore WPF: ${err.message}`);
+        return null;
+      }
+    }
+
     // Se il contenuto non è modificato e i dati sono in cache, restituisce la cache.
     if (!isModified && cachedReportData) {
       return cachedReportData;
     }
+
     if (editorRef.current && editorRef.current.view) {
       let content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
 
@@ -1105,30 +1165,71 @@ const renderPinDialog = () =>
     }
   }, [useV2Assembly]);
 
+  // WPF: sincronizza stato runtime dal main process (ready/faulted/stopped)
+  useEffect(() => {
+    const mapStatus = (state: string, reason?: string): string => {
+      switch (state) {
+        case "starting":
+          return "Avvio editor WPF...";
+        case "ready_visible":
+          return "Editor WPF attivo";
+        case "ready_hidden":
+          return "Editor WPF pronto (nascosto)";
+        case "stopping":
+          return "Arresto editor WPF...";
+        case "faulted":
+          return `Errore editor WPF${reason ? ` (${reason})` : ""}`;
+        default:
+          return reason ? `Editor WPF fermo (${reason})` : "Editor WPF fermo";
+      }
+    };
+
+    const onStatus = (status: {
+      state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+      isReady: boolean;
+      isVisible: boolean;
+      activeSessions: number;
+      reason?: string;
+    }) => {
+      setWpfEditorReady(status.isReady);
+      setWpfEditorStatus(mapStatus(status.state, status.reason));
+      if (status.state === "faulted" || status.state === "stopped") {
+        wpfSessionIdRef.current = null;
+      }
+    };
+
+    window.wpfEditor.onStatus(onStatus);
+    window.wpfEditor.getStatus().then(onStatus).catch(() => {});
+
+    return () => {
+      window.wpfEditor.removeStatusListeners();
+    };
+  }, []);
+
   // === WPF Editor: avvio processo e caricamento RTF ===
   useEffect(() => {
     if (!useWpfEditor) {
-      // Se disabilitato, ferma il processo WPF
-      if (wpfEditorReady) {
-        window.wpfEditor?.stop().catch(console.error);
-        setWpfEditorReady(false);
-        setWpfEditorStatus("");
+      // Se disabilitato, sgancia solo la sessione renderer dal processo WPF.
+      const currentSessionId = wpfSessionIdRef.current;
+      if (currentSessionId) {
+        window.wpfEditor?.detach({ sessionId: currentSessionId }).catch(console.error);
+        wpfSessionIdRef.current = null;
       }
+      setWpfEditorReady(false);
+      setWpfEditorStatus("");
       return;
     }
 
     let cancelled = false;
+    const sessionId = `editor-${uuidv4()}`;
+    wpfSessionIdRef.current = sessionId;
 
     const startWpf = async () => {
       try {
         setWpfEditorStatus("Avvio editor WPF...");
 
-        // 1. Avvia il processo WPF (attende READY)
-        await window.wpfEditor.start();
-        if (cancelled) return;
-
-        // 1b. Incorpora la finestra WPF come figlia della finestra Electron
-        await window.wpfEditor.setParent();
+        // 1. Attacca la sessione dell'editor al manager WPF nel main process
+        await window.wpfEditor.attach({ sessionId });
         if (cancelled) return;
 
         setWpfEditorStatus("Processo WPF avviato, caricamento RTF...");
@@ -1181,16 +1282,18 @@ const renderPinDialog = () =>
         if (cancelled) return;
 
         // 4. Posiziona e mostra la finestra WPF nell'area dell'editor
-        // Child window: coordinate relative alla client area della BrowserWindow (physical pixels)
-        const editorArea = wpfEditorAreaRef.current;
-        if (editorArea) {
-          const rect = editorArea.getBoundingClientRect();
-          const dpr = window.devicePixelRatio || 1;
+        // Coordinate in CSS pixels - la conversione a physical pixels avviene nel main process
+        // usando il scaleFactor del monitor corrente (gestisce correttamente multi-monitor con DPI diversi)
+        const rect = getWpfAnchorRect();
+        if (rect) {
           await window.wpfEditor.setBounds({
-            x: Math.round(rect.left * dpr),
-            y: Math.round(rect.top * dpr),
-            width: Math.round(rect.width * dpr),
-            height: Math.round(rect.height * dpr),
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            viewportDpr: window.devicePixelRatio || 1,
           });
         }
         await window.wpfEditor.show();
@@ -1211,6 +1314,10 @@ const renderPinDialog = () =>
 
     return () => {
       cancelled = true;
+      if (wpfSessionIdRef.current === sessionId) {
+        window.wpfEditor?.detach({ sessionId }).catch(console.error);
+        wpfSessionIdRef.current = null;
+      }
       window.wpfEditor?.hide().catch(console.error);
     };
   }, [useWpfEditor]);
@@ -1240,38 +1347,64 @@ const renderPinDialog = () =>
   // (Win32 child windows renderizzano sempre sopra il contenuto Chromium)
   useEffect(() => {
     if (!useWpfEditor || !wpfEditorReady) return;
-    const anyModalOpen = !!pdfUrl || isModalVisible || isCancelDialogVisible || isProcessing || isDialogVisible || isDictationModalOpen;
+    const anyModalOpen =
+      !!pdfUrl ||
+      isModalVisible ||
+      isCancelDialogVisible ||
+      isProcessing ||
+      isDialogVisible ||
+      isDictationModalOpen ||
+      isNativePrintPreviewOpen;
     if (anyModalOpen) {
       window.wpfEditor?.hide().catch(console.error);
     } else {
       window.wpfEditor?.show().catch(console.error);
     }
-  }, [useWpfEditor, wpfEditorReady, pdfUrl, isModalVisible, isCancelDialogVisible, isProcessing, isDialogVisible, isDictationModalOpen]);
+  }, [useWpfEditor, wpfEditorReady, pdfUrl, isModalVisible, isCancelDialogVisible, isProcessing, isDialogVisible, isDictationModalOpen, isNativePrintPreviewOpen]);
 
   // WPF: sincronizza i bounds quando la finestra viene ridimensionata
   useEffect(() => {
     if (!useWpfEditor || !wpfEditorReady) return;
-    const el = wpfEditorAreaRef.current;
-    if (!el) return;
+    let lastDpr = window.devicePixelRatio || 1;
 
     const updateBounds = () => {
-      const rect = el.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const rect = getWpfAnchorRect();
+      if (!rect) return;
+      // Invia CSS pixels - la conversione DPI avviene nel main process
       window.wpfEditor?.setBounds({
-        x: Math.round(rect.left * dpr),
-        y: Math.round(rect.top * dpr),
-        width: Math.round(rect.width * dpr),
-        height: Math.round(rect.height * dpr),
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        viewportDpr: window.devicePixelRatio || 1,
       }).catch(console.error);
     };
 
     const observer = new ResizeObserver(updateBounds);
+    const el = wpfEditorAreaRef.current;
+    if (!el) return;
     observer.observe(el);
     window.addEventListener('resize', updateBounds);
+    window.addEventListener('scroll', updateBounds, true);
+
+    // Safety-net per setup multi-monitor/DPI misti: riallinea periodicamente
+    const syncTimer = window.setInterval(() => {
+      const currentDpr = window.devicePixelRatio || 1;
+      if (currentDpr !== lastDpr) {
+        lastDpr = currentDpr;
+      }
+      updateBounds();
+    }, 350);
+
+    updateBounds();
 
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', updateBounds);
+      window.removeEventListener('scroll', updateBounds, true);
+      window.clearInterval(syncTimer);
     };
   }, [useWpfEditor, wpfEditorReady]);
 
@@ -1491,6 +1624,11 @@ const renderPinDialog = () =>
 // Componente Modal per l'anteprima di stampa (con timeout e loader)
 const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void, onCloseAndSave?: () => void): void => {
   const pdfUrl = URL.createObjectURL(pdfBlob);
+  setIsNativePrintPreviewOpen(true);
+
+  // Nascondi l'overlay WPF: essendo una finestra Win32 nativa, renderizza sempre
+  // sopra il contenuto DOM (z-index non ha effetto su finestre native)
+  window.wpfEditor?.hide().catch(() => {});
 
   // 1. Mostra loader temporaneo subito
   const loader = document.createElement('div');
@@ -1668,6 +1806,7 @@ const showPrintPreviewModal = (pdfBlob: Blob, onPrint: () => void, onCloseAndSav
     const closeModal = (): void => {
       document.body.removeChild(modal);
       URL.revokeObjectURL(pdfUrl);
+      setIsNativePrintPreviewOpen(false);
     };
 
     cancelBtn.onclick = closeModal;
@@ -2325,7 +2464,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
   // Salva il testo dal dialogo di dettatura legacy inserendolo nell'editor.
   const handleSave = () => {
     if (useWpfEditor && wpfEditorReady) {
-      window.wpfEditor.insertText(dictationText).catch(console.error);
+      window.wpfEditor.insertText(dictationText).then(() => setIsModified(true)).catch(console.error);
     } else if (editorRef.current && editorRef.current.view) {
       editorRef.current.view.focus();
       editorRef.current.view.dispatch(
@@ -2649,7 +2788,7 @@ const handleResultClick = async (result: any) => {
                 editorRef={editorRef}
                 enabled={speechToTextEnabled}
                 onInsertText={useWpfEditor && wpfEditorReady
-                  ? (text: string) => window.wpfEditor.insertText(text).catch(console.error)
+                  ? (text: string) => window.wpfEditor.insertText(text).then(() => setIsModified(true)).catch(console.error)
                   : undefined}
                 onDictationModalChange={setIsDictationModalOpen}
               />
@@ -2762,11 +2901,13 @@ const handleResultClick = async (result: any) => {
                   label="Usa motore PDF v2 (Document Model)"
                   onChange={e => setUseV2Assembly(e.value)}
                 />
-                <Checkbox
-                  checked={useWpfEditor}
-                  label="Usa editor WPF nativo (RTF)"
-                  onChange={e => setUseWpfEditor(e.value)}
-                />
+                {canUseUnsafeWpfToggle && (
+                  <Checkbox
+                    checked={useWpfEditor}
+                    label="Usa editor WPF nativo (RTF)"
+                    onChange={e => setUseWpfEditor(e.value)}
+                  />
+                )}
                 <Checkbox
                   style={{ display: "none" }}
                   checked={showLivePreview}
