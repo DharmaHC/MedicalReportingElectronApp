@@ -132,6 +132,7 @@ function EditorPage() {
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
   const [useV2Assembly, setUseV2Assembly] = useState<boolean>(true);
   const [useWpfEditor, setUseWpfEditor] = useState<boolean>(false);
+  const effectiveUseV2Assembly = useWpfEditor;
   const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
   const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
@@ -1061,7 +1062,7 @@ const renderPinDialog = () =>
         examResultId: exam.examResultId,
       }));
 
-      const reportUrl = useV2Assembly
+      const reportUrl = effectiveUseV2Assembly
         ? url_send_singleReportHTML_v2()
         : url_send_singleReportHTML();
 
@@ -1152,7 +1153,7 @@ const renderPinDialog = () =>
     }
   };
 
-  // Rigenera l'anteprima automaticamente quando si cambia il toggle v1/v2
+  // Rigenera l'anteprima automaticamente quando cambia il motore effettivo
   const v2InitialRender = useRef(true);
   useEffect(() => {
     if (v2InitialRender.current) {
@@ -1163,7 +1164,7 @@ const renderPinDialog = () =>
     if (pdfUrl) {
       previewPDF();
     }
-  }, [useV2Assembly]);
+  }, [effectiveUseV2Assembly]);
 
   // WPF: sincronizza stato runtime dal main process (ready/faulted/stopped)
   useEffect(() => {
@@ -2897,9 +2898,10 @@ const handleResultClick = async (result: any) => {
                   onChange={e => setPrintSignedPdf(e.value)}
                 />
                 <Checkbox
-                  checked={useV2Assembly}
-                  label="Usa motore PDF v2 (Document Model)"
+                  checked={effectiveUseV2Assembly}
+                  label="Motore PDF automatico (HTML=v1, RTF=v2)"
                   onChange={e => setUseV2Assembly(e.value)}
+                  disabled
                 />
                 {canUseUnsafeWpfToggle && (
                   <Checkbox
@@ -3029,3 +3031,6 @@ const handleResultClick = async (result: any) => {
 };
 
 export default EditorPage;
+
+
+
