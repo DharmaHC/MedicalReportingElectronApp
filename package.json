@@ -62,6 +62,13 @@
         "to": "assets"
       },
       {
+        "from": "MedReportEditor.Wpf/bin/Debug/net8.0-windows/",
+        "to": "wpf-editor",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "whisper-bin/",
         "to": "whisper",
         "filter": ["**/*"]

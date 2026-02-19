@@ -8,6 +8,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as net from 'net';
 import * as path from 'path';
+import { existsSync } from 'fs';
 import { app, ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log';
 
@@ -420,6 +421,9 @@ async function ensureProcessStarted(): Promise<void> {
     pipeName = `MedReportEditor_${process.pid}_${Date.now()}`;
 
     const exePath = getWpfExePath();
+    if (!existsSync(exePath)) {
+      throw new Error(`[WPF Editor] Eseguibile non trovato: ${exePath}`);
+    }
     log.info(`[WPF Editor] Avvio: ${exePath} --pipe ${pipeName}`);
 
     const env = { ...process.env };
@@ -451,6 +455,10 @@ async function ensureProcessStarted(): Promise<void> {
       } else {
         setState('faulted', 'process_exit');
       }
+    });
+
+    wpfProcess.on('error', (err) => {
+      log.error(`[WPF Editor] Errore avvio processo: ${err.message}`);
     });
 
     await connectToPipe(pipeName);
