@@ -161,7 +161,7 @@ function EditorPage() {
 
   // In component scope:
 const userName = useSelector((state: RootState) => state.auth.userName);
-const canUseUnsafeWpfToggle = (userName ?? "").trim().toUpperCase() === "FRSRFL72R25H282U";
+const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test
 
 // Funzione di log (ora sincronica, più semplice)
 const logToFile = (msg: string, details?: any) => {

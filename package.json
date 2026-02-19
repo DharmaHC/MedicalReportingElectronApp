@@ -65,7 +65,11 @@
         "from": "MedReportEditor.Wpf/bin/Debug/net8.0-windows/",
         "to": "wpf-editor",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.pdb",
+          "!runtimes/osx/**",
+          "!runtimes/win-x86/**",
+          "!runtimes/win-arm64/**"
         ]
       },
       {
@@ -75,6 +79,7 @@
       }
     ],
     "asar": true,
+    "compression": "maximum",
     "extraMetadata": {
       "main": "renderer-dist/main/index.js"
     },
