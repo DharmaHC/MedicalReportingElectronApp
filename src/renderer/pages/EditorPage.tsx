@@ -164,6 +164,8 @@ function EditorPage() {
 const userName = useSelector((state: RootState) => state.auth.userName);
 const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test
 const showPdfEngineSwitches = false; // Nasconde i toggle v1/v2 a tutti gli utenti
+const DICTATION_MASTER_USER = "FRSRFL72R25H282U";
+const canUseDictationControls = (userName ?? "").trim().toUpperCase() === DICTATION_MASTER_USER;
 
 // Funzione di log (ora sincronica, più semplice)
 const logToFile = (msg: string, details?: any) => {
@@ -252,6 +254,12 @@ const logToFile = (msg: string, details?: any) => {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (canUseDictationControls) return;
+    setIsDictationModalOpen(false);
+    setIsDialogVisible(false);
+  }, [canUseDictationControls]);
 
 
   useEffect(() => {
@@ -2852,14 +2860,16 @@ const handleResultClick = async (result: any) => {
           <div className="borderedbottom-div">
 
             <div>		 
-              <InlineDictationButton
-                editorRef={editorRef}
-                enabled={speechToTextEnabled}
-                onInsertText={useWpfEditor && wpfEditorReady
-                  ? (text: string) => window.wpfEditor.insertText(text).then(() => setIsModified(true)).catch(console.error)
-                  : undefined}
-                onDictationModalChange={setIsDictationModalOpen}
-              />
+              {canUseDictationControls && (
+                <InlineDictationButton
+                  editorRef={editorRef}
+                  enabled={speechToTextEnabled}
+                  onInsertText={useWpfEditor && wpfEditorReady
+                    ? (text: string) => window.wpfEditor.insertText(text).then(() => setIsModified(true)).catch(console.error)
+                    : undefined}
+                  onDictationModalChange={setIsDictationModalOpen}
+                />
+              )}
               <Button
                 svgIcon={imageIcon}
                 onClick={openCurrentStudy}
