@@ -131,12 +131,16 @@ function EditorPage() {
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(true);
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
   const [useV2Assembly, setUseV2Assembly] = useState<boolean>(true);
+  const [isPdfEngineAuto, setIsPdfEngineAuto] = useState<boolean>(true);
   const [useWpfEditor, setUseWpfEditor] = useState<boolean>(false);
-  const effectiveUseV2Assembly = useWpfEditor;
   const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
   const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
   const wpfSessionIdRef = useRef<string | null>(null);
+  // Regola richiesta:
+  // - Editor HTML => motore v1
+  // - Editor RTF/WPF => motore v2
+  const effectiveUseV2Assembly = isPdfEngineAuto ? useWpfEditor : useV2Assembly;
 
   const getWpfAnchorRect = (): DOMRect | null => {
     const area = wpfEditorAreaRef.current;
@@ -302,6 +306,7 @@ const logToFile = (msg: string, details?: any) => {
   // Refs per cleanup dei Blob URL (evita memory leak)
   const pdfUrlRef = useRef<string | null>(null);
   const cachedPdfBlobUrlRef = useRef<string | null>(null);
+  const cachedReportContextRef = useRef<{ engineV2: boolean; wpf: boolean } | null>(null);
 
   // Cleanup dei Blob URL quando il componente viene smontato
   useEffect(() => {
@@ -944,16 +949,69 @@ const renderPinDialog = () =>
     return new Blob(byteArrays, { type: contentType }); // Crea il Blob con il tipo MIME specificato.
   };
 
+  // Normalizza l'HTML dell'editor prima dell'invio al backend:
+  // - forza stile consistente dei paragrafi (evita spaziature verticali incoerenti in PDF)
+  // - rimuove rientri negativi delle tabelle
+  // - elimina gli overlay visuali dei page-break usati solo in editor
+  const normalizeEditorHtmlForReport = (rawHtml: string): string => {
+    const container = document.createElement("div");
+    container.innerHTML = rawHtml;
+
+    container
+      .querySelectorAll(".page-break-overlay-layer, .auto-page-break")
+      .forEach((node) => node.remove());
+
+    container.querySelectorAll("p").forEach((paragraph) => {
+      const currentStyle = paragraph.getAttribute("style") || "";
+      const fontSizeMatch = currentStyle.match(/font-size:\s*[\d.]+px/i);
+      const textAlignMatch = currentStyle.match(/text-align:\s*(left|right|center|justify)/i);
+
+      const normalizedStyleParts = [
+        'font-family: "Times New Roman"',
+        fontSizeMatch ? fontSizeMatch[0] : "font-size: 16px",
+        "margin-top: 0px",
+        "margin-bottom: 0px",
+        "line-height: 1",
+      ];
+      if (textAlignMatch) {
+        normalizedStyleParts.push(textAlignMatch[0]);
+      }
+
+      paragraph.setAttribute("style", normalizedStyleParts.join("; ") + ";");
+      paragraph.removeAttribute("class");
+    });
+
+    container.querySelectorAll("table[style]").forEach((table) => {
+      const currentStyle = table.getAttribute("style") || "";
+      const cleanedStyle = currentStyle
+        .replace(/margin-left:\s*-[\d.]+px;?\s*/gi, "")
+        .trim();
+
+      if (cleanedStyle) {
+        table.setAttribute("style", cleanedStyle);
+      } else {
+        table.removeAttribute("style");
+      }
+    });
+
+    return container.innerHTML;
+  };
+
   // Genera i dati del report (PDF e RTF) inviando l'HTML dell'editor al backend.
   // Utilizza la cache se il contenuto non è stato modificato.
   const generateReportData = async (
     rtfNeedsToBeStored: boolean = false, // Indica se l'RTF deve essere memorizzato (es. salvataggio finale).
     isSigningProcess: boolean = false   // Indica se la generazione è parte di un processo di firma.
   ): Promise<ReportData | null> => {
+    const cacheMatchesCurrentContext = (): boolean => {
+      const ctx = cachedReportContextRef.current;
+      return !!ctx && ctx.engineV2 === effectiveUseV2Assembly && ctx.wpf === useWpfEditor;
+    };
+
     // WPF Editor path: ottieni RTF e PDF direttamente dall'editor WPF
     if (useWpfEditor && wpfEditorReady) {
       try {
-        if (!isModified && cachedReportData) {
+        if (!isModified && cachedReportData && cacheMatchesCurrentContext()) {
           const wpfDirty = await window.wpfEditor.isDirty().catch(() => true);
           if (!wpfDirty) {
             return cachedReportData;
@@ -978,6 +1036,7 @@ const renderPinDialog = () =>
           return newReportData;
         });
         cachedPdfBlobUrlRef.current = pdfBlobUrl;
+        cachedReportContextRef.current = { engineV2: effectiveUseV2Assembly, wpf: useWpfEditor };
         setIsModified(false);
         return newReportData;
       } catch (err: any) {
@@ -988,12 +1047,13 @@ const renderPinDialog = () =>
     }
 
     // Se il contenuto non è modificato e i dati sono in cache, restituisce la cache.
-    if (!isModified && cachedReportData) {
+    if (!isModified && cachedReportData && cacheMatchesCurrentContext()) {
       return cachedReportData;
     }
 
     if (editorRef.current && editorRef.current.view) {
       let content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
+      content = normalizeEditorHtmlForReport(content);
 
       // Conta tutti i paragrafi vuoti (con o senza &nbsp;)
       let emptyParaCount = 0;
@@ -1003,13 +1063,18 @@ const renderPinDialog = () =>
         return `<p${attrs}></p>`;
       });
 
-      // Poi sostituisce TUTTI i paragrafi vuoti con contenuto che occupa spazio
-      content = content.replace(/<p([^>]*)><\/p>/gi, (_match, attrs) => {
-        emptyParaCount++;
-        // Usa il carattere spazio in formato HTML entity (&#160;) invece di &nbsp;
-        // Forse il backend riconosce uno ma non l'altro
-        return `<p${attrs}>&#160;</p>`;
-      });
+      // Legacy v1: converte i paragrafi vuoti in spazio non-breakable per preservare
+      // interruzioni visive nel vecchio pipeline string-based.
+      // v2: lascia i paragrafi vuoti reali, per evitare extra-spacing verticale.
+      if (!effectiveUseV2Assembly) {
+        content = content.replace(/<p([^>]*)><\/p>/gi, (_match, attrs) => {
+          emptyParaCount++;
+          return `<p${attrs}>&#160;</p>`;
+        });
+      } else {
+        const matches = content.match(/<p([^>]*)><\/p>/gi);
+        emptyParaCount = matches ? matches.length : 0;
+      }
 
       console.log(`[generateReportData] Paragrafi vuoti convertiti: ${emptyParaCount}`);
 
@@ -1107,6 +1172,7 @@ const renderPinDialog = () =>
               return newReportData;
             });
             cachedPdfBlobUrlRef.current = pdfBlobUrl; // Aggiorna il ref per cleanup on unmount
+            cachedReportContextRef.current = { engineV2: effectiveUseV2Assembly, wpf: useWpfEditor };
             setIsModified(false); // Resetta il flag di modifica dopo la generazione.
             return newReportData;
           } else {
@@ -2898,10 +2964,15 @@ const handleResultClick = async (result: any) => {
                   onChange={e => setPrintSignedPdf(e.value)}
                 />
                 <Checkbox
+                  checked={isPdfEngineAuto}
+                  label="Motore PDF automatico (default: HTML=v1, RTF=v2)"
+                  onChange={e => setIsPdfEngineAuto(e.value)}
+                />
+                <Checkbox
                   checked={effectiveUseV2Assembly}
-                  label="Motore PDF automatico (HTML=v1, RTF=v2)"
+                  label="Override manuale: usa motore PDF v2 (deseleziona = v1)"
                   onChange={e => setUseV2Assembly(e.value)}
-                  disabled
+                  disabled={isPdfEngineAuto}
                 />
                 {canUseUnsafeWpfToggle && (
                   <Checkbox
@@ -3031,6 +3102,5 @@ const handleResultClick = async (result: any) => {
 };
 
 export default EditorPage;
-
 
 
