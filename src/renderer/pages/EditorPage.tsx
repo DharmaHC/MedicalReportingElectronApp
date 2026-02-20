@@ -3102,5 +3102,3 @@ const handleResultClick = async (result: any) => {
 };
 
 export default EditorPage;
-
-
