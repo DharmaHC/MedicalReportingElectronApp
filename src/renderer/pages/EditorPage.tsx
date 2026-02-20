@@ -163,6 +163,7 @@ function EditorPage() {
   // In component scope:
 const userName = useSelector((state: RootState) => state.auth.userName);
 const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test
+const showPdfEngineSwitches = false; // Nasconde i toggle v1/v2 a tutti gli utenti
 
 // Funzione di log (ora sincronica, più semplice)
 const logToFile = (msg: string, details?: any) => {
@@ -2963,17 +2964,21 @@ const handleResultClick = async (result: any) => {
                   label="Stampa referto firmato quando termini (se disponibile)"
                   onChange={e => setPrintSignedPdf(e.value)}
                 />
-                <Checkbox
-                  checked={isPdfEngineAuto}
-                  label="Motore PDF automatico (default: HTML=v1, RTF=v2)"
-                  onChange={e => setIsPdfEngineAuto(e.value)}
-                />
-                <Checkbox
-                  checked={effectiveUseV2Assembly}
-                  label="Override manuale: usa motore PDF v2 (deseleziona = v1)"
-                  onChange={e => setUseV2Assembly(e.value)}
-                  disabled={isPdfEngineAuto}
-                />
+                {showPdfEngineSwitches && (
+                  <Checkbox
+                    checked={isPdfEngineAuto}
+                    label="Motore PDF automatico (default: HTML=v1, RTF=v2)"
+                    onChange={e => setIsPdfEngineAuto(e.value)}
+                  />
+                )}
+                {showPdfEngineSwitches && (
+                  <Checkbox
+                    checked={effectiveUseV2Assembly}
+                    label="Override manuale: usa motore PDF v2 (deseleziona = v1)"
+                    onChange={e => setUseV2Assembly(e.value)}
+                    disabled={isPdfEngineAuto}
+                  />
+                )}
                 {canUseUnsafeWpfToggle && (
                   <Checkbox
                     checked={useWpfEditor}
