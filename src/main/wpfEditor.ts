@@ -41,6 +41,43 @@ let messageBuffer = '';
 let isEditorVisible = false;
 let windowListenersSetup = false;
 let lastBoundsPayload: { x: number; y: number; width: number; height: number } | null = null;
+let managerState: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted' = 'stopped';
+let managerReason: string | undefined = undefined;
+const activeSessions = new Set<string>();
+
+type WpfEditorStatus = {
+  state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted';
+  isReady: boolean;
+  isVisible: boolean;
+  activeSessions: number;
+  reason?: string;
+};
+
+function getStatusSnapshot(): WpfEditorStatus {
+  return {
+    state: managerState,
+    isReady: isEditorReady(),
+    isVisible: isEditorVisible,
+    activeSessions: activeSessions.size,
+    reason: managerReason,
+  };
+}
+
+function emitStatus(): void {
+  const status = getStatusSnapshot();
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('wpf-editor:status', status);
+  }
+}
+
+function setManagerState(
+  state: 'stopped' | 'starting' | 'ready_hidden' | 'ready_visible' | 'stopping' | 'faulted',
+  reason?: string
+): void {
+  managerState = state;
+  managerReason = reason;
+  emitStatus();
+}
 
 /**
  * Restituisce il path dell'eseguibile WPF.
@@ -65,12 +102,15 @@ function getWpfExePath(): string {
 export async function startWpfEditor(): Promise<void> {
   if (wpfProcess && !wpfProcess.killed) {
     log.info('[WPF Editor] Processo gia\' attivo');
+    setManagerState(isEditorVisible ? 'ready_visible' : 'ready_hidden');
     return;
   }
+  setManagerState('starting');
 
   pipeName = `MedReportEditor_${process.pid}_${Date.now()}`;
   const exePath = getWpfExePath();
   if (!existsSync(exePath)) {
+    setManagerState('faulted', `Eseguibile non trovato: ${exePath}`);
     throw new Error(`[WPF Editor] Eseguibile non trovato: ${exePath}`);
   }
 
@@ -107,16 +147,19 @@ export async function startWpfEditor(): Promise<void> {
       cb.reject(new Error('WPF process exited'));
     }
     pendingCallbacks.clear();
+    setManagerState('stopped', code != null ? `exit_code_${code}` : undefined);
   });
 
   wpfProcess.on('error', (err) => {
     log.error(`[WPF Editor] Errore avvio processo: ${err.message}`);
+    setManagerState('faulted', err.message);
   });
 
   // Connetti al pipe e attendi il messaggio READY dal WPF
   await connectToPipe(pipeName);
   await waitForReady(15000);
   log.info('[WPF Editor] Pronto per ricevere comandi');
+  setManagerState('ready_hidden');
 }
 
 /**
@@ -365,6 +408,7 @@ export async function showEditor(): Promise<void> {
   await sendCommand('SHOW');
   isEditorVisible = true;
   setupWindowListeners();
+  setManagerState('ready_visible');
 }
 
 /**
@@ -373,6 +417,7 @@ export async function showEditor(): Promise<void> {
 export async function hideEditor(): Promise<void> {
   await sendCommand('HIDE');
   isEditorVisible = false;
+  setManagerState('ready_hidden');
 }
 
 /**
@@ -447,6 +492,7 @@ export function isEditorReady(): boolean {
  * Termina il processo WPF.
  */
 export function stopWpfEditor(): void {
+  setManagerState('stopping');
   if (wpfProcess && !wpfProcess.killed) {
     wpfProcess.kill();
     wpfProcess = null;
@@ -459,6 +505,62 @@ export function stopWpfEditor(): void {
   isEditorVisible = false;
   lastBoundsPayload = null;
   pendingCallbacks.clear();
+  setManagerState('stopped');
+}
+
+/**
+ * Registra una sessione renderer e assicura che il processo WPF sia disponibile.
+ */
+export async function attachSession(sessionId: string): Promise<WpfEditorStatus> {
+  if (!sessionId || !sessionId.trim()) {
+    throw new Error('sessionId mancante');
+  }
+  activeSessions.add(sessionId.trim());
+
+  try {
+    if (!isEditorReady()) {
+      await startWpfEditor();
+    }
+    await setParentWindow().catch((err: any) => {
+      log.warn(`[WPF Editor] setParent fallito in attach: ${err?.message ?? err}`);
+    });
+    emitStatus();
+    return getStatusSnapshot();
+  } catch (err: any) {
+    setManagerState('faulted', err?.message ?? 'attach_failed');
+    throw err;
+  }
+}
+
+/**
+ * Sgancia una sessione renderer. Se non ci sono piu' sessioni attive nasconde l'editor.
+ */
+export async function detachSession(sessionId: string): Promise<WpfEditorStatus> {
+  if (sessionId && sessionId.trim()) {
+    activeSessions.delete(sessionId.trim());
+  }
+
+  if (activeSessions.size === 0 && isEditorReady() && isEditorVisible) {
+    await hideEditor().catch(() => {});
+  } else {
+    emitStatus();
+  }
+
+  return getStatusSnapshot();
+}
+
+/**
+ * Restituisce lo stato del manager WPF.
+ */
+export function getStatus(): WpfEditorStatus {
+  return getStatusSnapshot();
+}
+
+/**
+ * Verifica se il documento corrente è stato modificato.
+ */
+export async function isDirty(): Promise<boolean> {
+  return await sendCommand('IS_DIRTY');
 }
 
 /**
@@ -468,6 +570,18 @@ export function registerWpfEditorIpcHandlers(): void {
   ipcMain.handle('wpf-editor:start', async () => {
     await startWpfEditor();
     return true;
+  });
+
+  ipcMain.handle('wpf-editor:attach', async (_e, params: { sessionId: string }) => {
+    return await attachSession(params?.sessionId ?? '');
+  });
+
+  ipcMain.handle('wpf-editor:detach', async (_e, params: { sessionId: string }) => {
+    return await detachSession(params?.sessionId ?? '');
+  });
+
+  ipcMain.handle('wpf-editor:get-status', async () => {
+    return getStatus();
   });
 
   ipcMain.handle('wpf-editor:load-rtf', async (_e, rtfBase64: string) => {
@@ -481,6 +595,10 @@ export function registerWpfEditorIpcHandlers(): void {
 
   ipcMain.handle('wpf-editor:get-pdf', async () => {
     return await getPdf();
+  });
+
+  ipcMain.handle('wpf-editor:is-dirty', async () => {
+    return await isDirty();
   });
 
   ipcMain.handle('wpf-editor:show', async () => {
