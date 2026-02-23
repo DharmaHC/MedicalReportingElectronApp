@@ -9,7 +9,7 @@ import * as pkcs11js from 'pkcs11js';
 import fs from 'fs';
 import log from 'electron-log';
 import { execFile } from 'child_process';
-import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation, migrateNamirialUrl } from './configManager';
+import { loadConfigJson, initializeAllConfigs, migrateOldConfigStructure, syncAllConfigsWithDefaults, isPerMachineInstallation, migrateNamirialUrl, getDefaultConfigDir, getCustomConfigDir } from './configManager';
 import type { CompanyUISettings, Settings } from '../globals';
 import {
   initializeRemoteSignProviders,
@@ -106,125 +106,86 @@ export function loadGlobalSettings(): Settings {
  * Carica settings con informazioni di debug sulla provenienza di ogni campo
  * @returns Oggetto con settings e info sulla provenienza
  */
-function loadSettingsWithDebugInfo(): {
-  settings: Settings;
-  sources: Record<string, 'default' | 'custom' | 'merged'>;
-  paths: { default: string; custom: string };
+/**
+ * Carica un file di configurazione con info debug sulla provenienza di ogni campo
+ */
+function loadConfigWithDebugInfo(filename: string): {
+  settings: Record<string, any>;
+  sources: Record<string, 'default' | 'custom'>;
+  paths: { default: string; custom: string; customExists: boolean };
 } {
-  const { getDefaultConfigDir, getCustomConfigDir } = require('./configManager');
+  const defaultPath = path.join(getDefaultConfigDir(), filename);
+  const customPath = path.join(getCustomConfigDir(), filename);
 
-  const defaultPath = path.join(getDefaultConfigDir(), 'sign-settings.json');
-  const customPath = path.join(getCustomConfigDir(), 'sign-settings.json');
-
-  // Carica file default
-  let defaultSettings: Settings = DEFAULT_SETTINGS;
+  let defaultConfig: Record<string, any> = {};
   if (fs.existsSync(defaultPath)) {
     try {
-      const raw = fs.readFileSync(defaultPath, 'utf8');
-      defaultSettings = JSON.parse(raw) as Settings;
+      defaultConfig = JSON.parse(fs.readFileSync(defaultPath, 'utf8'));
     } catch (err) {
-      log.error('Error loading default settings:', err);
+      log.error(`Error loading default ${filename}:`, err);
     }
   }
 
-  // Carica file custom (se esiste)
-  let customSettings: Partial<Settings> | null = null;
-  const hasCustomFile = fs.existsSync(customPath);
-  if (hasCustomFile) {
+  let customConfig: Record<string, any> | null = null;
+  const customExists = fs.existsSync(customPath);
+  if (customExists) {
     try {
-      const raw = fs.readFileSync(customPath, 'utf8');
-      customSettings = JSON.parse(raw) as Partial<Settings>;
+      customConfig = JSON.parse(fs.readFileSync(customPath, 'utf8'));
     } catch (err) {
-      log.error('Error loading custom settings:', err);
+      log.error(`Error loading custom ${filename}:`, err);
     }
   }
 
-  // Determina la provenienza di ogni campo
-  const sources: Record<string, 'default' | 'custom' | 'merged'> = {};
-  const finalSettings = loadGlobalSettings();
+  // Usa loadConfigJson per ottenere il risultato finale (merged)
+  const finalSettings = loadConfigJson<Record<string, any>>(filename, defaultConfig);
 
+  // Determina provenienza di ogni campo (top-level)
+  const sources: Record<string, 'default' | 'custom'> = {};
   for (const key in finalSettings) {
-    if (customSettings && key in customSettings) {
-      sources[key] = 'custom';
-    } else {
-      sources[key] = 'default';
-    }
+    sources[key] = (customConfig && key in customConfig) ? 'custom' : 'default';
   }
 
   return {
     settings: finalSettings,
     sources,
-    paths: { default: defaultPath, custom: customPath }
+    paths: { default: defaultPath, custom: customPath, customExists }
   };
 }
 
+function loadSettingsWithDebugInfo() {
+  return loadConfigWithDebugInfo('sign-settings.json');
+}
+
 /**
- * Espone i settings nella console di Chrome per debugging
- * Accessibile tramite: window.debugSettings()
+ * Registra window.debugSettings() nella console DevTools.
+ * Il log dettagliato viene fatto dal renderer via IPC debug:getSettings.
  */
 export function logSettingsToConsole(mainWindow: BrowserWindow | null): void {
   if (!mainWindow) return;
 
   try {
-    const { settings, sources, paths } = loadSettingsWithDebugInfo();
-
-    // Prepara dati per la console
-    const debugData: any[] = [];
-    for (const key in settings) {
-      const value = (settings as any)[key];
-      const source = sources[key] || 'default';
-      debugData.push({
-        'Setting': key,
-        'Valore': typeof value === 'string' ? value : JSON.stringify(value),
-        'Provenienza': source === 'custom' ? '🔧 Personalizzato' : '📦 Default'
-      });
-    }
-
-    // Conta personalizzazioni
-    const customCount = Object.values(sources).filter(s => s === 'custom').length;
-    const totalCount = Object.keys(settings).length;
-
-    // Espone i settings nella console del renderer
     mainWindow.webContents.executeJavaScript(`
-      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
-      console.log('%c📋 SETTINGS CARICATI (sign-settings.json)', 'color: #00aaff; font-weight: bold; font-size: 14px;');
-      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
-
-      console.log('%c📂 Percorsi File:', 'color: #888; font-weight: bold;');
-      console.log('  📦 Default:       ${paths.default.replace(/\\/g, '\\\\')}');
-      console.log('  🔧 Personalizzato: ${paths.custom.replace(/\\/g, '\\\\')}');
-      console.log('');
-
-      console.log('%c📊 Statistiche:', 'color: #888; font-weight: bold;');
-      console.log('  Totale settings: ${totalCount}');
-      console.log('  Personalizzati:  ${customCount}');
-      console.log('  Default:         ${totalCount - customCount}');
-      console.log('');
-
-      console.log('%c🔍 Dettaglio Settings:', 'color: #888; font-weight: bold;');
-      console.table(${JSON.stringify(debugData)});
-
-      console.log('%c💡 Puoi usare window.debugSettings() per rivedere questi valori', 'color: #888; font-style: italic;');
-      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00aaff; font-weight: bold;');
-
-      // Espone funzioni globali per debugging
-      window.debugSettings = () => {
-        console.table(${JSON.stringify(debugData)});
-        return ${JSON.stringify(settings)};
-      };
-
-      window.debugSettingsRaw = () => {
-        return {
-          settings: ${JSON.stringify(settings)},
-          sources: ${JSON.stringify(sources)},
-          paths: ${JSON.stringify(paths)}
+      (function() {
+        window.debugSettings = function() {
+          return window.electron.ipcRenderer.invoke('debug:getSettings').then(function(all) {
+            Object.keys(all).forEach(function(filename) {
+              var d = all[filename];
+              console.log('%c ' + filename, 'color: #00aaff; font-weight: bold; font-size: 13px');
+              console.log('  Default:', d.paths.default);
+              console.log('  Custom:', d.paths.customExists ? d.paths.custom : '(non esiste)');
+              console.table(Object.keys(d.settings).map(function(key) {
+                var v = d.settings[key];
+                return { Setting: key, Valore: typeof v === 'object' ? JSON.stringify(v) : String(v), Provenienza: d.sources[key] === 'custom' ? 'Personalizzato' : 'Default' };
+              }));
+            });
+            return all;
+          });
         };
-      };
+      })();
     `);
-
-    log.info(`Settings exposed to browser console: ${customCount}/${totalCount} personalizzati`);
+    log.info('window.debugSettings() registered');
   } catch (err) {
-    log.error('Error logging settings to console:', err);
+    log.error('Error registering debugSettings:', err);
   }
 }
 
@@ -481,6 +442,15 @@ ipcMain.handle('appSettings:get', async () => {
 ipcMain.handle('appSettings:reload', async () => {
   settingsCache = null;
   return await loadSettingsFileCached();
+});
+
+// ------ DEBUG SETTINGS IPC ------
+ipcMain.handle('debug:getSettings', () => {
+  return {
+    'sign-settings.json': loadConfigWithDebugInfo('sign-settings.json'),
+    'company-footer-settings.json': loadConfigWithDebugInfo('company-footer-settings.json'),
+    'company-ui-settings.json': loadConfigWithDebugInfo('company-ui-settings.json'),
+  };
 });
 
 // ------ APP INFO IPC ------

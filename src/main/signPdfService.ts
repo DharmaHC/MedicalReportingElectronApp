@@ -151,6 +151,7 @@ export interface SignPdfRequest {
   bypassSignature?: boolean; // ⚠️ BYPASS per recupero: solo header/footer, no firma digitale
   signedByName?: string;    // Nome del medico per dicitura firma digitale (usato in bypass mode)
   doctorName?: string;      // Nome leggibile del medico (es. "Dr. Mario Rossi") - ha priorità sul CN del certificato
+  signatureDate?: string;   // Data firma originale (ISO string) - se presente, usata al posto di new Date() nella dicitura
 }
 export interface SignPdfResponse {
   signedPdfBase64: string; // PDF estetico (non firmato)
@@ -174,7 +175,13 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
 
       // Usa signedByName per la dicitura di firma (non footerText che è per i dati aziendali)
       const signedBy = req.signedByName || "Documento con header/footer applicati";
-      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings);
+
+      // Se signatureDate è presente, usa la data originale di firma invece di new Date()
+      const overrideDate = req.signatureDate ? new Date(req.signatureDate) : undefined;
+      if (overrideDate) {
+        console.log(`📅 Data firma forzata: ${overrideDate.toLocaleString()}`);
+      }
+      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings, overrideDate);
 
       log('success (bypass mode)');
       return {
@@ -410,7 +417,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
 }
 
 /* ██████ AGGIUNGI DICITURA CN ULTIMA PAGINA ██████ */
-async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Settings): Promise<Buffer> {
+async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Settings, overrideDate?: Date): Promise<Buffer> {
   const doc = await PDFDocument.load(pdfBuf);
   const font = await embedFont(doc, settings.footerTextFontFamily);
 
@@ -419,7 +426,7 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
   const lastPage = pages[pages.length - 1];
   const { width } = lastPage.getSize();
 
-  const now = new Date();
+  const now = overrideDate || new Date();
 
   // Usa i template configurabili da sign-settings.json
   // Applica la sostituzione dei placeholder a ENTRAMBE le linee

@@ -658,10 +658,16 @@ export function loadConfigJson<T>(filename: string, fallbackValue: T): T {
       // Deep merge: customConfig sovrascrive baseConfig
       const merged = deepMerge(baseConfig, customConfig);
       console.log(`✓ Merge completato: default + personalizzazioni`);
+      console.log(`━━ ${filename} VALORI EFFETTIVI (merged) ━━`);
+      console.log(JSON.stringify(merged, null, 2));
+      console.log(`━━ fine ${filename} ━━`);
       return merged;
     }
 
     // 3. Se non esiste personalizzato, usa solo il default
+    console.log(`━━ ${filename} VALORI EFFETTIVI (solo default) ━━`);
+    console.log(JSON.stringify(baseConfig, null, 2));
+    console.log(`━━ fine ${filename} ━━`);
     return baseConfig;
   } catch (err) {
     console.error(`✗ Errore caricamento ${filename}:`, err);
