@@ -71,6 +71,30 @@ function AppWrapper() {
         console.log("✓ API Base URL caricato da configurazione:", settings.apiBaseUrl);
         setConfigError(null);
 
+        // Log di tutti i file di configurazione con provenienza nella console DevTools
+        if (window.electron?.ipcRenderer) {
+          window.electron.ipcRenderer.invoke('debug:getSettings').then((allConfigs: any) => {
+            console.log('[debug:getSettings] raw response:', JSON.stringify(allConfigs, null, 2));
+            for (const [filename, dbg] of Object.entries(allConfigs) as [string, any][]) {
+              if (!dbg || !dbg.paths || !dbg.settings) {
+                console.warn(`[debug] ${filename}: struttura inattesa`, dbg);
+                continue;
+              }
+              const customLabel = dbg.paths.customExists ? dbg.paths.custom : '(non esiste)';
+              console.log(`%c ${filename}`, 'color: #00aaff; font-weight: bold; font-size: 13px');
+              console.log('  Default:       ', dbg.paths.default);
+              console.log('  Personalizzato:', customLabel);
+              console.table(
+                Object.keys(dbg.settings).map((key: string) => ({
+                  Setting: key,
+                  Valore: typeof dbg.settings[key] === 'object' ? JSON.stringify(dbg.settings[key]) : String(dbg.settings[key]),
+                  Provenienza: dbg.sources[key] === 'custom' ? 'Personalizzato' : 'Default',
+                }))
+              );
+            }
+          }).catch((err: any) => { console.error('debug:getSettings failed:', err); });
+        }
+
       } catch (error) {
         console.error("Errore caricamento company-ui-settings:", error);
 
