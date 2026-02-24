@@ -66,13 +66,13 @@ Var InstallationType
     SetShellVarContext current
   ${EndIf}
 
-  ; ═══ Force settings reset per v1.0.52 ═══
+  ; ═══ Force settings + images reset per v1.0.54 ═══
   ; Crea il marker RESET_CONFIG in ProgramData per forzare la sovrascrittura
-  ; dei settings personalizzati con i nuovi default al prossimo avvio dell'app.
-  ; RIMUOVERE questo blocco nella versione successiva (1.0.53+).
+  ; dei settings e delle immagini (logo/footer) con i nuovi default al prossimo avvio.
+  ; Le immagini di default ora contengono i loghi corretti (non più placeholder vuoti).
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.52"
+  FileWrite $1 "1.0.54"
   FileClose $1
 !macroend

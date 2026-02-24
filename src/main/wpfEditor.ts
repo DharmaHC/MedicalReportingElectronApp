@@ -550,27 +550,26 @@ export async function setBounds(
 
   const win = getHostWindow(sourceWindow);
   const cb = win?.getContentBounds();
-  const vpW = lastViewportSize?.width ?? 0;
-  const vpH = lastViewportSize?.height ?? 0;
-  const dpr = lastViewportDpr && lastViewportDpr > 0 ? lastViewportDpr : 1;
-  // Compatibilità con il comportamento pre-ieri:
-  // WPF SetBounds fa già ClientToScreen, quindi qui vanno inviate coordinate
-  // RELATIVE alla client-area Electron (non assolute).
-  const payload = {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: Math.max(1, Math.round(width)),
-    height: Math.max(1, Math.round(height)),
-  };
 
-  logBoundsDebug({
-    mode: 'relative_client',
-    windowId: win?.id ?? null,
-    css: { x, y, width, height },
-    viewport: { width: vpW, height: vpH, dpr },
-    contentBounds: cb ? { x: cb.x, y: cb.y, width: cb.width, height: cb.height } : null,
-    payload,
-  });
+  // Invia coordinate DIP assolute sullo schermo (contentBounds + CSS offset).
+  // WPF per-monitor V2 le applica direttamente tramite Left/Top/Width/Height,
+  // gestendo la conversione DPI internamente. Questo evita il problema di
+  // ClientToScreen cross-process che restituisce coordinate in system-DPI space
+  // anziché physical space su monitor secondari con DPI diverso dal primario.
+  const payload = cb
+    ? {
+        x: Math.round(cb.x + x),
+        y: Math.round(cb.y + y),
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height)),
+        absolute: true,
+      }
+    : {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height)),
+      };
 
   await sendCommandNoAck('SET_BOUNDS', payload);
 }
