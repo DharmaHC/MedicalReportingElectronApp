@@ -18,7 +18,7 @@
   "reportPageWidth": 210,
   "reportPageHeight": 297,
   "editorZoomDefault": 1.3,
-  "rowsPerPage": 30,
+  "rowsPerPage": 32,
   "highlightPlaceholder": false,
   "pkcs11Lib": "C:\\Windows\\System32\\bit4ipki.dll",
   "cspSlotIndex": 0,
