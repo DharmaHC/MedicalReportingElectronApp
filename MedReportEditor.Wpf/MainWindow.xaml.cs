@@ -59,6 +59,9 @@ namespace MedReportEditor.Wpf
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
 
@@ -551,22 +554,46 @@ namespace MedReportEditor.Wpf
         {
             Dispatcher.Invoke(() =>
             {
-                int x = root.TryGetProperty("x", out var xv) ? (int)xv.GetDouble() : 0;
-                int y = root.TryGetProperty("y", out var yv) ? (int)yv.GetDouble() : 0;
-                int w = root.TryGetProperty("width", out var wv) ? (int)wv.GetDouble() : 800;
-                int h = root.TryGetProperty("height", out var hv) ? (int)hv.GetDouble() : 600;
+                double x = root.TryGetProperty("x", out var xv) ? xv.GetDouble() : 0;
+                double y = root.TryGetProperty("y", out var yv) ? yv.GetDouble() : 0;
+                double w = root.TryGetProperty("width", out var wv) ? wv.GetDouble() : 800;
+                double h = root.TryGetProperty("height", out var hv) ? hv.GetDouble() : 600;
+                bool absolute = root.TryGetProperty("absolute", out var av) && av.GetBoolean();
 
-                if (_isOverlay && _parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                if (absolute)
                 {
-                    // Converti da coordinate relative alla client-area di Electron
-                    // a coordinate schermo assolute
-                    var pt = new POINT { X = x, Y = y };
-                    ClientToScreen(_parentHwnd, ref pt);
-                    MoveWindow(_myHwnd, pt.X, pt.Y, w, h, true);
+                    // Coordinate DIP assolute sullo schermo.
+                    Left = x;
+                    Top = y;
+                    Width = w;
+                    Height = h;
+                }
+                else if (_parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                {
+                    // Coordinate relative alla client-area Electron in CSS px (DIP).
+                    // Converti solo l'origine del parent da physical px a DIP e applica offset DIP.
+                    var origin = new POINT { X = 0, Y = 0 };
+                    ClientToScreen(_parentHwnd, ref origin);
+
+                    double sf = 1.0;
+                    try
+                    {
+                        uint dpi = GetDpiForWindow(_parentHwnd);
+                        if (dpi > 0) sf = dpi / 96.0;
+                    }
+                    catch (EntryPointNotFoundException) { }
+
+                    double originDipX = origin.X / sf;
+                    double originDipY = origin.Y / sf;
+
+                    Left = originDipX + x;
+                    Top = originDipY + y;
+                    Width = w;
+                    Height = h;
                 }
                 else if (_myHwnd != IntPtr.Zero)
                 {
-                    MoveWindow(_myHwnd, x, y, w, h, true);
+                    MoveWindow(_myHwnd, (int)x, (int)y, (int)w, (int)h, true);
                 }
                 else
                 {
