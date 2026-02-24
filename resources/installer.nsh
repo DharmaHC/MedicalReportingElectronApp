@@ -65,4 +65,14 @@ Var InstallationType
   ${If} $InstallationType == "standard"
     SetShellVarContext current
   ${EndIf}
+
+  ; ═══ Force settings reset per v1.0.52 ═══
+  ; Crea il marker RESET_CONFIG in ProgramData per forzare la sovrascrittura
+  ; dei settings personalizzati con i nuovi default al prossimo avvio dell'app.
+  ; RIMUOVERE questo blocco nella versione successiva (1.0.53+).
+  ReadEnvStr $R0 "ProgramData"
+  CreateDirectory "$R0\MedReportAndSign"
+  FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
+  FileWrite $1 "1.0.52"
+  FileClose $1
 !macroend

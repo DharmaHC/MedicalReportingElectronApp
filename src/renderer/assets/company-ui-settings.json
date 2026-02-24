@@ -34,5 +34,5 @@
   },
   "useExternalIdSystem": false,
   "dicomImageSystemName": "RemoteEye",
-  "zoomFactor": 1.0
+  "zoomFactor": 1
 }
