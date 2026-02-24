@@ -63,7 +63,7 @@
         "to": "assets"
       },
       {
-        "from": "MedReportEditor.Wpf/bin/Debug/net8.0-windows/",
+        "from": "MedReportEditor.Wpf/bin/Debug/net48/",
         "to": "wpf-editor",
         "filter": [
           "**/*",

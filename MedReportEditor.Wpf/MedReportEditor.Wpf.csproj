@@ -1,19 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
+    <LangVersion>8.0</LangVersion>
     <AssemblyName>MedReportEditor</AssemblyName>
     <RootNamespace>MedReportEditor.Wpf</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Telerik UI for WPF - meta-pacchetto Xaml (implicit styles) per .NET 8.
+    <!-- Telerik UI for WPF - meta-pacchetto Xaml (implicit styles) per .NET Framework 4.8.
          Include tutti i controlli, temi e format providers. Non servono pacchetti individuali. -->
-    <PackageReference Include="Telerik.UI.for.Wpf.80" Version="2025.4.1321.0" />
-    <!-- System.Drawing.Common for .NET 8 -->
-    <PackageReference Include="System.Drawing.Common" Version="8.0.7" />
+    <PackageReference Include="Telerik.UI.for.Wpf.AllControls.NoXaml" Version="2025.4.1321.0" />
+    <!-- System.Text.Json per .NET Framework 4.8 (non incluso di default) -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
   <ItemGroup>
     <!-- Copia telerik-license.txt nella cartella di output (la env var TELERIK_LICENSE e' troncata su Windows) -->

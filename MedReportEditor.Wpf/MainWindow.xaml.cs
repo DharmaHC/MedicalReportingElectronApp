@@ -1,8 +1,11 @@
+using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -71,8 +74,8 @@ namespace MedReportEditor.Wpf
         private IntPtr _parentHwnd = IntPtr.Zero;
         private bool _isOverlay = false;
 
-        private CancellationTokenSource? _cts;
-        private NamedPipeServerStream? _pipeServer;
+        private CancellationTokenSource _cts;
+        private NamedPipeServerStream _pipeServer;
         private bool _isDocumentDirty = false;
 
         // Font sizes comuni per la ComboBox
@@ -314,25 +317,25 @@ namespace MedReportEditor.Wpf
                 try
                 {
                     _pipeServer = new NamedPipeServerStream(
-                        App.PipeName!,
+                        App.PipeName,
                         PipeDirection.InOut,
                         1,
                         PipeTransmissionMode.Byte,
                         PipeOptions.Asynchronous);
 
                     statusText.Text = "In attesa di connessione...";
-                    await _pipeServer.WaitForConnectionAsync(ct);
+                    await _pipeServer.WaitForConnectionAsync();
                     statusText.Text = "Electron connesso";
 
                     var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                    using var reader = new StreamReader(_pipeServer, utf8NoBom, leaveOpen: true);
-                    using var writer = new StreamWriter(_pipeServer, utf8NoBom, leaveOpen: true) { AutoFlush = true };
+                    using var reader = new StreamReader(_pipeServer, utf8NoBom, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+                    using var writer = new StreamWriter(_pipeServer, utf8NoBom, bufferSize: 1024, leaveOpen: true) { AutoFlush = true };
 
                     await SendMessageAsync(writer, new { type = "READY" });
 
                     while (_pipeServer.IsConnected && !ct.IsCancellationRequested)
                     {
-                        var line = await reader.ReadLineAsync(ct);
+                        var line = await reader.ReadLineAsync();
                         if (line == null) break;
 
                         await ProcessCommandAsync(line, writer);
