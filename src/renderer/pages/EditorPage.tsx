@@ -137,10 +137,11 @@ function EditorPage() {
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
   const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
   const wpfSessionIdRef = useRef<string | null>(null);
-  // Regola richiesta:
-  // - Editor HTML => motore v1
-  // - Editor RTF/WPF => motore v2
+  const wpfBoundsLogRef = useRef<{ signature: string; at: number }>({ signature: "", at: 0 });
+  // Regola: editor HTML su v1 (default), editor RTF/WPF su v2.
   const effectiveUseV2Assembly = isPdfEngineAuto ? useWpfEditor : useV2Assembly;
+  // Boost font richiesto solo nel flusso v1.
+  const forcedReportFontSizePx = 17;
 
   const getWpfAnchorRect = (): DOMRect | null => {
     const area = wpfEditorAreaRef.current;
@@ -152,6 +153,43 @@ function EditorPage() {
     if (rect.width <= 0 || rect.height <= 0) return null;
     return rect;
   };
+
+  const logWpfBounds = useCallback((phase: string, rect: DOMRect | null) => {
+    const data = rect
+      ? {
+          phase,
+          rect: {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          },
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            dpr: window.devicePixelRatio || 1,
+          },
+          scroll: {
+            x: Math.round(window.scrollX || 0),
+            y: Math.round(window.scrollY || 0),
+          },
+        }
+      : {
+          phase,
+          rect: null,
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            dpr: window.devicePixelRatio || 1,
+          },
+        };
+
+    const signature = JSON.stringify(data);
+    const now = Date.now();
+    if (signature === wpfBoundsLogRef.current.signature && now - wpfBoundsLogRef.current.at < 2500) return;
+    wpfBoundsLogRef.current = { signature, at: now };
+    console.log(`[WPF BOUNDS][renderer] ${signature}`);
+  }, []);
 
   const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
   const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
@@ -479,8 +517,8 @@ const renderPinDialog = () =>
   );
 
   // Plugin Prosemirror per applicare stili ai paragrafi nell'editor.
-  // - Forza solo font-family e spaziatura verticale
-  // - Preserva font-size e text-align originali dal template
+  // - Forza font-family, line-height e dimensione minima del font
+  // - Preserva text-align originale dal template
   // - Rimuove margin-left negativi (non hanno senso nell'editor senza section margins RTF)
   // Il backend v2 riapplica l'indentazione dal template in fase di assemblaggio.
   const paragraphStylerPlugin = new Plugin({
@@ -494,18 +532,24 @@ const renderPinDialog = () =>
       newState.doc.descendants((node, pos) => {
         if (node.type.name === "paragraph") {
           const currentStyle: string = node.attrs?.style || "";
-          // Preserva font-size originale dal template (se presente)
-          const fontSizeMatch = currentStyle.match(/font-size:\s*[\d.]+px/);
+          const fontSizeMatch = currentStyle.match(/font-size:\s*([\d.]+)px/i);
+          const parsedFontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : NaN;
+          const baseFontSizePx = Number.isFinite(parsedFontSize) ? parsedFontSize : 16;
+          const paragraphFontSizePx = effectiveUseV2Assembly
+            ? baseFontSizePx
+            : Math.max(baseFontSizePx, forcedReportFontSizePx);
           // Preserva text-align (justify, center, right)
           const textAlignMatch = currentStyle.match(/text-align:\s*\w+/);
 
           const parts = [
             'font-family: "Times New Roman"',
-            fontSizeMatch ? fontSizeMatch[0] : 'font-size: 16px',
+            `font-size: ${paragraphFontSizePx}px`,
             'margin-top: 0px',
             'margin-bottom: 0px',
-            'line-height: 100%'
           ];
+          if (!effectiveUseV2Assembly) {
+            parts.push('line-height: 100%');
+          }
           if (textAlignMatch) parts.push(textAlignMatch[0]);
           const newStyle = parts.join("; ") + ";";
 
@@ -972,16 +1016,23 @@ const renderPinDialog = () =>
 
     container.querySelectorAll("p").forEach((paragraph) => {
       const currentStyle = paragraph.getAttribute("style") || "";
-      const fontSizeMatch = currentStyle.match(/font-size:\s*[\d.]+px/i);
+      const fontSizeMatch = currentStyle.match(/font-size:\s*([\d.]+)px/i);
+      const parsedFontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : NaN;
+      const baseFontSizePx = Number.isFinite(parsedFontSize) ? parsedFontSize : 16;
+      const normalizedFontSizePx = effectiveUseV2Assembly
+        ? baseFontSizePx
+        : Math.max(baseFontSizePx, forcedReportFontSizePx);
       const textAlignMatch = currentStyle.match(/text-align:\s*(left|right|center|justify)/i);
 
       const normalizedStyleParts = [
         'font-family: "Times New Roman"',
-        fontSizeMatch ? fontSizeMatch[0] : "font-size: 16px",
+        `font-size: ${normalizedFontSizePx}px`,
         "margin-top: 0px",
         "margin-bottom: 0px",
-        "line-height: 1",
       ];
+      if (!effectiveUseV2Assembly) {
+        normalizedStyleParts.push("line-height: 100%");
+      }
       if (textAlignMatch) {
         normalizedStyleParts.push(textAlignMatch[0]);
       }
@@ -1361,6 +1412,7 @@ const renderPinDialog = () =>
         // Coordinate in CSS pixels - la conversione a physical pixels avviene nel main process
         // usando il scaleFactor del monitor corrente (gestisce correttamente multi-monitor con DPI diversi)
         const rect = getWpfAnchorRect();
+        logWpfBounds("startWpf", rect);
         if (rect) {
           await window.wpfEditor.setBounds({
             x: Math.round(rect.left),
@@ -1445,6 +1497,7 @@ const renderPinDialog = () =>
 
     const updateBounds = () => {
       const rect = getWpfAnchorRect();
+      logWpfBounds("updateBounds", rect);
       if (!rect) return;
       // Invia CSS pixels - la conversione DPI avviene nel main process
       window.wpfEditor?.setBounds({

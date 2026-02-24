@@ -550,21 +550,6 @@ namespace MedReportEditor.Wpf
             });
         }
 
-        /// <summary>
-        /// Riceve coordinate CSS pixel (relative al viewport di Electron) e posiziona
-        /// la finestra WPF calcolando le coordinate schermo fisiche localmente.
-        ///
-        /// Approccio:
-        /// 1. ClientToScreen(parentHwnd, {0,0}) → origine fisica della client-area del parent
-        ///    (per il punto {0,0} non c'è ambiguità di DPI cross-process)
-        /// 2. GetDpiForWindow(parentHwnd) → DPI del monitor su cui si trova Electron
-        /// 3. physOffset = cssOffset * (dpi / 96) → conversione CSS→physical locale
-        /// 4. MoveWindow con coordinate schermo assolute
-        ///
-        /// Questo evita ClientToScreen con offset non-zero cross-process, che può
-        /// fallire su setup multi-monitor con DPI diversi per differenze di
-        /// DPI-awareness context tra Electron (V1) e WPF .NET 8 (V2).
-        /// </summary>
         private void SetBounds(JsonElement root)
         {
             Dispatcher.Invoke(() =>
@@ -577,9 +562,7 @@ namespace MedReportEditor.Wpf
 
                 if (absolute)
                 {
-                    // Coordinate DIP assolute sullo schermo, calcolate da Electron come
-                    // contentBounds + CSS offset. WPF per-monitor V2 gestisce la
-                    // conversione DPI internamente tramite Left/Top/Width/Height.
+                    // Coordinate DIP assolute sullo schermo.
                     Left = x;
                     Top = y;
                     Width = w;
@@ -587,9 +570,8 @@ namespace MedReportEditor.Wpf
                 }
                 else if (_parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
                 {
-                    // Overlay con parent noto: converti origine client del parent in DIP schermo
-                    // e applica offset CSS direttamente in DIP. Evita MoveWindow in pixel fisici,
-                    // che su setup multi-monitor/DPI misti può introdurre offset sistematici.
+                    // Coordinate relative alla client-area Electron in CSS px (DIP).
+                    // Converti solo l'origine del parent da physical px a DIP e applica offset DIP.
                     var origin = new POINT { X = 0, Y = 0 };
                     ClientToScreen(_parentHwnd, ref origin);
 
