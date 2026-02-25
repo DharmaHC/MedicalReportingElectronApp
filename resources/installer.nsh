@@ -1,7 +1,7 @@
 ; Custom NSIS installer script for MedReport
 ; Handles auto-update (--updated flag from electron-updater) and manual installation
 ;
-; v1.0.67: TWO CRITICAL FIXES
+; v1.0.68: NON-SILENT auto-update with WMIC Job Object escape
 ;
 ; Fix 1 - WMIC self-relaunch to escape Chromium Job Object:
 ; When electron-updater (v1.0.52 and earlier) spawns this installer via
@@ -14,19 +14,17 @@
 ; through the WMI service, completely independent of any Job Object) and exit.
 ; The relaunched instance has --wmic-relaunched flag and proceeds normally.
 ;
-; Fix 2 - SetSilent in preInit (not customInit):
-; The template's .onInit has steps between preInit and customInit
-; (check64BitAndSetRegView, ALLOW_ONLY_ONE_INSTALLER_INSTANCE, initMultiUser)
-; that may show hidden dialogs or trigger unexpected behavior.
-; Fix: Set silent mode in preInit BEFORE any of these steps run.
+; v1.0.68: Removed SetSilent for auto-updates. The installer now shows its
+; full UI (Welcome, Directory, Progress) so the user can follow the update.
+; The Finish page is auto-skipped (app is launched from customInstall).
 ;
 ; Auto-update flow:
 ;   0. preInit: WMIC self-relaunch (if spawned by Electron, escapes Job Object)
-;   1. preInit: SetSilent + kill stuck old installers + kill app processes
-;   2. ALLOW_ONLY_ONE_INSTALLER_INSTANCE: mutex check (silent, no BringToFront issue)
+;   1. preInit: kill stuck old installers + kill app processes (NO SetSilent)
+;   2. ALLOW_ONLY_ONE_INSTALLER_INSTANCE: mutex check
 ;   3. initMultiUser: reads registry, sets $INSTDIR to existing install path
-;   4. customInit: confirms --updated, logs diagnostic
-;   5. All pages skipped (already silent)
+;   4. customInit: confirms --updated, sets standard install, BringToFront
+;   5. Pages shown: Welcome → Directory (pre-filled) → Progress
 ;   6. customInstall: launch app via StdUtils.ExecShellAsUser
 ;   7. customFinishPage PRE: skip finish page (app already launched)
 
@@ -51,7 +49,7 @@ Var InstallationType
     ; Relaunch ourselves via wmic to escape the Job Object, then exit.
     ReadEnvStr $R0 TEMP
     FileOpen $2 "$R0\NSIS_RELAUNCH.log" w
-    FileWrite $2 "v1.0.67 WMIC self-relaunch$\r$\n"
+    FileWrite $2 "v1.0.68 WMIC self-relaunch$\r$\n"
     FileWrite $2 "EXEPATH=$EXEPATH$\r$\n"
     System::Call 'kernel32::GetCommandLineW() t .r3'
     FileWrite $2 "OrigCmdLine=$3$\r$\n"
@@ -74,17 +72,10 @@ Var InstallationType
   ; installer runs. preInit runs BEFORE the mutex check.
   System::Call 'kernel32::GetCurrentProcessId() i .r9'
 
-  ; ═══ CRITICAL FIX 2: Set silent mode EARLY for auto-updates ═══
-  ; This MUST happen before any other .onInit steps (mutex check, initMultiUser)
-  ; because those steps may show hidden dialogs if not in silent mode.
-  ${If} ${isUpdated}
-    SetSilent silent
-  ${EndIf}
-
   ; Write diagnostic to %TEMP% (preInit can't use $INSTDIR yet)
   ReadEnvStr $R0 TEMP
   FileOpen $2 "$R0\NSIS_PREINIT.log" w
-  FileWrite $2 "preInit v1.0.67$\r$\n"
+  FileWrite $2 "preInit v1.0.68$\r$\n"
   FileWrite $2 "OurPID=$9$\r$\n"
 
   ; --- Diagnostic: raw command line ---
@@ -95,7 +86,7 @@ Var InstallationType
 
   ; --- Diagnostic: isUpdated, wmic-relaunched, and Silent flags ---
   ${If} ${isUpdated}
-    FileWrite $2 "isUpdated=YES, SetSilent already called$\r$\n"
+    FileWrite $2 "isUpdated=YES (non-silent, UI visible)$\r$\n"
   ${Else}
     FileWrite $2 "isUpdated=NO$\r$\n"
   ${EndIf}
@@ -233,14 +224,16 @@ Var InstallationType
   ; Write diagnostic to confirm customInit was reached (past mutex check)
   ReadEnvStr $R0 TEMP
   FileOpen $2 "$R0\NSIS_CUSTOMINIT.log" w
-  FileWrite $2 "customInit v1.0.67 reached (mutex check passed!)$\r$\n"
+  FileWrite $2 "customInit v1.0.68 reached (mutex check passed!)$\r$\n"
 
-  ; When electron-updater launches the installer with --updated,
-  ; force silent mode to prevent NSIS pages from appearing behind other windows.
-  ; The app is launched explicitly from customInstall using StdUtils.ExecShellAsUser.
   ${If} ${isUpdated}
-    FileWrite $2 "isUpdated=YES, setting silent$\r$\n"
-    SetSilent silent
+    ; Auto-update: set standard install type, bring window to front
+    ; The installer shows its UI (non-silent) so the user can follow the update progress.
+    FileWrite $2 "isUpdated=YES, standard install + BringToFront$\r$\n"
+    StrCpy $InstallationType "standard"
+    StrCpy $InstallMode "CurrentUser"
+    SetShellVarContext current
+    BringToFront
   ${Else}
     FileWrite $2 "isUpdated=NO, showing MessageBox$\r$\n"
     FileClose $2
@@ -295,12 +288,12 @@ Var InstallationType
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.67"
+  FileWrite $1 "1.0.68"
   FileClose $1
 
   ; ═══ Diagnostic log in $INSTDIR ═══
   FileOpen $2 "$INSTDIR\NSIS_AUTOUPDATE.log" w
-  FileWrite $2 "version=1.0.67$\r$\n"
+  FileWrite $2 "version=1.0.68$\r$\n"
   FileWrite $2 "INSTDIR=$INSTDIR$\r$\n"
   FileWrite $2 "launchLink=$launchLink$\r$\n"
   FileWrite $2 "appExe=$appExe$\r$\n"
@@ -328,9 +321,7 @@ Var InstallationType
 !macroend
 
 ; ═══ Custom finish page ═══
-; Override the default finish page to auto-skip during auto-update.
-; Without this, the finish page would show (hidden behind other windows)
-; and block the installer from completing.
+; Auto-skip finish page during auto-update (app is already launched from customInstall).
 ; For manual installations, shows the normal finish page with "Run app" checkbox.
 !macro customFinishPage
   ; Define StartApp function for the "Run app" checkbox (manual installs only)
