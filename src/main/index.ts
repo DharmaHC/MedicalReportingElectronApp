@@ -839,18 +839,31 @@ function setupAutoUpdater() {
       }
     };
 
-    if (mainWindow) {
+    const showUpdateDialog = () => {
+      if (!mainWindow) {
+        setImmediate(() => launchInstallerAndQuit());
+        return;
+      }
+      const version = (info as any).version || 'nuova versione';
       dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: 'Aggiornamento disponibile',
-        message: 'Una nuova versione è stata scaricata. L\'app verrà chiusa per installare l\'aggiornamento.',
-        buttons: ['Ok']
-      }).then(() => {
-        setImmediate(() => launchInstallerAndQuit());
+        message: `La versione ${version} è stata scaricata ed è pronta per l'installazione.`,
+        detail: 'L\'applicazione verrà chiusa e si aprirà il programma di installazione.\nAl termine, l\'applicazione verrà riavviata automaticamente.',
+        buttons: ['Installa ora', 'Più tardi'],
+        defaultId: 0,
+        cancelId: 1
+      }).then((result) => {
+        if (result.response === 0) {
+          setImmediate(() => launchInstallerAndQuit());
+        } else {
+          log.info('User postponed update, will remind in 30 minutes');
+          setTimeout(showUpdateDialog, 30 * 60 * 1000);
+        }
       });
-    } else {
-      setImmediate(() => launchInstallerAndQuit());
-    }
+    };
+
+    showUpdateDialog();
   });
 }
 
