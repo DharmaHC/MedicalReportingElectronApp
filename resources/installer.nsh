@@ -11,26 +11,10 @@ Var InstallationType
   Pop $0 ; exit code
   Pop $1 ; output
 
-  ; Pulisce chiavi registro residue che impediscono reinstallazione
-  ; HKEY_CURRENT_USER
-  DeleteRegKey HKCU "Software\MedReport"
-  DeleteRegKey HKCU "Software\medreportandsign"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
-
-  ; HKEY_LOCAL_MACHINE (richiede admin, fallisce silenziosamente se non admin)
-  DeleteRegKey HKLM "SOFTWARE\MedReport"
-  DeleteRegKey HKLM "SOFTWARE\medreportandsign"
-  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
-  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
-
-  ; Windows 7 / 64-bit (Wow6432Node per app 32-bit su OS 64-bit)
-  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\MedReport"
-  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\medreportandsign"
-  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\MedReport"
-  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{net.dharmahealthcare.medreportandsign}"
-  DeleteRegKey HKCU "Software\Wow6432Node\MedReport"
-  DeleteRegKey HKCU "Software\Wow6432Node\medreportandsign"
+  ; NOTE: NON cancellare chiavi di registro qui!
+  ; In modalita' --updated, NSIS legge il registro per trovare la directory
+  ; di installazione esistente. Se le chiavi vengono cancellate prima,
+  ; l'installer installa in una nuova directory invece di aggiornare.
 
   StrCpy $InstallationType "standard"
 !macroend
@@ -66,12 +50,29 @@ Var InstallationType
     SetShellVarContext current
   ${EndIf}
 
+  ; ═══ Pulizia chiavi registro residue ═══
+  ; Eseguita DOPO l'installazione (non in preInit) per non interferire
+  ; con la rilevazione della directory in modalita' --updated
+  ; HKEY_CURRENT_USER
+  DeleteRegKey HKCU "Software\MedReport"
+  DeleteRegKey HKCU "Software\medreportandsign"
+
+  ; HKEY_LOCAL_MACHINE (richiede admin, fallisce silenziosamente se non admin)
+  DeleteRegKey HKLM "SOFTWARE\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\medreportandsign"
+
+  ; Windows 7 / 64-bit (Wow6432Node per app 32-bit su OS 64-bit)
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\MedReport"
+  DeleteRegKey HKLM "SOFTWARE\Wow6432Node\medreportandsign"
+  DeleteRegKey HKCU "Software\Wow6432Node\MedReport"
+  DeleteRegKey HKCU "Software\Wow6432Node\medreportandsign"
+
   ; ═══ Force settings + images reset ═══
   ; Crea il marker RESET_CONFIG in ProgramData per forzare la sovrascrittura
   ; dei settings e delle immagini con i nuovi default al prossimo avvio dell'app.
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.56"
+  FileWrite $1 "1.0.57"
   FileClose $1
 !macroend
