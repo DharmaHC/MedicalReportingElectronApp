@@ -2,6 +2,7 @@
 ; Asks user for installation type and skips mode selection for standard
 
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 Var InstallationType
 
@@ -20,12 +21,16 @@ Var InstallationType
 !macroend
 
 !macro customInit
-  ; In modalita' --updated (auto-update), NSIS gira in silent mode (/S).
-  ; MessageBox in silent mode restituisce IDNO di default, che manderebbe
-  ; nel path "advanced" rompendo l'auto-update. Skippiamo tutto e teniamo
-  ; il tipo "standard" settato in preInit.
-  IfSilent done
+  ; Rileva il flag --updated passato da electron-updater durante l'auto-update.
+  ; NOTA: electron-updater NON passa /S (silent mode), quindi IfSilent non funziona!
+  ; Il MessageBox appare nascosto dietro altre finestre e blocca l'installer
+  ; indefinitamente. Controlliamo direttamente i parametri della command line.
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "--updated" $R1
+  ; GetOptions: error flag SET = opzione non trovata, CLEAR = trovata
+  IfErrors 0 done
 
+  ; --updated NON trovato -> installazione manuale, mostra la scelta
   MessageBox MB_YESNO|MB_ICONQUESTION "Scegli la modalità di installazione:$\n$\nSI = Installazione Standard (Consigliata)$\n        Per utente corrente, con aggiornamenti automatici$\n$\nNO = Installazione Avanzata$\n        Permette di installare per tutti gli utenti (solo per Service)" IDNO advanced
 
   ; User clicked YES - Standard installation
@@ -79,6 +84,6 @@ Var InstallationType
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.59"
+  FileWrite $1 "1.0.60"
   FileClose $1
 !macroend
