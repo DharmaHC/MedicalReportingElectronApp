@@ -9,6 +9,7 @@ import {
   EditorMountEvent
 } from "@progress/kendo-react-editor";
 import { TextSelection, Plugin } from "prosemirror-state";
+import { Fragment, Slice } from "prosemirror-model";
 import { Button } from "@progress/kendo-react-buttons";
 import { PDFDocument, rgb } from "pdf-lib";
 import {
@@ -717,11 +718,21 @@ const renderPinDialog = () =>
     handlePhraseClick(item.text);
   };
 
+  const normalizePhraseForInsertion = (rawPhrase: string): string => {
+    return (rawPhrase ?? "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\u00A0/g, " ")
+      .replace(/\u202F/g, " ")
+      .replace(/\u2007/g, " ");
+  };
+
   // Inserisce la frase selezionata nell'editor (ProseMirror o WPF).
   const handlePhraseClick = (phrase: string) => {
+    const normalizedPhrase = normalizePhraseForInsertion(phrase);
+
     // Se il WPF editor è attivo, inserisci lì
     if (useWpfEditor && wpfEditorReady) {
-      window.wpfEditor.insertText(phrase).then(() => setIsModified(true)).catch(console.error);
+      window.wpfEditor.insertText(normalizedPhrase).then(() => setIsModified(true)).catch(console.error);
       return;
     }
 
@@ -730,23 +741,47 @@ const renderPinDialog = () =>
     view.focus();
 
     const { state, dispatch } = view;
-    const { from } = state.selection;
-    let pos = from;
-    let tr = state.tr;
-
-    const lines = phrase.split(/\r?\n/);
-
+    const lines = normalizedPhrase.split(/\r?\n/);
+    const inlineNodes: any[] = [];
     lines.forEach((line, idx) => {
       if (idx > 0) {
-        // Inserisce un hard break (<br />)
-        tr = tr.insert(pos, state.schema.nodes.hard_break.create());
-        pos += 1;
+        inlineNodes.push(state.schema.nodes.hard_break.create());
       }
-      tr = tr.insertText(line, pos);
-      pos += line.length;
+      if (line.length > 0) {
+        inlineNodes.push(state.schema.text(line));
+      }
     });
 
+    if (!inlineNodes.length) {
+      return;
+    }
+
+    const fragment = Fragment.fromArray(inlineNodes);
+    const expectedText = lines.join("\n");
+    const selectionFrom = state.selection.from;
+    const insertedFrom = selectionFrom;
+    const insertedTo = selectionFrom + fragment.size;
+
+    const tr = state.tr
+      .replaceSelection(new Slice(fragment, 0, 0))
+      .scrollIntoView();
+
     dispatch(tr);
+
+    try {
+      const insertedText = view.state.doc.textBetween(insertedFrom, insertedTo, "\n", "\n");
+      if (insertedText !== expectedText) {
+        console.warn("[PhraseInsert][Mismatch]", {
+          expectedLength: expectedText.length,
+          actualLength: insertedText.length,
+          expectedPreview: expectedText.slice(0, 160),
+          actualPreview: insertedText.slice(0, 160),
+          hasNbspSource: /&nbsp;|\u00A0|\u202F|\u2007/i.test(phrase),
+        });
+      }
+    } catch (diagErr) {
+      console.warn("[PhraseInsert][DiagError]", diagErr);
+    }
           // setIsModified(true) sarà gestito dal plugin docChangePlugin.
     };
 

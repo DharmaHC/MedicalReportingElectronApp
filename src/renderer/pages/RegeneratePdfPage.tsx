@@ -57,6 +57,9 @@ const RegeneratePdfPage: React.FC = () => {
   const [searching, setSearching] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
 
+  // Regeneration options
+  const [useCurrentTemplate, setUseCurrentTemplate] = useState(false);
+
   // Regeneration state
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateResults, setRegenerateResults] = useState<RegenerateResult[]>([]);
@@ -203,7 +206,8 @@ const RegeneratePdfPage: React.FC = () => {
       addLog(`Rigenerazione ${patientName} (${reportId})...`);
 
       // 1. Get regenerated PDF from API
-      const regenResponse = await fetch(`${getApiBaseUrl()}reports/${reportId}/regenerate-pdf`, {
+      const regenUrl = `${getApiBaseUrl()}reports/${reportId}/regenerate-pdf${useCurrentTemplate ? '?useCurrentTemplate=true' : ''}`;
+      const regenResponse = await fetch(regenUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -214,6 +218,9 @@ const RegeneratePdfPage: React.FC = () => {
 
       const regenData = await regenResponse.json();
       addLog(`  RTF recuperato, conversione in PDF completata`);
+      if (regenData.templateUsed) {
+        addLog(`  Modello attuale: ${regenData.templateFound ? 'APPLICATO' : 'NON TROVATO (fallback RTF originale)'}`);
+      }
       addLog(`  CompanyId: "${regenData.companyId}" - Medico: "${regenData.doctorName}"`);
 
       // Calcola data firma: 1 ora dopo la data di refertazione originale
@@ -457,7 +464,8 @@ const RegeneratePdfPage: React.FC = () => {
       addLog(`TEST rigenerazione: ${patientName}`);
 
       // 1. Get regenerated PDF
-      const regenResponse = await fetch(`${getApiBaseUrl()}reports/${reportId}/regenerate-pdf`, {
+      const regenUrl = `${getApiBaseUrl()}reports/${reportId}/regenerate-pdf${useCurrentTemplate ? '?useCurrentTemplate=true' : ''}`;
+      const regenResponse = await fetch(regenUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -469,6 +477,9 @@ const RegeneratePdfPage: React.FC = () => {
       const regenData = await regenResponse.json();
       addLog(`  RTF trovato, PDF rigenerato (non decorato): ${regenData.pdfBase64.length} chars`);
       addLog(`  CompanyId da DB: "${regenData.companyId}" - Medico: "${regenData.doctorName}"`);
+      if (regenData.templateUsed) {
+        addLog(`  Modello attuale: ${regenData.templateFound ? 'APPLICATO' : 'NON TROVATO (fallback RTF originale)'}`);
+      }
 
       // Calcola data firma: 1 ora dopo la data di refertazione originale
       let signatureDate: string | undefined;
@@ -676,6 +687,29 @@ const RegeneratePdfPage: React.FC = () => {
               )}
             />
           </Grid>
+
+          {/* Template option */}
+          <div style={{
+            marginTop: "15px",
+            padding: "10px 14px",
+            background: "#fff3cd",
+            borderRadius: "4px",
+            border: "1px solid #ffc107"
+          }}>
+            <label style={{ display: "flex", alignItems: "center", cursor: "pointer", fontWeight: 500 }}>
+              <input
+                type="checkbox"
+                checked={useCurrentTemplate}
+                onChange={(e) => setUseCurrentTemplate(e.target.checked)}
+                style={{ marginRight: "8px", width: "16px", height: "16px" }}
+              />
+              Usa header/footer dal modello attuale del medico
+            </label>
+            <div style={{ fontSize: "11px", color: "#856404", marginTop: "4px", marginLeft: "24px" }}>
+              Se attivo, il body del referto viene mantenuto dall'RTF originale,
+              ma header e footer vengono presi dal modello corrente del medico.
+            </div>
+          </div>
 
           {/* Regenerate Button */}
           <div style={{ marginTop: "15px" }}>

@@ -58,6 +58,9 @@ interface Settings {
   highlightPlaceholder: boolean;
   signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
+  signatureDateIncludeTime?: boolean; // Se true, {date} include l'orario (default: true per retrocompatibilità)
+  footerCompanyDataAlignment?: 'left' | 'center' | 'right'; // Allineamento dati azienda (default: center)
+  signatureTextAlignment?: 'left' | 'center' | 'right'; // Allineamento dicitura firma (default: center)
   remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
   speechToText?: SpeechToTextConfig; // Configurazione dettatura vocale locale (Whisper)
 }
@@ -69,6 +72,8 @@ interface CompanyFooterSettings {
   yPosFooterImage: number;
   footerImageXPositionOffset: number;
   footerText: string; // Testo dati aziendali (es. "Aster Diagnostica Srl - P.I. 06191121000")
+  footerCompanyDataAlignment?: 'left' | 'center' | 'right'; // Override allineamento dati azienda per company
+  signatureTextAlignment?: 'left' | 'center' | 'right'; // Override allineamento dicitura firma per company
 }
 
 interface EmergencyWorkaround {

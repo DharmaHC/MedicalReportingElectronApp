@@ -805,6 +805,40 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     log.info('Update downloaded', info);
+
+    const launchInstallerAndQuit = () => {
+      // CRITICAL: On Windows, Electron/Chromium's Job Object kills child processes
+      // when the app exits. Using autoUpdater.quitAndInstall() spawns the installer
+      // as a child process that gets terminated when app.quit() is called.
+      // Fix: Use wmic to create the installer process via the WMI service,
+      // which runs independently of Electron's process hierarchy.
+      const installerPath = (info as any).downloadedFile
+        || (autoUpdater as any).downloadedUpdateHelper?.file
+        || (autoUpdater as any).installerPath;
+
+      if (installerPath && process.platform === 'win32') {
+        log.info(`Launching installer via wmic (outside Job Object): ${installerPath}`);
+        try {
+          const { execSync } = require('child_process');
+          // wmic process call create launches via WMI service - completely independent process
+          const wmicCmd = `wmic process call create '"${installerPath}" --updated --force-run'`;
+          log.info(`wmic command: ${wmicCmd}`);
+          execSync(wmicCmd, { stdio: 'ignore', windowsHide: true, timeout: 10000 });
+          log.info('Installer launched via wmic, quitting app...');
+        } catch (err: any) {
+          log.error('wmic failed, falling back to quitAndInstall:', err.message);
+          autoUpdater.quitAndInstall(true, true);
+          return;
+        }
+
+        require('electron').autoUpdater.emit('before-quit-for-update');
+        setTimeout(() => app.quit(), 500);
+      } else {
+        // Non-Windows or no installer path: use standard quitAndInstall
+        autoUpdater.quitAndInstall(true, true);
+      }
+    };
+
     if (mainWindow) {
       dialog.showMessageBox(mainWindow, {
         type: 'info',
@@ -812,10 +846,10 @@ function setupAutoUpdater() {
         message: 'Una nuova versione è stata scaricata. L\'app verrà chiusa per installare l\'aggiornamento.',
         buttons: ['Ok']
       }).then(() => {
-        setImmediate(() => autoUpdater.quitAndInstall(true, true));
+        setImmediate(() => launchInstallerAndQuit());
       });
     } else {
-      setImmediate(() => autoUpdater.quitAndInstall(true, true));
+      setImmediate(() => launchInstallerAndQuit());
     }
   });
 }
