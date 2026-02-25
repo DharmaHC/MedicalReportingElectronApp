@@ -1,0 +1,22 @@
+{
+  "header": {
+    "logo": {
+      "url": "https://referti.asterdiagnostica.it/images/logo.png",
+      "link": "http://www.asterdiagnostica.it/",
+      "alt": "Logo Aster"
+    },
+    "title": {
+      "text": "Refertazione Medica",
+      "color": "rgb(34, 154, 97)",
+      "fontSize": "30px"
+    }
+  },
+  "footer": {
+    "copyright": "© 2017 Aster Diagnostica - Direttore Sanitario: Dott. Girardi Domingo",
+    "poweredBy": {
+      "text": "Powered by",
+      "link": "https://www.dharmahealthcare.net",
+      "name": "Dharma Healthcares"
+    }
+  }
+}
