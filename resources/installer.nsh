@@ -1,7 +1,7 @@
 ; Custom NSIS installer script for MedReport
 ; Handles auto-update (--updated flag from electron-updater) and manual installation
 ;
-; v1.0.68: NON-SILENT auto-update with WMIC Job Object escape
+; v1.0.69: NON-SILENT auto-update with WMIC Job Object escape
 ;
 ; Fix 1 - WMIC self-relaunch to escape Chromium Job Object:
 ; When electron-updater (v1.0.52 and earlier) spawns this installer via
@@ -14,7 +14,7 @@
 ; through the WMI service, completely independent of any Job Object) and exit.
 ; The relaunched instance has --wmic-relaunched flag and proceeds normally.
 ;
-; v1.0.68: Removed SetSilent for auto-updates. The installer now shows its
+; v1.0.69: Removed SetSilent for auto-updates. The installer now shows its
 ; full UI (Welcome, Directory, Progress) so the user can follow the update.
 ; The Finish page is auto-skipped (app is launched from customInstall).
 ;
@@ -49,7 +49,7 @@ Var InstallationType
     ; Relaunch ourselves via wmic to escape the Job Object, then exit.
     ReadEnvStr $R0 TEMP
     FileOpen $2 "$R0\NSIS_RELAUNCH.log" w
-    FileWrite $2 "v1.0.68 WMIC self-relaunch$\r$\n"
+    FileWrite $2 "v1.0.69 WMIC self-relaunch$\r$\n"
     FileWrite $2 "EXEPATH=$EXEPATH$\r$\n"
     System::Call 'kernel32::GetCommandLineW() t .r3'
     FileWrite $2 "OrigCmdLine=$3$\r$\n"
@@ -75,7 +75,7 @@ Var InstallationType
   ; Write diagnostic to %TEMP% (preInit can't use $INSTDIR yet)
   ReadEnvStr $R0 TEMP
   FileOpen $2 "$R0\NSIS_PREINIT.log" w
-  FileWrite $2 "preInit v1.0.68$\r$\n"
+  FileWrite $2 "preInit v1.0.69$\r$\n"
   FileWrite $2 "OurPID=$9$\r$\n"
 
   ; --- Diagnostic: raw command line ---
@@ -224,7 +224,7 @@ Var InstallationType
   ; Write diagnostic to confirm customInit was reached (past mutex check)
   ReadEnvStr $R0 TEMP
   FileOpen $2 "$R0\NSIS_CUSTOMINIT.log" w
-  FileWrite $2 "customInit v1.0.68 reached (mutex check passed!)$\r$\n"
+  FileWrite $2 "customInit v1.0.69 reached (mutex check passed!)$\r$\n"
 
   ${If} ${isUpdated}
     ; Auto-update: set standard install type, bring window to front
@@ -288,12 +288,12 @@ Var InstallationType
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.68"
+  FileWrite $1 "1.0.69"
   FileClose $1
 
   ; ═══ Diagnostic log in $INSTDIR ═══
   FileOpen $2 "$INSTDIR\NSIS_AUTOUPDATE.log" w
-  FileWrite $2 "version=1.0.68$\r$\n"
+  FileWrite $2 "version=1.0.69$\r$\n"
   FileWrite $2 "INSTDIR=$INSTDIR$\r$\n"
   FileWrite $2 "launchLink=$launchLink$\r$\n"
   FileWrite $2 "appExe=$appExe$\r$\n"
