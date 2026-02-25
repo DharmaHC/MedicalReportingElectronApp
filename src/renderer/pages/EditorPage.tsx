@@ -131,12 +131,17 @@ function EditorPage() {
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(true);
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
   const [useV2Assembly, setUseV2Assembly] = useState<boolean>(true);
+  const [isPdfEngineAuto, setIsPdfEngineAuto] = useState<boolean>(true);
   const [useWpfEditor, setUseWpfEditor] = useState<boolean>(false);
-  const effectiveUseV2Assembly = useWpfEditor;
   const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
   const wpfEditorAreaRef = useRef<HTMLDivElement>(null);
   const wpfSessionIdRef = useRef<string | null>(null);
+  const wpfBoundsLogRef = useRef<{ signature: string; at: number }>({ signature: "", at: 0 });
+  // Regola: editor HTML su v1 (default), editor RTF/WPF su v2.
+  const effectiveUseV2Assembly = isPdfEngineAuto ? useWpfEditor : useV2Assembly;
+  // Boost font richiesto solo nel flusso v1.
+  const forcedReportFontSizePx = 17;
 
   const getWpfAnchorRect = (): DOMRect | null => {
     const area = wpfEditorAreaRef.current;
@@ -149,6 +154,43 @@ function EditorPage() {
     return rect;
   };
 
+  const logWpfBounds = useCallback((phase: string, rect: DOMRect | null) => {
+    const data = rect
+      ? {
+          phase,
+          rect: {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          },
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            dpr: window.devicePixelRatio || 1,
+          },
+          scroll: {
+            x: Math.round(window.scrollX || 0),
+            y: Math.round(window.scrollY || 0),
+          },
+        }
+      : {
+          phase,
+          rect: null,
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            dpr: window.devicePixelRatio || 1,
+          },
+        };
+
+    const signature = JSON.stringify(data);
+    const now = Date.now();
+    if (signature === wpfBoundsLogRef.current.signature && now - wpfBoundsLogRef.current.at < 2500) return;
+    wpfBoundsLogRef.current = { signature, at: now };
+    console.log(`[WPF BOUNDS][renderer] ${signature}`);
+  }, []);
+
   const [selectedResultPdf, setSelectedResultPdf] = useState<string | null>(null);
   const [resultPdfError, setResultPdfError] = useState<string | null>(null); // nuovo stato per errore PDF
 
@@ -159,6 +201,9 @@ function EditorPage() {
   // In component scope:
 const userName = useSelector((state: RootState) => state.auth.userName);
 const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test
+const showPdfEngineSwitches = false; // Nasconde i toggle v1/v2 a tutti gli utenti
+const DICTATION_MASTER_USER = "FRSRFL72R25H282U";
+const canUseDictationControls = (userName ?? "").trim().toUpperCase() === DICTATION_MASTER_USER;
 
 // Funzione di log (ora sincronica, più semplice)
 const logToFile = (msg: string, details?: any) => {
@@ -248,6 +293,12 @@ const logToFile = (msg: string, details?: any) => {
     });
   }, []);
 
+  useEffect(() => {
+    if (canUseDictationControls) return;
+    setIsDictationModalOpen(false);
+    setIsDialogVisible(false);
+  }, [canUseDictationControls]);
+
 
   useEffect(() => {
   // Listener custom per mostrare la modale annulla su chiusura
@@ -302,6 +353,7 @@ const logToFile = (msg: string, details?: any) => {
   // Refs per cleanup dei Blob URL (evita memory leak)
   const pdfUrlRef = useRef<string | null>(null);
   const cachedPdfBlobUrlRef = useRef<string | null>(null);
+  const cachedReportContextRef = useRef<{ engineV2: boolean; wpf: boolean } | null>(null);
 
   // Cleanup dei Blob URL quando il componente viene smontato
   useEffect(() => {
@@ -465,8 +517,8 @@ const renderPinDialog = () =>
   );
 
   // Plugin Prosemirror per applicare stili ai paragrafi nell'editor.
-  // - Forza solo font-family e spaziatura verticale
-  // - Preserva font-size e text-align originali dal template
+  // - Forza font-family, line-height e dimensione minima del font
+  // - Preserva text-align originale dal template
   // - Rimuove margin-left negativi (non hanno senso nell'editor senza section margins RTF)
   // Il backend v2 riapplica l'indentazione dal template in fase di assemblaggio.
   const paragraphStylerPlugin = new Plugin({
@@ -480,18 +532,24 @@ const renderPinDialog = () =>
       newState.doc.descendants((node, pos) => {
         if (node.type.name === "paragraph") {
           const currentStyle: string = node.attrs?.style || "";
-          // Preserva font-size originale dal template (se presente)
-          const fontSizeMatch = currentStyle.match(/font-size:\s*[\d.]+px/);
+          const fontSizeMatch = currentStyle.match(/font-size:\s*([\d.]+)px/i);
+          const parsedFontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : NaN;
+          const baseFontSizePx = Number.isFinite(parsedFontSize) ? parsedFontSize : 16;
+          const paragraphFontSizePx = effectiveUseV2Assembly
+            ? baseFontSizePx
+            : Math.max(baseFontSizePx, forcedReportFontSizePx);
           // Preserva text-align (justify, center, right)
           const textAlignMatch = currentStyle.match(/text-align:\s*\w+/);
 
           const parts = [
             'font-family: "Times New Roman"',
-            fontSizeMatch ? fontSizeMatch[0] : 'font-size: 16px',
+            `font-size: ${paragraphFontSizePx}px`,
             'margin-top: 0px',
             'margin-bottom: 0px',
-            'line-height: 100%'
           ];
+          if (!effectiveUseV2Assembly) {
+            parts.push('line-height: 100%');
+          }
           if (textAlignMatch) parts.push(textAlignMatch[0]);
           const newStyle = parts.join("; ") + ";";
 
@@ -944,16 +1002,76 @@ const renderPinDialog = () =>
     return new Blob(byteArrays, { type: contentType }); // Crea il Blob con il tipo MIME specificato.
   };
 
+  // Normalizza l'HTML dell'editor prima dell'invio al backend:
+  // - forza stile consistente dei paragrafi (evita spaziature verticali incoerenti in PDF)
+  // - rimuove rientri negativi delle tabelle
+  // - elimina gli overlay visuali dei page-break usati solo in editor
+  const normalizeEditorHtmlForReport = (rawHtml: string): string => {
+    const container = document.createElement("div");
+    container.innerHTML = rawHtml;
+
+    container
+      .querySelectorAll(".page-break-overlay-layer, .auto-page-break")
+      .forEach((node) => node.remove());
+
+    container.querySelectorAll("p").forEach((paragraph) => {
+      const currentStyle = paragraph.getAttribute("style") || "";
+      const fontSizeMatch = currentStyle.match(/font-size:\s*([\d.]+)px/i);
+      const parsedFontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : NaN;
+      const baseFontSizePx = Number.isFinite(parsedFontSize) ? parsedFontSize : 16;
+      const normalizedFontSizePx = effectiveUseV2Assembly
+        ? baseFontSizePx
+        : Math.max(baseFontSizePx, forcedReportFontSizePx);
+      const textAlignMatch = currentStyle.match(/text-align:\s*(left|right|center|justify)/i);
+
+      const normalizedStyleParts = [
+        'font-family: "Times New Roman"',
+        `font-size: ${normalizedFontSizePx}px`,
+        "margin-top: 0px",
+        "margin-bottom: 0px",
+      ];
+      if (!effectiveUseV2Assembly) {
+        normalizedStyleParts.push("line-height: 100%");
+      }
+      if (textAlignMatch) {
+        normalizedStyleParts.push(textAlignMatch[0]);
+      }
+
+      paragraph.setAttribute("style", normalizedStyleParts.join("; ") + ";");
+      paragraph.removeAttribute("class");
+    });
+
+    container.querySelectorAll("table[style]").forEach((table) => {
+      const currentStyle = table.getAttribute("style") || "";
+      const cleanedStyle = currentStyle
+        .replace(/margin-left:\s*-[\d.]+px;?\s*/gi, "")
+        .trim();
+
+      if (cleanedStyle) {
+        table.setAttribute("style", cleanedStyle);
+      } else {
+        table.removeAttribute("style");
+      }
+    });
+
+    return container.innerHTML;
+  };
+
   // Genera i dati del report (PDF e RTF) inviando l'HTML dell'editor al backend.
   // Utilizza la cache se il contenuto non è stato modificato.
   const generateReportData = async (
     rtfNeedsToBeStored: boolean = false, // Indica se l'RTF deve essere memorizzato (es. salvataggio finale).
     isSigningProcess: boolean = false   // Indica se la generazione è parte di un processo di firma.
   ): Promise<ReportData | null> => {
+    const cacheMatchesCurrentContext = (): boolean => {
+      const ctx = cachedReportContextRef.current;
+      return !!ctx && ctx.engineV2 === effectiveUseV2Assembly && ctx.wpf === useWpfEditor;
+    };
+
     // WPF Editor path: ottieni RTF e PDF direttamente dall'editor WPF
     if (useWpfEditor && wpfEditorReady) {
       try {
-        if (!isModified && cachedReportData) {
+        if (!isModified && cachedReportData && cacheMatchesCurrentContext()) {
           const wpfDirty = await window.wpfEditor.isDirty().catch(() => true);
           if (!wpfDirty) {
             return cachedReportData;
@@ -978,6 +1096,7 @@ const renderPinDialog = () =>
           return newReportData;
         });
         cachedPdfBlobUrlRef.current = pdfBlobUrl;
+        cachedReportContextRef.current = { engineV2: effectiveUseV2Assembly, wpf: useWpfEditor };
         setIsModified(false);
         return newReportData;
       } catch (err: any) {
@@ -988,12 +1107,13 @@ const renderPinDialog = () =>
     }
 
     // Se il contenuto non è modificato e i dati sono in cache, restituisce la cache.
-    if (!isModified && cachedReportData) {
+    if (!isModified && cachedReportData && cacheMatchesCurrentContext()) {
       return cachedReportData;
     }
 
     if (editorRef.current && editorRef.current.view) {
       let content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
+      content = normalizeEditorHtmlForReport(content);
 
       // Conta tutti i paragrafi vuoti (con o senza &nbsp;)
       let emptyParaCount = 0;
@@ -1003,13 +1123,18 @@ const renderPinDialog = () =>
         return `<p${attrs}></p>`;
       });
 
-      // Poi sostituisce TUTTI i paragrafi vuoti con contenuto che occupa spazio
-      content = content.replace(/<p([^>]*)><\/p>/gi, (_match, attrs) => {
-        emptyParaCount++;
-        // Usa il carattere spazio in formato HTML entity (&#160;) invece di &nbsp;
-        // Forse il backend riconosce uno ma non l'altro
-        return `<p${attrs}>&#160;</p>`;
-      });
+      // Legacy v1: converte i paragrafi vuoti in spazio non-breakable per preservare
+      // interruzioni visive nel vecchio pipeline string-based.
+      // v2: lascia i paragrafi vuoti reali, per evitare extra-spacing verticale.
+      if (!effectiveUseV2Assembly) {
+        content = content.replace(/<p([^>]*)><\/p>/gi, (_match, attrs) => {
+          emptyParaCount++;
+          return `<p${attrs}>&#160;</p>`;
+        });
+      } else {
+        const matches = content.match(/<p([^>]*)><\/p>/gi);
+        emptyParaCount = matches ? matches.length : 0;
+      }
 
       console.log(`[generateReportData] Paragrafi vuoti convertiti: ${emptyParaCount}`);
 
@@ -1107,6 +1232,7 @@ const renderPinDialog = () =>
               return newReportData;
             });
             cachedPdfBlobUrlRef.current = pdfBlobUrl; // Aggiorna il ref per cleanup on unmount
+            cachedReportContextRef.current = { engineV2: effectiveUseV2Assembly, wpf: useWpfEditor };
             setIsModified(false); // Resetta il flag di modifica dopo la generazione.
             return newReportData;
           } else {
@@ -1286,6 +1412,7 @@ const renderPinDialog = () =>
         // Coordinate in CSS pixels - la conversione a physical pixels avviene nel main process
         // usando il scaleFactor del monitor corrente (gestisce correttamente multi-monitor con DPI diversi)
         const rect = getWpfAnchorRect();
+        logWpfBounds("startWpf", rect);
         if (rect) {
           await window.wpfEditor.setBounds({
             x: Math.round(rect.left),
@@ -1370,6 +1497,7 @@ const renderPinDialog = () =>
 
     const updateBounds = () => {
       const rect = getWpfAnchorRect();
+      logWpfBounds("updateBounds", rect);
       if (!rect) return;
       // Invia CSS pixels - la conversione DPI avviene nel main process
       window.wpfEditor?.setBounds({
@@ -2785,14 +2913,16 @@ const handleResultClick = async (result: any) => {
           <div className="borderedbottom-div">
 
             <div>		 
-              <InlineDictationButton
-                editorRef={editorRef}
-                enabled={speechToTextEnabled}
-                onInsertText={useWpfEditor && wpfEditorReady
-                  ? (text: string) => window.wpfEditor.insertText(text).then(() => setIsModified(true)).catch(console.error)
-                  : undefined}
-                onDictationModalChange={setIsDictationModalOpen}
-              />
+              {canUseDictationControls && (
+                <InlineDictationButton
+                  editorRef={editorRef}
+                  enabled={speechToTextEnabled}
+                  onInsertText={useWpfEditor && wpfEditorReady
+                    ? (text: string) => window.wpfEditor.insertText(text).then(() => setIsModified(true)).catch(console.error)
+                    : undefined}
+                  onDictationModalChange={setIsDictationModalOpen}
+                />
+              )}
               <Button
                 svgIcon={imageIcon}
                 onClick={openCurrentStudy}
@@ -2897,12 +3027,21 @@ const handleResultClick = async (result: any) => {
                   label="Stampa referto firmato quando termini (se disponibile)"
                   onChange={e => setPrintSignedPdf(e.value)}
                 />
-                <Checkbox
-                  checked={effectiveUseV2Assembly}
-                  label="Motore PDF automatico (HTML=v1, RTF=v2)"
-                  onChange={e => setUseV2Assembly(e.value)}
-                  disabled
-                />
+                {showPdfEngineSwitches && (
+                  <Checkbox
+                    checked={isPdfEngineAuto}
+                    label="Motore PDF automatico (default: HTML=v1, RTF=v2)"
+                    onChange={e => setIsPdfEngineAuto(e.value)}
+                  />
+                )}
+                {showPdfEngineSwitches && (
+                  <Checkbox
+                    checked={effectiveUseV2Assembly}
+                    label="Override manuale: usa motore PDF v2 (deseleziona = v1)"
+                    onChange={e => setUseV2Assembly(e.value)}
+                    disabled={isPdfEngineAuto}
+                  />
+                )}
                 {canUseUnsafeWpfToggle && (
                   <Checkbox
                     checked={useWpfEditor}
@@ -3031,6 +3170,3 @@ const handleResultClick = async (result: any) => {
 };
 
 export default EditorPage;
-
-
-

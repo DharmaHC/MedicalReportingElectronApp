@@ -5,7 +5,7 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Telerik.UI.for.Wpf.80 e' NoXaml: servono i ResourceDictionary espliciti dal tema -->
+                <!-- Telerik.UI.for.Wpf (.NET Framework 4.8) e' NoXaml: servono i ResourceDictionary espliciti dal tema -->
                 <ResourceDictionary Source="/Telerik.Windows.Themes.Fluent;component/Themes/System.Windows.xaml"/>
                 <ResourceDictionary Source="/Telerik.Windows.Themes.Fluent;component/Themes/Telerik.Windows.Controls.xaml"/>
                 <ResourceDictionary Source="/Telerik.Windows.Themes.Fluent;component/Themes/Telerik.Windows.Controls.Input.xaml"/>

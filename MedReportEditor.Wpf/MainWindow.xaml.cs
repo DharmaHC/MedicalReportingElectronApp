@@ -1,8 +1,11 @@
+using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -59,6 +62,9 @@ namespace MedReportEditor.Wpf
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
 
@@ -68,8 +74,8 @@ namespace MedReportEditor.Wpf
         private IntPtr _parentHwnd = IntPtr.Zero;
         private bool _isOverlay = false;
 
-        private CancellationTokenSource? _cts;
-        private NamedPipeServerStream? _pipeServer;
+        private CancellationTokenSource _cts;
+        private NamedPipeServerStream _pipeServer;
         private bool _isDocumentDirty = false;
 
         // Font sizes comuni per la ComboBox
@@ -311,25 +317,25 @@ namespace MedReportEditor.Wpf
                 try
                 {
                     _pipeServer = new NamedPipeServerStream(
-                        App.PipeName!,
+                        App.PipeName,
                         PipeDirection.InOut,
                         1,
                         PipeTransmissionMode.Byte,
                         PipeOptions.Asynchronous);
 
                     statusText.Text = "In attesa di connessione...";
-                    await _pipeServer.WaitForConnectionAsync(ct);
+                    await _pipeServer.WaitForConnectionAsync();
                     statusText.Text = "Electron connesso";
 
                     var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                    using var reader = new StreamReader(_pipeServer, utf8NoBom, leaveOpen: true);
-                    using var writer = new StreamWriter(_pipeServer, utf8NoBom, leaveOpen: true) { AutoFlush = true };
+                    using var reader = new StreamReader(_pipeServer, utf8NoBom, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+                    using var writer = new StreamWriter(_pipeServer, utf8NoBom, bufferSize: 1024, leaveOpen: true) { AutoFlush = true };
 
                     await SendMessageAsync(writer, new { type = "READY" });
 
                     while (_pipeServer.IsConnected && !ct.IsCancellationRequested)
                     {
-                        var line = await reader.ReadLineAsync(ct);
+                        var line = await reader.ReadLineAsync();
                         if (line == null) break;
 
                         await ProcessCommandAsync(line, writer);
@@ -551,22 +557,46 @@ namespace MedReportEditor.Wpf
         {
             Dispatcher.Invoke(() =>
             {
-                int x = root.TryGetProperty("x", out var xv) ? (int)xv.GetDouble() : 0;
-                int y = root.TryGetProperty("y", out var yv) ? (int)yv.GetDouble() : 0;
-                int w = root.TryGetProperty("width", out var wv) ? (int)wv.GetDouble() : 800;
-                int h = root.TryGetProperty("height", out var hv) ? (int)hv.GetDouble() : 600;
+                double x = root.TryGetProperty("x", out var xv) ? xv.GetDouble() : 0;
+                double y = root.TryGetProperty("y", out var yv) ? yv.GetDouble() : 0;
+                double w = root.TryGetProperty("width", out var wv) ? wv.GetDouble() : 800;
+                double h = root.TryGetProperty("height", out var hv) ? hv.GetDouble() : 600;
+                bool absolute = root.TryGetProperty("absolute", out var av) && av.GetBoolean();
 
-                if (_isOverlay && _parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                if (absolute)
                 {
-                    // Converti da coordinate relative alla client-area di Electron
-                    // a coordinate schermo assolute
-                    var pt = new POINT { X = x, Y = y };
-                    ClientToScreen(_parentHwnd, ref pt);
-                    MoveWindow(_myHwnd, pt.X, pt.Y, w, h, true);
+                    // Coordinate DIP assolute sullo schermo.
+                    Left = x;
+                    Top = y;
+                    Width = w;
+                    Height = h;
+                }
+                else if (_parentHwnd != IntPtr.Zero && _myHwnd != IntPtr.Zero)
+                {
+                    // Coordinate relative alla client-area Electron in CSS px (DIP).
+                    // Converti solo l'origine del parent da physical px a DIP e applica offset DIP.
+                    var origin = new POINT { X = 0, Y = 0 };
+                    ClientToScreen(_parentHwnd, ref origin);
+
+                    double sf = 1.0;
+                    try
+                    {
+                        uint dpi = GetDpiForWindow(_parentHwnd);
+                        if (dpi > 0) sf = dpi / 96.0;
+                    }
+                    catch (EntryPointNotFoundException) { }
+
+                    double originDipX = origin.X / sf;
+                    double originDipY = origin.Y / sf;
+
+                    Left = originDipX + x;
+                    Top = originDipY + y;
+                    Width = w;
+                    Height = h;
                 }
                 else if (_myHwnd != IntPtr.Zero)
                 {
-                    MoveWindow(_myHwnd, x, y, w, h, true);
+                    MoveWindow(_myHwnd, (int)x, (int)y, (int)w, (int)h, true);
                 }
                 else
                 {

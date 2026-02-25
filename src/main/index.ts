@@ -689,6 +689,7 @@ function setupAutoUpdater() {
   }
 
   autoUpdater.channel = 'win7';
+  autoUpdater.allowDowngrade = false;
   log.info(`AutoUpdater configurato per il canale: ${autoUpdater.channel}`);
 
   autoUpdater.checkForUpdatesAndNotify();

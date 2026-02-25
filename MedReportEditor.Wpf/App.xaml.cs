@@ -4,7 +4,7 @@ namespace MedReportEditor.Wpf
 {
     public partial class App : Application
     {
-        public static string? PipeName { get; private set; }
+        public static string PipeName { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
