@@ -20,6 +20,12 @@ Var InstallationType
 !macroend
 
 !macro customInit
+  ; In modalita' --updated (auto-update), NSIS gira in silent mode (/S).
+  ; MessageBox in silent mode restituisce IDNO di default, che manderebbe
+  ; nel path "advanced" rompendo l'auto-update. Skippiamo tutto e teniamo
+  ; il tipo "standard" settato in preInit.
+  IfSilent done
+
   MessageBox MB_YESNO|MB_ICONQUESTION "Scegli la modalità di installazione:$\n$\nSI = Installazione Standard (Consigliata)$\n        Per utente corrente, con aggiornamenti automatici$\n$\nNO = Installazione Avanzata$\n        Permette di installare per tutti gli utenti (solo per Service)" IDNO advanced
 
   ; User clicked YES - Standard installation
@@ -73,6 +79,6 @@ Var InstallationType
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.58"
+  FileWrite $1 "1.0.59"
   FileClose $1
 !macroend
