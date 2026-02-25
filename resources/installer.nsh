@@ -23,15 +23,15 @@ Var InstallationType
 !macro customInit
   ; Rileva il flag --updated passato da electron-updater durante l'auto-update.
   ; electron-updater NON passa /S, quindi l'installer NSIS assisted (oneClick=false)
-  ; mostra TUTTE le pagine (Welcome, Directory, Install...) nascoste dietro altre
-  ; finestre, bloccando l'installer indefinitamente.
-  ; Soluzione: forzare SetSilent silent per saltare TUTTE le pagine.
+  ; mostra TUTTE le pagine nascoste dietro altre finestre.
+  ; SetSilent silent forza l'intero installer in silent mode (nessuna pagina).
+  ; L'app viene poi lanciata esplicitamente in customInstall perche'
+  ; in silent mode la finish page (che normalmente lancia l'app) e' saltata.
   ${GetParameters} $R0
   ${GetOptions} $R0 "--updated" $R1
-  ; GetOptions: error flag SET = opzione non trovata, CLEAR = trovata
   IfErrors notUpdated 0
 
-  ; --updated TROVATO -> auto-update, forza silent mode per l'intero installer
+  ; --updated TROVATO -> auto-update, forza silent mode
   SetSilent silent
   Goto done
 
@@ -85,11 +85,18 @@ Var InstallationType
   DeleteRegKey HKCU "Software\Wow6432Node\medreportandsign"
 
   ; ═══ Force settings + images reset ═══
-  ; Crea il marker RESET_CONFIG in ProgramData per forzare la sovrascrittura
-  ; dei settings e delle immagini con i nuovi default al prossimo avvio dell'app.
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.61"
+  FileWrite $1 "1.0.62"
   FileClose $1
+
+  ; ═══ Lancio app dopo auto-update ═══
+  ; In silent mode (SetSilent silent da customInit), la finish page e' saltata
+  ; e la funzione StartApp (che normalmente lancia l'app) non viene chiamata.
+  ; Lanciamo l'app esplicitamente qui alla fine dell'installazione.
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "--updated" $R1
+  IfErrors +2 0
+  Exec '"$INSTDIR\${APP_EXECUTABLE_FILENAME}"'
 !macroend
