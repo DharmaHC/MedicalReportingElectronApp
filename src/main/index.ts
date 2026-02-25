@@ -676,6 +676,89 @@ ipcMain.on('app-quit', () => {
   }
 });
 
+// ---------------- GHOST INSTALLATION CLEANUP ----------------
+/**
+ * Copia ricorsiva di una directory (src → dest), sovrascrivendo i file esistenti.
+ */
+function copyDirRecursive(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+/**
+ * Rimuove installazioni fantasma create dal bug nell'installer.nsh (pre v1.0.57).
+ *
+ * Il preInit cancellava le chiavi di registro prima che NSIS determinasse $INSTDIR,
+ * causando l'installazione in una nuova directory invece di aggiornare quella esistente.
+ * Risultato: directory fantasma con productName diverso nella stessa cartella Programs.
+ *
+ * Prima di cancellare, copia gli assets (JSON config + immagini) dalla ghost directory
+ * nella directory corrente, cosi' eventuali file piu' aggiornati vengono preservati.
+ */
+function cleanupGhostInstallation(): void {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+
+  try {
+    const exePath = app.getPath('exe');
+    const installDir = path.dirname(exePath);
+    const parentDir = path.dirname(installDir);
+    const currentDirName = path.basename(installDir);
+
+    // Solo per installazioni perUser (%LOCALAPPDATA%\Programs\)
+    if (!installDir.toLowerCase().includes('\\appdata\\local\\programs\\')) {
+      return;
+    }
+
+    // Determina la directory ghost in base alla directory corrente
+    let ghostName: string | null = null;
+    if (currentDirName === 'MedReportAndSign') {
+      ghostName = 'MedReport';
+    } else if (currentDirName === 'MedReport') {
+      ghostName = 'MedReportAndSign';
+    }
+
+    if (!ghostName) return;
+
+    const ghostDir = path.join(parentDir, ghostName);
+    if (!fs.existsSync(ghostDir)) return;
+
+    // Sicurezza: non cancellare la propria directory
+    if (ghostDir.toLowerCase() === installDir.toLowerCase()) {
+      log.warn(`[GhostCleanup] Ghost dir matches current dir, skipping`);
+      return;
+    }
+
+    log.info(`[GhostCleanup] Found ghost installation at: ${ghostDir}`);
+    log.info(`[GhostCleanup] Current installation at: ${installDir}`);
+
+    // Copia assets (JSON config + immagini) dalla ghost alla directory corrente
+    const ghostAssets = path.join(ghostDir, 'resources', 'assets');
+    const currentAssets = path.join(installDir, 'resources', 'assets');
+    if (fs.existsSync(ghostAssets)) {
+      try {
+        copyDirRecursive(ghostAssets, currentAssets);
+        log.info(`[GhostCleanup] Copied assets from ghost to current installation`);
+      } catch (copyErr: any) {
+        log.warn(`[GhostCleanup] Could not copy assets: ${copyErr.message}`);
+      }
+    }
+
+    // Rimuovi la directory ghost
+    fs.rmSync(ghostDir, { recursive: true, force: true });
+    log.info(`[GhostCleanup] Successfully removed ghost installation`);
+  } catch (err: any) {
+    log.warn(`[GhostCleanup] Could not remove ghost installation: ${err.message}`);
+  }
+}
+
 // ---------------- AUTO UPDATE (electron-updater) ----------------
 function setupAutoUpdater() {
   // Avvia subito la ricerca aggiornamenti (solo se non in dev!)
@@ -784,6 +867,9 @@ app.whenReady().then(() => {
   } catch (err: any) {
     log.error('[Main] ERRORE registrazione WPF Editor:', err.message, err.stack);
   }
+
+  // Pulizia installazioni fantasma da bug auto-update pre v1.0.57
+  cleanupGhostInstallation();
 
   createWindow();
   setupAutoUpdater();

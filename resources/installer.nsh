@@ -73,6 +73,6 @@ Var InstallationType
   ReadEnvStr $R0 "ProgramData"
   CreateDirectory "$R0\MedReportAndSign"
   FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.57"
+  FileWrite $1 "1.0.58"
   FileClose $1
 !macroend
