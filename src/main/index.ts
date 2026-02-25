@@ -812,10 +812,10 @@ function setupAutoUpdater() {
         message: 'Una nuova versione è stata scaricata. L\'app verrà chiusa per installare l\'aggiornamento.',
         buttons: ['Ok']
       }).then(() => {
-        setImmediate(() => autoUpdater.quitAndInstall());
+        setImmediate(() => autoUpdater.quitAndInstall(true, true));
       });
     } else {
-      setImmediate(() => autoUpdater.quitAndInstall());
+      setImmediate(() => autoUpdater.quitAndInstall(true, true));
     }
   });
 }
