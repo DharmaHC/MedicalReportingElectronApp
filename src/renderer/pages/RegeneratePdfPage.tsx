@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { RootState } from "../store";
 import { Button } from "@progress/kendo-react-buttons";
@@ -42,6 +43,7 @@ interface RegenerateResult {
 }
 
 const RegeneratePdfPage: React.FC = () => {
+  const navigate = useNavigate();
   const token = useSelector((state: RootState) => state.auth.token);
 
   // Search state
@@ -56,6 +58,9 @@ const RegeneratePdfPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
+
+  // Regeneration options
+  const [useCurrentTemplate, setUseCurrentTemplate] = useState(false);
 
   // Regeneration state
   const [regenerating, setRegenerating] = useState(false);
@@ -203,7 +208,8 @@ const RegeneratePdfPage: React.FC = () => {
       addLog(`Rigenerazione ${patientName} (${reportId})...`);
 
       // 1. Get regenerated PDF from API
-      const regenResponse = await fetch(`${getApiBaseUrl()}reports/${reportId}/regenerate-pdf`, {
+      const regenUrl = `${getApiBaseUrl()}reports/${reportId}/regenerate-pdf${useCurrentTemplate ? '?useCurrentTemplate=true' : ''}`;
+      const regenResponse = await fetch(regenUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -214,6 +220,9 @@ const RegeneratePdfPage: React.FC = () => {
 
       const regenData = await regenResponse.json();
       addLog(`  RTF recuperato, conversione in PDF completata`);
+      if (regenData.templateUsed) {
+        addLog(`  Modello attuale: ${regenData.templateFound ? 'APPLICATO' : 'NON TROVATO (fallback RTF originale)'}`);
+      }
       addLog(`  CompanyId: "${regenData.companyId}" - Medico: "${regenData.doctorName}"`);
 
       // Calcola data firma: 1 ora dopo la data di refertazione originale
@@ -457,7 +466,8 @@ const RegeneratePdfPage: React.FC = () => {
       addLog(`TEST rigenerazione: ${patientName}`);
 
       // 1. Get regenerated PDF
-      const regenResponse = await fetch(`${getApiBaseUrl()}reports/${reportId}/regenerate-pdf`, {
+      const regenUrl = `${getApiBaseUrl()}reports/${reportId}/regenerate-pdf${useCurrentTemplate ? '?useCurrentTemplate=true' : ''}`;
+      const regenResponse = await fetch(regenUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -469,6 +479,9 @@ const RegeneratePdfPage: React.FC = () => {
       const regenData = await regenResponse.json();
       addLog(`  RTF trovato, PDF rigenerato (non decorato): ${regenData.pdfBase64.length} chars`);
       addLog(`  CompanyId da DB: "${regenData.companyId}" - Medico: "${regenData.doctorName}"`);
+      if (regenData.templateUsed) {
+        addLog(`  Modello attuale: ${regenData.templateFound ? 'APPLICATO' : 'NON TROVATO (fallback RTF originale)'}`);
+      }
 
       // Calcola data firma: 1 ora dopo la data di refertazione originale
       let signatureDate: string | undefined;
@@ -513,12 +526,45 @@ const RegeneratePdfPage: React.FC = () => {
 
   return (
     <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
-      <h2>Rigenerazione PDF Referti</h2>
-      <p style={{ color: "#666", marginBottom: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "4px" }}>
+        <Button
+          fillMode="flat"
+          onClick={() => navigate("/")}
+          title="Torna alla Home"
+          style={{ padding: "4px 8px" }}
+        >
+          &larr; Indietro
+        </Button>
+        <h2 style={{ margin: 0 }}>Rigenerazione PDF Referti</h2>
+      </div>
+      <p style={{ color: "#666", marginBottom: "15px" }}>
         Usa questa pagina per rigenerare i PDF dei referti che sono stati impaginati male.
         <br />
         <strong style={{ color: "#c00" }}>ATTENZIONE:</strong> I PDF rigenerati avranno solo firma estetica (bypass), non firma digitale valida.
       </p>
+
+      {/* Template option - a inizio pagina */}
+      <div style={{
+        marginBottom: "15px",
+        padding: "10px 14px",
+        background: "#fff3cd",
+        borderRadius: "4px",
+        border: "1px solid #ffc107"
+      }}>
+        <label style={{ display: "flex", alignItems: "center", cursor: "pointer", fontWeight: 500 }}>
+          <input
+            type="checkbox"
+            checked={useCurrentTemplate}
+            onChange={(e) => setUseCurrentTemplate(e.target.checked)}
+            style={{ marginRight: "8px", width: "16px", height: "16px" }}
+          />
+          Usa header/footer dal modello attuale del medico
+        </label>
+        <div style={{ fontSize: "11px", color: "#856404", marginTop: "4px", marginLeft: "24px" }}>
+          Se attivo, il body del referto viene mantenuto dall'RTF originale,
+          ma header e footer vengono presi dal modello corrente del medico.
+        </div>
+      </div>
 
       {/* Search Section */}
       <div style={{

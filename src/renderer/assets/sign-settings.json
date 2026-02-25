@@ -9,7 +9,7 @@
   "footerTextFontFamily": "Times New Roman",
   "footerTextPointFromBottom": 60,
   "footerTextFontSize": 10,
-  "footerCompanyDataPointFromBottom": 37,
+  "footerCompanyDataPointFromBottom": 39,
   "footerCompanyDataMultiline": true,
   "footerCompanyDataAlignment": "center",
   "signatureTextAlignment": "left",
