@@ -16,7 +16,7 @@
     "footerImageXPositionOffset": 0
   },
   "ASTER": {
-    "footerText": "Aster Diagnostica Srl a Socio Unico - P.I. e C.F. 06191121000",
+    "footerText": "Aster Diagnostica Srl a socio unico - P.I. e C.F. 06191121000",
     "footerImageWidth": 160,
     "footerImageHeight": 32,
     "blankFooterHeight": 50,
@@ -24,7 +24,7 @@
     "footerImageXPositionOffset": 0
   },
   "RAD": {
-    "footerText": "Radiologia Mostacciano Srl a Socio Unico - P. I. 01321781005 - C.F. 04891080584",
+    "footerText": "Radiologia Mostacciano Srl a socio unico - P. I. 01321781005 - C.F. 04891080584",
     "footerImageWidth": 160,
     "footerImageHeight": 32,
     "blankFooterHeight": 50,
