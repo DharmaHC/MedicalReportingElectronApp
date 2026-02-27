@@ -504,6 +504,7 @@ const renderPinDialog = () =>
   const readOnly = location.state?.readOnly === true; // Determina se l'editor è in modalità sola lettura (es. referto già finalizzato).
   const openedByOtherDoctor = location.state?.openedByOtherDoctor === true; // Indica se il referto è stato refertato da un altro medico (anche in bozza).
   const requiresRtfEditor = location.state?.requiresRtfEditor === true; // Template contiene tabelle/immagini → editor WPF
+  const savedRtfBase64 = location.state?.savedRtfBase64 as string | undefined; // RTF salvato in precedenza (riapertura referto)
 
   // Auto-attiva editor WPF se il template richiede RTF nativo
   useEffect(() => {
@@ -1396,51 +1397,62 @@ const renderPinDialog = () =>
 
         setWpfEditorStatus("Processo WPF avviato, caricamento RTF...");
 
-        // 2. Fetch del template RTF compilato dal backend
-        const deduplicatedMoreExams = selectedMoreExams.filter(
-          (exam, index, array) =>
-            array.findIndex(
-              (e) =>
-                e.examId === exam.examId &&
-                e.examVersion === exam.examVersion &&
-                e.subExamId === exam.subExamId &&
-                e.examResultId === exam.examResultId
-            ) === index
-        );
+        // 2. Carica RTF: se abbiamo un referto già salvato, usiamo quello;
+        //    altrimenti fetch del template fresco dal backend.
+        let rtfToLoad: string;
 
-        const queryParams = new URLSearchParams({
-          doctorCode: doctorCode?.trim() ?? "",
-          examinationId: selectedExaminationId || "",
-        });
+        if (savedRtfBase64) {
+          // Riapertura di un referto esistente: carica l'RTF salvato in ImageResult
+          rtfToLoad = savedRtfBase64;
+        } else {
+          // Nuovo referto: fetch del template RTF compilato dal backend
+          const deduplicatedMoreExams = selectedMoreExams.filter(
+            (exam, index, array) =>
+              array.findIndex(
+                (e) =>
+                  e.examId === exam.examId &&
+                  e.examVersion === exam.examVersion &&
+                  e.subExamId === exam.subExamId &&
+                  e.examResultId === exam.examResultId
+              ) === index
+          );
 
-        const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
-          examId: exam.examId,
-          examVersion: exam.examVersion,
-          subExamId: exam.subExamId,
-          examResultId: exam.examResultId,
-        }));
+          const queryParams = new URLSearchParams({
+            doctorCode: doctorCode?.trim() ?? "",
+            examinationId: selectedExaminationId || "",
+          });
 
-        const response = await fetch(
-          `${url_getCompiledRtfTemplate()}?${queryParams.toString()}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(linkedResultsList),
+          const linkedResultsList = deduplicatedMoreExams.map((exam) => ({
+            examId: exam.examId,
+            examVersion: exam.examVersion,
+            subExamId: exam.subExamId,
+            examResultId: exam.examResultId,
+          }));
+
+          const response = await fetch(
+            `${url_getCompiledRtfTemplate()}?${queryParams.toString()}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(linkedResultsList),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Errore API: ${response.status} ${response.statusText}`);
           }
-        );
 
-        if (!response.ok) {
-          throw new Error(`Errore API: ${response.status} ${response.statusText}`);
+          const data = await response.json();
+          if (cancelled) return;
+
+          rtfToLoad = data.rtfContent;
         }
 
-        const data = await response.json();
-        if (cancelled) return;
-
         // 3. Carica RTF nel processo WPF
-        await window.wpfEditor.loadRtf(data.rtfContent);
+        await window.wpfEditor.loadRtf(rtfToLoad);
         if (cancelled) return;
 
         // 4. Posiziona e mostra la finestra WPF nell'area dell'editor
