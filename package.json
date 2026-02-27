@@ -1,7 +1,7 @@
 {
   "name": "medreportandsign",
   "productName": "MedReportAndSign",
-  "version": "1.0.70",
+  "version": "1.0.71", (v1.0.71: Fix WPF editor not reloading saved RTF on report reopen)
   "description": "Applicazione Electron per la refertazione medica con firma digitale",
   "author": "Dharma Healthcare <info@dharmahealthcare.net>",
   "license": "MIT",

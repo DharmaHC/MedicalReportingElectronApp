@@ -261,8 +261,8 @@ const PrestazioniRisultati = () => {
         );
         if (response.ok) {
           const data = await response.json();
-          // Passiamo readOnly e requiresRtfEditor
-          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor } });
+          // Passiamo readOnly, requiresRtfEditor e RTF salvato per editor WPF
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor, savedRtfBase64: data.rtfBase64 } });
         } else {
           console.error("Failed to fetch existing report");
         }
@@ -348,7 +348,7 @@ const PrestazioniRisultati = () => {
         );
         if (response.ok) {
           const data = await response.json();
-          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor } });
+          navigate("/editor", { state: { htmlContent: data.html, readOnly, openedByOtherDoctor, requiresRtfEditor: data.requiresRtfEditor, savedRtfBase64: data.rtfBase64 } });
         } else {
           console.error("Failed to fetch existing reports");
         }
