@@ -26,6 +26,7 @@ interface Registration {
   isDraft?: boolean;
   externalPatientId?: string | null;
   externalAccessionNumber?: string | null;
+  birthDate?: string | null;
 }
 const initialState: Registration[] = [];
 

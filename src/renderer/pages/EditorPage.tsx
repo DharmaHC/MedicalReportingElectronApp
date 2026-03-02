@@ -2894,6 +2894,12 @@ const handleResultClick = async (result: any) => {
                   <div>
                     <strong>Età:</strong> {patient.age} anni
                   </div>
+                  {patient.birthDate && (
+                    <div>
+                      <strong>Data di nascita:</strong>{" "}
+                      {new Date(patient.birthDate).toLocaleDateString("it-IT")}
+                    </div>
+                  )}
                   {patient.diagnosticQuestion && (
                     <div>
                       <strong>Quesito Diagnostico:</strong>{" "}
