@@ -42,9 +42,14 @@ interface RegenerateResult {
   webReportUpdated?: boolean;
 }
 
+type PageMode = "regenerate" | "sign-unsigned";
+
 const RegeneratePdfPage: React.FC = () => {
   const navigate = useNavigate();
   const token = useSelector((state: RootState) => state.auth.token);
+
+  // Mode state
+  const [mode, setMode] = useState<PageMode>("regenerate");
 
   // Search state
   const [lastName, setLastName] = useState("");
@@ -151,7 +156,11 @@ const RegeneratePdfPage: React.FC = () => {
         params.append("dateTo", dt);
       }
 
-      const response = await fetch(`${getApiBaseUrl()}reports/search?${params.toString()}`, {
+      const endpoint = mode === "sign-unsigned"
+        ? `${getApiBaseUrl()}reports/unsigned/search?${params.toString()}`
+        : `${getApiBaseUrl()}reports/search?${params.toString()}`;
+
+      const response = await fetch(endpoint, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -160,7 +169,13 @@ const RegeneratePdfPage: React.FC = () => {
       const data = await response.json();
 
       if (data.reports && data.reports.length > 0) {
-        setSearchResults(data.reports.map((r: any) => ({ ...r, selected: false })));
+        // Normalizza i risultati: in mode sign-unsigned l'id è examinationId (numerico)
+        const mapped = data.reports.map((r: any) => ({
+          ...r,
+          id: r.id ?? `${r.examinationId}_${r.resultIds}`, // unsigned non ha guid, usiamo chiave composita
+          selected: false,
+        }));
+        setSearchResults(mapped);
         setSearchMessage(`Trovati ${data.reports.length} referti`);
         addLog(`Trovati ${data.reports.length} referti`);
       } else {
@@ -297,17 +312,24 @@ const RegeneratePdfPage: React.FC = () => {
     }
   };
 
-  // Regenerate selected reports
-  const handleRegenerateSelected = async () => {
+  // Process selected reports (regenerate or sign depending on mode)
+  const handleProcessSelected = async () => {
     const selected = searchResults.filter(r => r.selected);
     if (selected.length === 0) {
-      setSearchMessage("Seleziona almeno un referto da rigenerare");
+      setSearchMessage(mode === "regenerate"
+        ? "Seleziona almeno un referto da rigenerare"
+        : "Seleziona almeno un referto da firmare");
       return;
     }
 
-    const confirmMsg = `Stai per rigenerare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\n` +
-      `ATTENZIONE: I PDF rigenerati NON avranno firma digitale valida (solo bypass estetico).\n\n` +
-      `Continuare?`;
+    const confirmMsg = mode === "regenerate"
+      ? `Stai per rigenerare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\n` +
+        `ATTENZIONE: I PDF rigenerati NON avranno firma digitale valida (solo bypass estetico).\n\n` +
+        `Continuare?`
+      : `Stai per firmare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} non firmati.\n\n` +
+        `Verrà creato un record in DigitalSignedReports (ExaminationState=5) e aggiornato StateId a 8.\n` +
+        `La firma sarà di tipo bypass (estetica, non digitale).\n\n` +
+        `Continuare?`;
 
     if (!window.confirm(confirmMsg)) {
       return;
@@ -317,7 +339,8 @@ const RegeneratePdfPage: React.FC = () => {
     setTotalToProcess(selected.length);
     setCurrentProgress(0);
     setRegenerateResults([]);
-    addLog(`=== INIZIO RIGENERAZIONE DI ${selected.length} REFERTI ===`);
+    const actionLabel = mode === "regenerate" ? "RIGENERAZIONE" : "FIRMA";
+    addLog(`=== INIZIO ${actionLabel} DI ${selected.length} REFERTI ===`);
 
     const results: RegenerateResult[] = [];
 
@@ -325,7 +348,9 @@ const RegeneratePdfPage: React.FC = () => {
       const report = selected[i];
       setCurrentProgress(i + 1);
 
-      const result = await regenerateSingle(report.id, report.patientName, report.externalAccessionNumber);
+      const result = mode === "regenerate"
+        ? await regenerateSingle(report.id, report.patientName, report.externalAccessionNumber)
+        : await signSingle(report);
       results.push(result);
       setRegenerateResults([...results]);
     }
@@ -522,25 +547,206 @@ const RegeneratePdfPage: React.FC = () => {
     }
   };
 
+  // === SIGN UNSIGNED: Test preview ===
+  const handleTestUnsigned = async (report: any) => {
+    try {
+      addLog(`TEST firma: ${report.patientName}`);
+
+      const prepareUrl = `${getApiBaseUrl()}reports/unsigned/${report.examinationId}/prepare-pdf?resultIds=${encodeURIComponent(report.resultIds)}${useCurrentTemplate ? '&useCurrentTemplate=true' : ''}`;
+      const prepareResponse = await fetch(prepareUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!prepareResponse.ok) {
+        const errorData = await prepareResponse.json();
+        throw new Error(errorData.error || "Errore");
+      }
+
+      const prepareData = await prepareResponse.json();
+      addLog(`  RTF trovato, PDF generato: ${prepareData.pdfBase64.length} chars`);
+      addLog(`  CompanyId: "${prepareData.companyId}" - Medico: "${prepareData.doctorName}"`);
+
+      let signatureDate: string | undefined;
+      if (prepareData.reportDate) {
+        const d = new Date(prepareData.reportDate);
+        d.setHours(d.getHours() + 1);
+        signatureDate = d.toISOString();
+        addLog(`  Data firma forzata: ${d.toLocaleString()}`);
+      }
+
+      const signResult = await (window as any).nativeSign.signPdf({
+        pdfBase64: prepareData.pdfBase64,
+        companyId: prepareData.companyId || "",
+        footerText: null,
+        useRemote: null, otpCode: null, pin: null, userCN: null,
+        bypassSignature: true,
+        signedByName: prepareData.doctorName || "Medico",
+        doctorName: prepareData.doctorName,
+        signatureDate,
+      });
+
+      const pdfBytes = Uint8Array.from(atob(signResult.signedPdfBase64), c => c.charCodeAt(0));
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+      addLog(`  TEST COMPLETATO - PDF aperto in nuova finestra`);
+    } catch (error) {
+      addLog(`  TEST FALLITO: ${error}`);
+    }
+  };
+
+  // === SIGN UNSIGNED: Sign single ===
+  const signSingle = async (report: any): Promise<RegenerateResult> => {
+    try {
+      addLog(`Firma ${report.patientName} (ExamId: ${report.examinationId})...`);
+
+      // 1. Prepare PDF
+      const prepareUrl = `${getApiBaseUrl()}reports/unsigned/${report.examinationId}/prepare-pdf?resultIds=${encodeURIComponent(report.resultIds)}${useCurrentTemplate ? '&useCurrentTemplate=true' : ''}`;
+      const prepareResponse = await fetch(prepareUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!prepareResponse.ok) {
+        const errorData = await prepareResponse.json();
+        throw new Error(errorData.error || "Errore nella preparazione PDF");
+      }
+
+      const prepareData = await prepareResponse.json();
+      addLog(`  PDF generato`);
+
+      let signatureDate: string | undefined;
+      if (prepareData.reportDate) {
+        const d = new Date(prepareData.reportDate);
+        d.setHours(d.getHours() + 1);
+        signatureDate = d.toISOString();
+      }
+
+      // 2. Decorate PDF
+      const signResult = await (window as any).nativeSign.signPdf({
+        pdfBase64: prepareData.pdfBase64,
+        companyId: prepareData.companyId || "",
+        footerText: null,
+        useRemote: null, otpCode: null, pin: null, userCN: null,
+        bypassSignature: true,
+        signedByName: prepareData.doctorName || "Medico",
+        doctorName: prepareData.doctorName,
+        signatureDate,
+      });
+
+      if (!signResult.signedPdfBase64) throw new Error("Decorazione PDF fallita");
+      addLog(`  PDF decorato`);
+
+      // 3. Save signed report (creates DSR)
+      const saveResponse = await fetch(`${getApiBaseUrl()}reports/unsigned/save-signed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          pdfBase64: signResult.signedPdfBase64,
+          examinationId: prepareData.examinationId,
+          resultIds: prepareData.resultIds,
+          doctorCode: prepareData.doctorCode,
+          companyId: prepareData.companyId,
+          workareaIds: prepareData.workareaIds,
+          applicantId: prepareData.applicantId,
+          examinationMnemonicCodeFull: prepareData.examinationMnemonicCodeFull,
+          patientId: prepareData.patientId,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || "Errore nel salvataggio");
+      }
+
+      const saveData = await saveResponse.json();
+      addLog(`  COMPLETATO: ${report.patientName} - DSR creato, PDF: ${saveData.newPdfSize} bytes`);
+
+      return {
+        reportId: saveData.dsrId || report.examinationId.toString(),
+        status: "success",
+        patientName: report.patientName,
+        accessionNumber: report.externalAccessionNumber,
+        examinationId: report.examinationId,
+        resultsIds: report.resultIds,
+        newPdfSize: saveData.newPdfSize,
+        message: "Firmato con successo",
+      };
+    } catch (error) {
+      addLog(`  ERRORE ${report.patientName}: ${error}`);
+      return {
+        reportId: report.examinationId?.toString() || "?",
+        status: "error",
+        patientName: report.patientName,
+        accessionNumber: report.externalAccessionNumber,
+        message: String(error),
+      };
+    }
+  };
+
   const selectedCount = searchResults.filter(r => r.selected).length;
 
   return (
     <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "4px" }}>
         <Button
-          fillMode="flat"
+          fillMode="outline"
           onClick={() => navigate("/")}
           title="Torna alla Home"
-          style={{ padding: "4px 8px" }}
+          style={{ padding: "6px 14px" }}
         >
           &larr; Indietro
         </Button>
-        <h2 style={{ margin: 0 }}>Rigenerazione PDF Referti</h2>
+        <h2 style={{ margin: 0 }}>
+          {mode === "regenerate" ? "Rigenerazione PDF Referti" : "Firma Referti Non Firmati"}
+        </h2>
       </div>
+
+      {/* Mode Toggle */}
+      <div style={{ display: "flex", gap: "0", marginBottom: "12px" }}>
+        <button
+          onClick={() => { setMode("regenerate"); setSearchResults([]); setSearchMessage(""); setRegenerateResults([]); }}
+          style={{
+            padding: "8px 20px",
+            border: "1px solid #ccc",
+            borderRight: "none",
+            borderRadius: "4px 0 0 4px",
+            background: mode === "regenerate" ? "#0275d8" : "#fff",
+            color: mode === "regenerate" ? "#fff" : "#333",
+            fontWeight: mode === "regenerate" ? 600 : 400,
+            cursor: "pointer",
+          }}
+        >
+          Rigenera PDF
+        </button>
+        <button
+          onClick={() => { setMode("sign-unsigned"); setSearchResults([]); setSearchMessage(""); setRegenerateResults([]); }}
+          style={{
+            padding: "8px 20px",
+            border: "1px solid #ccc",
+            borderRadius: "0 4px 4px 0",
+            background: mode === "sign-unsigned" ? "#0275d8" : "#fff",
+            color: mode === "sign-unsigned" ? "#fff" : "#333",
+            fontWeight: mode === "sign-unsigned" ? 600 : 400,
+            cursor: "pointer",
+          }}
+        >
+          Firma Referti Non Firmati
+        </button>
+      </div>
+
       <p style={{ color: "#666", marginBottom: "15px" }}>
-        Usa questa pagina per rigenerare i PDF dei referti che sono stati impaginati male.
-        <br />
-        <strong style={{ color: "#c00" }}>ATTENZIONE:</strong> I PDF rigenerati avranno solo firma estetica (bypass), non firma digitale valida.
+        {mode === "regenerate" ? (
+          <>
+            Usa questa pagina per rigenerare i PDF dei referti che sono stati impaginati male.
+            <br />
+            <strong style={{ color: "#c00" }}>ATTENZIONE:</strong> I PDF rigenerati avranno solo firma estetica (bypass), non firma digitale valida.
+          </>
+        ) : (
+          <>
+            Cerca referti con RTF salvato ma senza record in DigitalSignedReports e firmali con bypass.
+            <br />
+            <strong style={{ color: "#c00" }}>ATTENZIONE:</strong> Verrà creato un nuovo record in DigitalSignedReports con ExaminationState=5 e StateId=8.
+          </>
+        )}
       </p>
 
       {/* Template option - a inizio pagina */}
@@ -643,6 +849,25 @@ const RegeneratePdfPage: React.FC = () => {
             {searchMessage}
           </div>
         )}
+
+        {/* Action Button - dentro al blocco ricerca */}
+        {searchResults.length > 0 && (
+          <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #ddd" }}>
+            <Button
+              themeColor="error"
+              size="large"
+              onClick={handleProcessSelected}
+              disabled={regenerating || selectedCount === 0}
+            >
+              {regenerating
+                ? `${mode === "regenerate" ? "Rigenerazione" : "Firma"} in corso... (${currentProgress}/${totalToProcess})`
+                : mode === "regenerate"
+                  ? `Rigenera ${selectedCount} Refert${selectedCount !== 1 ? 'i' : 'o'} Selezionat${selectedCount !== 1 ? 'i' : 'o'}`
+                  : `Firma ${selectedCount} Refert${selectedCount !== 1 ? 'i' : 'o'} Non Firmat${selectedCount !== 1 ? 'i' : 'o'}`
+              }
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Results Grid */}
@@ -680,41 +905,62 @@ const RegeneratePdfPage: React.FC = () => {
             />
             <GridColumn field="patientName" title="Paziente" width="200px" />
             <GridColumn field="externalAccessionNumber" title="Accession" width="120px" />
-            <GridColumn
-              field="signedDate"
-              title="Data Firma"
-              width="150px"
-              cell={(props) => (
-                <td>{new Date(props.dataItem.signedDate).toLocaleString('it-IT')}</td>
-              )}
-            />
+            {mode === "regenerate" ? (
+              <GridColumn
+                field="signedDate"
+                title="Data Firma"
+                width="150px"
+                cell={(props) => (
+                  <td>{new Date(props.dataItem.signedDate).toLocaleString('it-IT')}</td>
+                )}
+              />
+            ) : (
+              <GridColumn
+                field="examinationDate"
+                title="Data Accettazione"
+                width="150px"
+                cell={(props) => (
+                  <td>{props.dataItem.examinationDate ? new Date(props.dataItem.examinationDate).toLocaleString('it-IT') : '-'}</td>
+                )}
+              />
+            )}
             <GridColumn field="doctorName" title="Medico" width="150px" />
-            <GridColumn
-              field="pdfSize"
-              title="Size"
-              width="80px"
-              cell={(props) => (
-                <td>{Math.round(props.dataItem.pdfSize / 1024)} KB</td>
-              )}
-            />
+            {mode === "regenerate" ? (
+              <GridColumn
+                field="pdfSize"
+                title="Size"
+                width="80px"
+                cell={(props) => (
+                  <td>{Math.round(props.dataItem.pdfSize / 1024)} KB</td>
+                )}
+              />
+            ) : (
+              <GridColumn field="examNames" title="Esami" width="200px" />
+            )}
             <GridColumn
               title="Azioni"
               width="200px"
               sortable={false}
               cell={(props) => (
                 <td>
-                  <Button
-                    size="small"
-                    fillMode="flat"
-                    onClick={() => handlePreviewPdf(props.dataItem.id, props.dataItem.patientName)}
-                  >
-                    PDF Orig
-                  </Button>
+                  {mode === "regenerate" && (
+                    <Button
+                      size="small"
+                      fillMode="flat"
+                      onClick={() => handlePreviewPdf(props.dataItem.id, props.dataItem.patientName)}
+                    >
+                      PDF Orig
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     fillMode="flat"
                     themeColor="warning"
-                    onClick={() => handleTestRegenerate(props.dataItem.id, props.dataItem.patientName)}
+                    onClick={() =>
+                      mode === "regenerate"
+                        ? handleTestRegenerate(props.dataItem.id, props.dataItem.patientName)
+                        : handleTestUnsigned(props.dataItem)
+                    }
                   >
                     Test
                   </Button>
@@ -723,20 +969,6 @@ const RegeneratePdfPage: React.FC = () => {
             />
           </Grid>
 
-          {/* Regenerate Button */}
-          <div style={{ marginTop: "15px" }}>
-            <Button
-              themeColor="error"
-              size="large"
-              onClick={handleRegenerateSelected}
-              disabled={regenerating || selectedCount === 0}
-            >
-              {regenerating
-                ? `Rigenerazione in corso... (${currentProgress}/${totalToProcess})`
-                : `Rigenera ${selectedCount} Refert${selectedCount !== 1 ? 'i' : 'o'} Selezionat${selectedCount !== 1 ? 'i' : 'o'}`
-              }
-            </Button>
-          </div>
         </div>
       )}
 
