@@ -58,6 +58,9 @@ const RegeneratePdfPage: React.FC = () => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [examNames, setExamNames] = useState<string[]>([]);
+  const [filteredExamNames, setFilteredExamNames] = useState<string[]>([]);
+  const [selectedExamName, setSelectedExamName] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -115,6 +118,38 @@ const RegeneratePdfPage: React.FC = () => {
     loadDoctors();
   }, [token]);
 
+  // Load distinct exam names on mount
+  useEffect(() => {
+    const loadExamNames = async () => {
+      if (!token) return;
+      try {
+        const response = await fetch(`${getApiBaseUrl()}reports/distinct-exam-names`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data: string[] = await response.json();
+          setExamNames(data);
+          setFilteredExamNames(data);
+        }
+      } catch (error) {
+        console.error("Errore caricamento nomi esami:", error);
+      }
+    };
+    loadExamNames();
+  }, [token]);
+
+  // Filter exam names for autocomplete
+  const handleExamNameFilterChange = (event: ComboBoxFilterChangeEvent) => {
+    const filter = event.filter.value.toLowerCase();
+    if (!filter) {
+      setFilteredExamNames(examNames);
+    } else {
+      setFilteredExamNames(
+        examNames.filter(name => name.toLowerCase().includes(filter))
+      );
+    }
+  };
+
   // Filter doctors for autocomplete
   const handleDoctorFilterChange = (event: ComboBoxFilterChangeEvent) => {
     const filter = event.filter.value.toLowerCase();
@@ -131,7 +166,7 @@ const RegeneratePdfPage: React.FC = () => {
 
   // Search reports
   const handleSearch = async () => {
-    if (!lastName && !firstName && !selectedDoctor && !dateFrom && !dateTo) {
+    if (!lastName && !firstName && !selectedDoctor && !selectedExamName && !dateFrom && !dateTo) {
       setSearchMessage("Inserisci almeno un criterio di ricerca");
       return;
     }
@@ -146,6 +181,7 @@ const RegeneratePdfPage: React.FC = () => {
       if (lastName) params.append("lastName", lastName);
       if (firstName) params.append("firstName", firstName);
       if (selectedDoctor) params.append("doctorCode", selectedDoctor.doctorCode.trim());
+      if (selectedExamName) params.append("examName", selectedExamName);
       // Usa formato locale per evitare shift di timezone con toISOString()
       if (dateFrom) {
         const df = `${dateFrom.getFullYear()}-${String(dateFrom.getMonth() + 1).padStart(2, '0')}-${String(dateFrom.getDate()).padStart(2, '0')}`;
@@ -212,9 +248,11 @@ const RegeneratePdfPage: React.FC = () => {
     setLastName("");
     setFirstName("");
     setSelectedDoctor(null);
+    setSelectedExamName(null);
     setDateFrom(null);
     setDateTo(null);
     setFilteredDoctors(doctors);
+    setFilteredExamNames(examNames);
   };
 
   // Regenerate single report - returns detailed result
@@ -809,6 +847,18 @@ const RegeneratePdfPage: React.FC = () => {
               placeholder="Seleziona medico..."
               filterable={true}
               loading={loadingDoctors}
+              style={{ width: "250px" }}
+            />
+          </div>
+          <div>
+            <label>Esame</label>
+            <ComboBox
+              data={filteredExamNames}
+              value={selectedExamName}
+              onChange={(e: ComboBoxChangeEvent) => setSelectedExamName(e.value)}
+              onFilterChange={handleExamNameFilterChange}
+              placeholder="Seleziona esame..."
+              filterable={true}
               style={{ width: "250px" }}
             />
           </div>
