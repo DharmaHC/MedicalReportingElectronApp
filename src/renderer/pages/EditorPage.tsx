@@ -588,7 +588,7 @@ const renderPinDialog = () =>
   const { sanitizeClassAttr, sanitizeStyleAttr, removeAttribute, replaceImageSourcesFromRtf } =
     EditorUtils;
   const pasteSettings: PasteCleanupSettings = {
-    stripTags: 'span|font|h1|h2|h3|h4|h5|h6', // Rimuove specifici tag HTML.
+    stripTags: 'span|font|h1|h2|h3|h4|h5|h6|table|thead|tbody|tfoot|tr|td|th|col|colgroup|caption', // Rimuove specifici tag HTML (incluse tabelle da paste Word).
     attributes: { // Definisce come gestire gli attributi HTML.
         class: sanitizeClassAttr, // Pulisce l'attributo 'class'.
         style: sanitizeStyleAttr, // Pulisce l'attributo 'style'.
