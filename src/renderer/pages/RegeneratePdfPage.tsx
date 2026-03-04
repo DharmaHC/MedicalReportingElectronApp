@@ -20,6 +20,7 @@ interface Doctor {
 interface SearchResult {
   id: string;
   patientName: string;
+  birthDate: string | null;
   externalAccessionNumber: string;
   externalPatientId: string;
   examinationDate: string;
@@ -954,6 +955,14 @@ const RegeneratePdfPage: React.FC = () => {
               )}
             />
             <GridColumn field="patientName" title="Paziente" width="200px" />
+            <GridColumn
+              field="birthDate"
+              title="Data Nascita"
+              width="110px"
+              cell={(props) => (
+                <td>{props.dataItem.birthDate ? new Date(props.dataItem.birthDate + 'T00:00:00').toLocaleDateString('it-IT') : '-'}</td>
+              )}
+            />
             <GridColumn field="externalAccessionNumber" title="Accession" width="120px" />
             {mode === "regenerate" ? (
               <GridColumn
