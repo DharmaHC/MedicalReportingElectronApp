@@ -322,7 +322,7 @@ const dispatch = useDispatch();
           panes={innerPanes}
           onChange={handleInnerPanesChange}
         >
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             {/* Header a sinistra */}
             <div className="header">
               <div className="header-left">
@@ -347,12 +347,16 @@ const dispatch = useDispatch();
             </div>
 
             <h5>{labels.homepage.elencoRegistrazioni}</h5>
-            {filtersReady && <ElencoRegistrazioni />}
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              {filtersReady && <ElencoRegistrazioni />}
+            </div>
           </div>
 
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             <h5>{labels.homepage.prestazioniRisultati}</h5>
-            {filtersReady && <PrestazioniRisultati />}
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              {filtersReady && <PrestazioniRisultati />}
+            </div>
           </div>
         </Splitter>
       </Splitter>
