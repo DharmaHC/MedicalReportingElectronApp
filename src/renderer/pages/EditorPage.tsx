@@ -133,6 +133,7 @@ function EditorPage() {
   const [printSignedPdf, setPrintSignedPdf] = useState<boolean>(false);
   const [useV2Assembly, setUseV2Assembly] = useState<boolean>(true);
   const [isPdfEngineAuto, setIsPdfEngineAuto] = useState<boolean>(true);
+  const [isWindows, setIsWindows] = useState<boolean>(true); // default true (primary target)
   const [useWpfEditor, setUseWpfEditor] = useState<boolean>(false);
   const [wpfEditorStatus, setWpfEditorStatus] = useState<string>("");
   const [wpfEditorReady, setWpfEditorReady] = useState<boolean>(false);
@@ -201,7 +202,7 @@ function EditorPage() {
 
   // In component scope:
 const userName = useSelector((state: RootState) => state.auth.userName);
-const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test
+const canUseUnsafeWpfToggle = true; // TEMP: visibile a tutti per test (gated by isWindows at render)
 const showPdfEngineSwitches = false; // Nasconde i toggle v1/v2 a tutti gli utenti
 const DICTATION_MASTER_USER = "FRSRFL72R25H282U";
 const canUseDictationControls = (userName ?? "").trim().toUpperCase() === DICTATION_MASTER_USER;
@@ -252,6 +253,9 @@ const logToFile = (msg: string, details?: any) => {
         setreportPageHeight(settings.reportPageHeight ?? 1.5);
         setBlankFooterHeight(settings.blankFooterHeight ?? 30);
         setSpeechToTextEnabled(settings.speechToText?.enabled ?? false);
+      });
+      window.appInfo.get().then(info => {
+        setIsWindows(info.platform === 'win32');
       });
     }, []);
 
@@ -506,12 +510,12 @@ const renderPinDialog = () =>
   const requiresRtfEditor = location.state?.requiresRtfEditor === true; // Template contiene tabelle/immagini → editor WPF
   const savedRtfBase64 = location.state?.savedRtfBase64 as string | undefined; // RTF salvato in precedenza (riapertura referto)
 
-  // Auto-attiva editor WPF se il template richiede RTF nativo
+  // Auto-attiva editor WPF se il template richiede RTF nativo (solo su Windows)
   useEffect(() => {
-    if (requiresRtfEditor && !useWpfEditor) {
+    if (isWindows && requiresRtfEditor && !useWpfEditor) {
       setUseWpfEditor(true);
     }
-  }, [requiresRtfEditor]);
+  }, [isWindows, requiresRtfEditor]);
 
   // Selettori Redux per accedere a parti dello stato globale.
   const printReportWhenFinished = useSelector(
@@ -543,8 +547,12 @@ const renderPinDialog = () =>
           // Preserva text-align (justify, center, right)
           const textAlignMatch = currentStyle.match(/text-align:\s*\w+/);
 
+          // Preserva il font-family esistente del paragrafo (dal template); default a TNR
+          const fontFamilyMatch = currentStyle.match(/font-family:\s*([^;]+)/i);
+          const fontFamily = fontFamilyMatch ? fontFamilyMatch[1].trim() : '"Times New Roman"';
+
           const parts = [
-            'font-family: "Times New Roman"',
+            `font-family: ${fontFamily}`,
             `font-size: ${paragraphFontSizePx}px`,
             'margin-top: 0px',
             'margin-bottom: 0px',
@@ -610,19 +618,29 @@ const renderPinDialog = () =>
       if (event.nativeEvent.clipboardData) {
           html = replaceImageSourcesFromRtf(html, event.nativeEvent.clipboardData);
       }
-      // Sostituzioni specifiche per uniformare lo stile del testo incollato.
-      while (html.includes('style="text-align: justify;"')) {
-        html = html.replace(' style="text-align: justify;"', ' style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;"');
-      }
-      while (html.includes(' class="Predefinito" style="margin-bottom: 0cm;"')) {
-        html = html.replace(' class="Predefinito" style="margin-bottom: 0cm;"', ' style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;"');
-      }
-      while (html.includes('<p>')) {
-        html = html.replace('<p>', '<p style="font-family: &quot;Times New Roman&quot; font-size: 16px; margin-top: 0px; margin-bottom: 0px; line-height: 100%;">');
-      }
 
-      // Non aggiungere &nbsp; ai paragrafi vuoti - il backend PDF li gestisce correttamente quando sono vuoti
-      // html = html.replace(/<p([^>]*)>\s*<\/p>/gi, '<p$1>&nbsp;</p>');
+      // Rimuovi TUTTI gli attributi style e class da ogni elemento per eliminare
+      // formattazione esterna (font-size, line-height, margin, ecc. da Word/altri).
+      // Il paragraphStylerPlugin riapplicherà gli stili corretti ai paragrafi.
+      html = html.replace(/\s+(style|class)="[^"]*"/gi, "");
+
+      // Rileva il font-family del paragrafo al punto di inserimento e iniettalo
+      // nei <p> incollati, così il paragraphStylerPlugin lo preserverà.
+      const view = editorRef.current?.view;
+      if (view) {
+        const { $from } = view.state.selection;
+        // Risali al nodo paragrafo che contiene il cursore
+        for (let d = $from.depth; d >= 0; d--) {
+          const node = $from.node(d);
+          if (node.type.name === "paragraph") {
+            const cursorFont = node.attrs?.style?.match(/font-family:\s*([^;]+)/i)?.[1]?.trim();
+            if (cursorFont) {
+              html = html.replace(/<p(?=[\s>])/gi, `<p style="font-family: ${cursorFont};"`);
+            }
+            break;
+          }
+        }
+      }
 
       setIsModified(true); // Segna il documento come modificato.
 
@@ -1059,9 +1077,11 @@ const renderPinDialog = () =>
         ? baseFontSizePx
         : Math.max(baseFontSizePx, forcedReportFontSizePx);
       const textAlignMatch = currentStyle.match(/text-align:\s*(left|right|center|justify)/i);
+      const fontFamilyMatch = currentStyle.match(/font-family:\s*([^;]+)/i);
+      const fontFamily = fontFamilyMatch ? fontFamilyMatch[1].trim() : '"Times New Roman"';
 
       const normalizedStyleParts = [
-        'font-family: "Times New Roman"',
+        `font-family: ${fontFamily}`,
         `font-size: ${normalizedFontSizePx}px`,
         "margin-top: 0px",
         "margin-bottom: 0px",
@@ -3095,7 +3115,7 @@ const handleResultClick = async (result: any) => {
                     disabled={isPdfEngineAuto}
                   />
                 )}
-                {canUseUnsafeWpfToggle && (
+                {isWindows && canUseUnsafeWpfToggle && (
                   <Checkbox
                     checked={useWpfEditor}
                     label="Usa editor WPF nativo (RTF)"
