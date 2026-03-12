@@ -1,8 +1,8 @@
 // PreviousResultModal.tsx
-import React, {useRef} from "react";
+import React, {useRef, useCallback} from "react";
 import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import { Button } from "@progress/kendo-react-buttons";
-import { imageIcon, checkIcon } from "@progress/kendo-svg-icons";
+import { imageIcon, checkIcon, copyIcon } from "@progress/kendo-svg-icons";
 
 interface PreviousResultModalProps {
   accNum: string;
@@ -38,6 +38,47 @@ interface PreviousResultModalProps {
 
 const htmlRef = useRef<HTMLDivElement>(null);
 
+/** Strip negative margin-left values injected by RTF \li-N indentation */
+const sanitizeHtml = (html: string): string =>
+  html.replace(/margin-left:\s*-[0-9.]+\s*(px|pt|cm|mm|in|em)\s*;?/gi, "");
+
+/** Select all body text skipping the exam-name heading and leading blank lines */
+const handleSelectText = useCallback(() => {
+  const container = htmlRef.current;
+  if (!container) return;
+
+  // Collect all <p> elements inside the rendered HTML
+  const paragraphs = Array.from(container.querySelectorAll("p"));
+  if (paragraphs.length === 0) return;
+
+  // Find first paragraph with real content after the exam-name line.
+  // Pattern: first non-empty <p> = exam name → skip it + any following empty <p>s
+  let startIdx = 0;
+  // Skip to first non-empty paragraph (exam name)
+  while (startIdx < paragraphs.length && !paragraphs[startIdx].textContent?.trim()) {
+    startIdx++;
+  }
+  // Skip the exam-name paragraph itself
+  if (startIdx < paragraphs.length) startIdx++;
+  // Skip any subsequent empty paragraphs
+  while (startIdx < paragraphs.length && !paragraphs[startIdx].textContent?.trim()) {
+    startIdx++;
+  }
+
+  if (startIdx >= paragraphs.length) {
+    // Fallback: select everything
+    startIdx = 0;
+  }
+
+  const sel = window.getSelection();
+  if (!sel) return;
+  const range = document.createRange();
+  range.setStartBefore(paragraphs[startIdx]);
+  range.setEndAfter(paragraphs[paragraphs.length - 1]);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}, []);
+
 const handleViewPdf = () => {
     if (!signedPdf) return;
     const bytes = atob(signedPdf);
@@ -68,7 +109,7 @@ return (
       {htmlReport ? (
         <div
           ref={htmlRef}
-          dangerouslySetInnerHTML={{ __html: htmlReport }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(htmlReport) }}
           style={{ height: 300, overflowY: "auto", marginBottom: 12 }}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -108,6 +149,12 @@ return (
         <Button svgIcon={imageIcon} onClick={() => onOpenImages(accNum)}>
           Apri Immagini
         </Button>
+
+        {htmlReport && (
+          <Button svgIcon={copyIcon} onClick={handleSelectText}>
+            Seleziona Testo
+          </Button>
+        )}
 
         <Button svgIcon={checkIcon} onClick={onClose}>
           Chiudi
