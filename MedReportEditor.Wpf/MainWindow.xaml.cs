@@ -431,12 +431,13 @@ namespace MedReportEditor.Wpf
                         Dispatcher.Invoke(() =>
                         {
                             // Inserisce testo alla posizione corrente del cursore.
-                            // Gestisce newline come line break (Shift+Enter).
+                            // Ogni newline crea un nuovo paragrafo (\par) così il testo
+                            // giustificato non "stiracchia" le righe corte.
                             var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                             for (int i = 0; i < lines.Length; i++)
                             {
                                 if (i > 0)
-                                    editor.InsertLineBreak();
+                                    editor.InsertParagraph();
                                 if (!string.IsNullOrEmpty(lines[i]))
                                     editor.Insert(lines[i]);
                             }

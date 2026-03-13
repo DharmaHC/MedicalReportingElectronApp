@@ -774,4 +774,5 @@ export function registerWpfEditorIpcHandlers(): void {
     stopWpfEditor();
     return true;
   });
+
 }

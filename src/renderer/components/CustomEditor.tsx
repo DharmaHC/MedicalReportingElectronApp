@@ -45,7 +45,12 @@ const ZoomControls: React.FC<{ zoomLevel: number; setZoomLevel: (n: number) => v
   );
 };
 
-const CustomEditor = forwardRef<Editor, EditorProps>((props, ref) => {
+interface CustomEditorProps extends EditorProps {
+  bodyWidthPt?: number; // Larghezza body del template RTF in pt (dal server)
+}
+
+const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
+  const { bodyWidthPt, ...editorProps } = props;
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const stored = sessionStorage.getItem(ZOOM_STORAGE_KEY);
     if (stored) {
@@ -114,13 +119,34 @@ const renderPageBreaks = useCallback(() => {
   }
 
   // Apply scale & margin
+  // La larghezza deve corrispondere al body del template RTF per avere
+  // lo stesso word-wrap dell'anteprima PDF.
+  // Con content-box, width = area testo; il padding è fuori.
+  const editorWidthPt = bodyWidthPt && bodyWidthPt > 0 ? bodyWidthPt : 428;
   proseMirror.style.transform = `scale(${zoomLevel})`;
-    proseMirror.style.width = '428pt';
+    proseMirror.style.width = `${editorWidthPt}pt`;
     proseMirror.style.marginLeft = '100pt';
     proseMirror.style.overflowX = 'hidden';
     proseMirror.style.transformOrigin = "top left";
     proseMirror.style.height = `${100 / zoomLevel}%`;
-}, [zoomLevel, rowsPerPage]);
+
+    // Dopo il layout, controlla se una scrollbar è apparsa e compensa.
+    // La scrollbar è causata da overflow verticale, quindi allargare
+    // ProseMirror non la fa scomparire → niente loop.
+    requestAnimationFrame(() => {
+      // Cerca scrollbar su ProseMirror e sui suoi antenati fino a k-editor-content
+      let el: HTMLElement | null = proseMirror;
+      let scrollbarW = 0;
+      while (el && !el.classList.contains('k-editor-content')) {
+        const sw = el.offsetWidth - el.clientWidth;
+        if (sw > scrollbarW) scrollbarW = sw;
+        el = el.parentElement;
+      }
+      if (scrollbarW > 0) {
+        proseMirror.style.width = `calc(${editorWidthPt}pt + ${scrollbarW}px)`;
+      }
+    });
+}, [zoomLevel, rowsPerPage, bodyWidthPt]);
 
   useEffect(() => { sessionStorage.setItem(ZOOM_STORAGE_KEY, String(zoomLevel)); }, [zoomLevel]);
 
@@ -367,7 +393,7 @@ useEffect(() => {
             editorViewRef.current = node.view;
           }
         }}
-        {...props}
+        {...editorProps}
         tools={tools}
         defaultEditMode="div"
         onChange={handleEditorChange}

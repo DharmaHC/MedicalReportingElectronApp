@@ -509,6 +509,8 @@ const renderPinDialog = () =>
   const openedByOtherDoctor = location.state?.openedByOtherDoctor === true; // Indica se il referto è stato refertato da un altro medico (anche in bozza).
   const requiresRtfEditor = location.state?.requiresRtfEditor === true; // Template contiene tabelle/immagini → editor WPF
   const savedRtfBase64 = location.state?.savedRtfBase64 as string | undefined; // RTF salvato in precedenza (riapertura referto)
+  const templateTextAlign = (location.state?.templateTextAlign as string) || "left"; // Allineamento del template RTF (justify, center, right, left)
+  const templateBodyWidthPt = Number(location.state?.templateBodyWidthPt) || 0; // Larghezza body del template RTF in pt (0 = usa default)
 
   // Auto-attiva editor WPF se il template richiede RTF nativo (solo su Windows)
   useEffect(() => {
@@ -545,7 +547,9 @@ const renderPinDialog = () =>
             ? baseFontSizePx
             : Math.max(baseFontSizePx, forcedReportFontSizePx);
           // Preserva text-align (justify, center, right)
+          // Preserva text-align esplicito; se assente usa quello del template RTF
           const textAlignMatch = currentStyle.match(/text-align:\s*\w+/);
+          const textAlign = textAlignMatch ? textAlignMatch[0] : `text-align: ${templateTextAlign}`;
 
           // Preserva il font-family esistente del paragrafo (dal template); default a TNR
           const fontFamilyMatch = currentStyle.match(/font-family:\s*([^;]+)/i);
@@ -560,7 +564,7 @@ const renderPinDialog = () =>
           if (!effectiveUseV2Assembly) {
             parts.push('line-height: 100%');
           }
-          if (textAlignMatch) parts.push(textAlignMatch[0]);
+          if (textAlign) parts.push(textAlign);
           const newStyle = parts.join("; ") + ";";
 
           if (currentStyle !== newStyle) {
@@ -761,46 +765,29 @@ const renderPinDialog = () =>
 
     const { state, dispatch } = view;
     const lines = normalizedPhrase.split(/\r?\n/);
-    const inlineNodes: any[] = [];
-    lines.forEach((line, idx) => {
-      if (idx > 0) {
-        inlineNodes.push(state.schema.nodes.hard_break.create());
-      }
-      if (line.length > 0) {
-        inlineNodes.push(state.schema.text(line));
-      }
-    });
 
-    if (!inlineNodes.length) {
+    if (!lines.length || (lines.length === 1 && lines[0].length === 0)) {
       return;
     }
 
-    const fragment = Fragment.fromArray(inlineNodes);
-    const expectedText = lines.join("\n");
-    const selectionFrom = state.selection.from;
-    const insertedFrom = selectionFrom;
-    const insertedTo = selectionFrom + fragment.size;
+    // Crea paragrafi separati per ogni riga così il testo giustificato
+    // non "stiracchia" le righe corte (ogni \n diventa \par, non \line).
+    const paragraphs = lines.map((line) =>
+      state.schema.nodes.paragraph.create(
+        null,
+        line.length > 0 ? [state.schema.text(line)] : []
+      )
+    );
+    const fragment = Fragment.fromArray(paragraphs);
+    // openStart=1, openEnd=1: la prima riga si fonde nel paragrafo corrente
+    // (al cursore), le righe successive creano nuovi <p>.
+    const slice = new Slice(fragment, 1, 1);
 
     const tr = state.tr
-      .replaceSelection(new Slice(fragment, 0, 0))
+      .replaceSelection(slice)
       .scrollIntoView();
 
     dispatch(tr);
-
-    try {
-      const insertedText = view.state.doc.textBetween(insertedFrom, insertedTo, "\n", "\n");
-      if (insertedText !== expectedText) {
-        console.warn("[PhraseInsert][Mismatch]", {
-          expectedLength: expectedText.length,
-          actualLength: insertedText.length,
-          expectedPreview: expectedText.slice(0, 160),
-          actualPreview: insertedText.slice(0, 160),
-          hasNbspSource: /&nbsp;|\u00A0|\u202F|\u2007/i.test(phrase),
-        });
-      }
-    } catch (diagErr) {
-      console.warn("[PhraseInsert][DiagError]", diagErr);
-    }
           // setIsModified(true) sarà gestito dal plugin docChangePlugin.
     };
 
@@ -1077,6 +1064,7 @@ const renderPinDialog = () =>
         ? baseFontSizePx
         : Math.max(baseFontSizePx, forcedReportFontSizePx);
       const textAlignMatch = currentStyle.match(/text-align:\s*(left|right|center|justify)/i);
+      const textAlign = textAlignMatch ? textAlignMatch[0] : `text-align: ${templateTextAlign}`;
       const fontFamilyMatch = currentStyle.match(/font-family:\s*([^;]+)/i);
       const fontFamily = fontFamilyMatch ? fontFamilyMatch[1].trim() : '"Times New Roman"';
 
@@ -1089,8 +1077,8 @@ const renderPinDialog = () =>
       if (!effectiveUseV2Assembly) {
         normalizedStyleParts.push("line-height: 100%");
       }
-      if (textAlignMatch) {
-        normalizedStyleParts.push(textAlignMatch[0]);
+      if (textAlign) {
+        normalizedStyleParts.push(textAlign);
       }
 
       paragraph.setAttribute("style", normalizedStyleParts.join("; ") + ";");
@@ -2953,6 +2941,7 @@ const handleResultClick = async (result: any) => {
           <div style={useWpfEditor ? { visibility: "hidden", height: "100%" } : { height: "100%" }}>
           <CustomEditor
             ref={editorRef}
+            bodyWidthPt={templateBodyWidthPt}
             defaultContent={(() => {
               const raw = location.state?.htmlContent || "<p></p><p></p><p></p>";
               // Rimuovi margin-left negativo dalle tabelle (non ha senso nell'editor senza section margins RTF).

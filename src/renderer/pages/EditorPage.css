@@ -215,3 +215,14 @@ or-content {
   background-color: #66ff66 !important; /* verde più scuro al hover */
   border-color: #66ff66 !important;
 }
+
+/* content-box: la width imposta solo l'area testo, il padding viene aggiunto fuori.
+   Così la larghezza del testo corrisponde esattamente a bodyWidthPt del template RTF
+   mantenendo il padding visivo dell'editor. */
+.k-editor-content .ProseMirror {
+  box-sizing: content-box !important;
+}
+
+
+
+
