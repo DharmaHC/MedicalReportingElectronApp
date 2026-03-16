@@ -91,10 +91,8 @@ const renderPageBreaks = useCallback(() => {
   // Altezza body dal template RTF (pt → px: 1pt = 96/72 px a schermo)
   // Default 697.9pt ≈ A4 (841.89pt) meno 72pt margine sopra e sotto
   const heightPt = bodyHeightPt && bodyHeightPt > 0 ? bodyHeightPt : 697.9;
-  // Compensazione: il PDF ha paragraph spacing (\sa) che l'editor non riproduce
-  // completamente → la pagina PDF si riempie prima rispetto all'editor.
-  // Fattore 3.3: lo \sa si accumula su più paragrafi per pagina di scarto.
-  const saCompensation = spacingAfterPt && spacingAfterPt > 0 ? spacingAfterPt * 3.3 : 0;
+  // Compensazione \sa: il PDF ha paragraph spacing che l'editor non riproduce.
+  const saCompensation = spacingAfterPt && spacingAfterPt > 0 ? spacingAfterPt * 0.5 : 0;
   const adjustedHeightPt = heightPt - saCompensation;
   const pageHeightPx = adjustedHeightPt * (96 / 72);
 
