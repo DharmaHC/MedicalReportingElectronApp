@@ -556,13 +556,11 @@ export function initializeAllConfigs(): void {
   // STEP 0: Migra la vecchia struttura se esiste
   migrateOldConfigStructure();
 
-  // Verifica se è stato richiesto un reset forzato
+  // Rimuovi eventuale marker RESET_CONFIG rimasto da versioni precedenti
+  // (non facciamo più reset forzato — il merge conservativo preserva i settings custom)
   if (shouldForceReset()) {
-    console.log('\n⚠️ RILEVATO FILE MARKER: C:\\ProgramData\\MedReportAndSign\\RESET_CONFIG');
-    console.log('   Eseguo reset forzato delle configurazioni...\n');
-    resetAllConfigs();
+    console.log('\n📋 Marker RESET_CONFIG trovato (vecchia versione) — rimosso senza reset');
     clearResetMarker();
-    return;
   }
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('📋 Inizializzazione file di configurazione e immagini');

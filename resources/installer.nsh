@@ -284,16 +284,14 @@ Var InstallationType
   DeleteRegKey HKCU "Software\Wow6432Node\MedReport"
   DeleteRegKey HKCU "Software\Wow6432Node\medreportandsign"
 
-  ; ═══ Force settings + images reset ═══
-  ReadEnvStr $R0 "ProgramData"
-  CreateDirectory "$R0\MedReportAndSign"
-  FileOpen $1 "$R0\MedReportAndSign\RESET_CONFIG" w
-  FileWrite $1 "1.0.70"
-  FileClose $1
+  ; ═══ Settings reset removed (v1.0.77+) ═══
+  ; No longer force-reset settings on install/update.
+  ; syncAllConfigsWithDefaults() in configManager.ts merges new defaults
+  ; into existing custom settings without overwriting user values.
 
   ; ═══ Diagnostic log in $INSTDIR ═══
   FileOpen $2 "$INSTDIR\NSIS_AUTOUPDATE.log" w
-  FileWrite $2 "version=1.0.70$\r$\n"
+  FileWrite $2 "version=1.0.77$\r$\n"
   FileWrite $2 "INSTDIR=$INSTDIR$\r$\n"
   FileWrite $2 "launchLink=$launchLink$\r$\n"
   FileWrite $2 "appExe=$appExe$\r$\n"
