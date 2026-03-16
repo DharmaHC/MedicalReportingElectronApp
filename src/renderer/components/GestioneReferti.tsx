@@ -227,12 +227,11 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         return;
       }
 
-      // Se si cerca per cognome/nome, usa un range date molto ampio per ignorare il filtro
+      // Se si cerca per cognome/nome, non inviare date per far saltare il filtro date nella SP
       const hasNameSearch = !!(lastName.trim() || firstName.trim());
 
       const qs = new URLSearchParams({
-        fromDate: hasNameSearch ? "2000-01-01" : (localFromDate || ""),
-        toDate: hasNameSearch ? "2099-12-31" : (localToDate || ""),
+        ...(hasNameSearch ? {} : { fromDate: localFromDate || "", toDate: localToDate || "" }),
         searchByEacStartDate: String(!searchByEacWithdrawalDate),
         searchByEacWithdrawalDate: String(searchByEacWithdrawalDate),
         searchModeStartsWith: String(searchMode === "startwith"),
@@ -308,12 +307,11 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     const workareaIds         = Object.keys(p.sectorsParam).filter(k => p.sectorsParam[k]).join(",");
     const examNames = (p.examNamesParam || []).join(",");
 
-    // Se si cerca per cognome/nome, usa un range date molto ampio per ignorare il filtro
+    // Se si cerca per cognome/nome, non inviare date per far saltare il filtro date nella SP
     const hasNameSearch = !!(p.lastNameParam.trim() || p.firstNameParam.trim());
 
     const qs = new URLSearchParams({
-      fromDate: hasNameSearch ? "2000-01-01" : p.fromDateParam,
-      toDate:   hasNameSearch ? "2099-12-31" : p.toDateParam,
+      ...(hasNameSearch ? {} : { fromDate: p.fromDateParam, toDate: p.toDateParam }),
       searchByEacStartDate     : String(!p.searchByEacWithdrawalDateParam),
       searchByEacWithdrawalDate: String(p.searchByEacWithdrawalDateParam),
       searchModeStartsWith     : String(p.searchModeParam === "startwith"),
