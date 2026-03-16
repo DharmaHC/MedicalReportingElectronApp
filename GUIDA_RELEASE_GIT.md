@@ -121,33 +121,28 @@ gh release create v1.0.73 \
 
 > **IMPORTANTE**: La release MAIN deve essere creata **per ultima**. GitHub assegna automaticamente il tag "Latest" all'ultima release pubblicata. La release "Latest" deve sempre essere quella di `main` (Windows 10/11), non quella di `w7`.
 
-### 8b. Aggiungere win7.yml alla release MAIN (CRITICO per auto-update W7)
+### 8b. Aggiungere installer W7 + win7.yml alla release MAIN (CRITICO per auto-update W7)
 
 > **PERCHÉ**: `electron-updater` cerca `win7.yml` **esclusivamente nel release "Latest"** di GitHub (sempre il release main). Se manca, i client Win7 ricevono errore 404 e **non si aggiornano mai**.
 
-Il `win7.yml` nella release W7 usa URL relativi (non funzionano se copiato in un altro release). Bisogna generarlo con URL assoluti:
+> **IMPORTANTE**: `electron-updater` prepende SEMPRE il base URL della release al campo `url` del yml. URL assoluti nel yml vengono raddoppiati e causano 404. La soluzione è caricare l'installer W7 + blockmap direttamente nella release MAIN, così win7.yml funziona con URL relativi (solo il filename).
 
 ```bash
-VER=1.0.73
+VER=1.0.77
 
-# Scaricare win7.yml dalla release win7
-gh release download v${VER}-win7 --pattern "win7.yml" --output /tmp/win7-main.yml
+# Caricare installer W7 e blockmap nella release MAIN
+gh release upload v${VER} dist/MedReportAndSign-Setup-${VER}.exe --clobber
+gh release upload v${VER} dist/MedReportAndSign-Setup-${VER}.exe.blockmap --clobber
 
-# Sostituire URL relativi con URL assoluti che puntano alla release win7
-INSTALLER="MedReportAndSign-Setup-${VER}.exe"
-FULL_URL="https://github.com/DharmaHC/MedicalReportingElectronApp/releases/download/v${VER}-win7/${INSTALLER}"
-
-sed -i \
-  "s|url: ${INSTALLER}|url: ${FULL_URL}|g; s|path: ${INSTALLER}|path: ${FULL_URL}|g" \
-  /tmp/win7-main.yml
-
-# Caricare nella release MAIN (come asset "win7.yml")
-cp /tmp/win7-main.yml /tmp/win7.yml
+# Caricare win7.yml (con URL relativi, direttamente dalla build W7)
+cp dist/win7.yml /tmp/win7.yml
 gh release upload v${VER} /tmp/win7.yml --clobber
 
-# Verificare che entrambi i file siano presenti
+# Verificare che tutti i file siano presenti
 gh release view v${VER} --json assets --jq '.assets[].name'
-# Output atteso: latest.yml, MedReport-Setup-X.X.X.exe, win7.yml
+# Output atteso: latest.yml, MedReport-Setup-X.X.X.exe,
+#                MedReportAndSign-Setup-X.X.X.exe, MedReportAndSign-Setup-X.X.X.exe.blockmap,
+#                win7.yml
 ```
 
 ### 9. Verificare il tag "Latest"
@@ -194,7 +189,7 @@ Error: Cannot find win7.yml in the latest release artifacts
 (releases/download/vX.X.X/win7.yml): HttpError: 404
 ```
 **Causa**: Il `win7.yml` con URL relativi è presente nella release `vX.X.X-win7` ma **non** nella release `vX.X.X` (Latest).
-**Soluzione**: Eseguire il passaggio **8b** dopo ogni release main.
+**Soluzione**: Eseguire il passaggio **8b** dopo ogni release main (caricare installer W7 + blockmap + win7.yml nella release MAIN).
 
 ### Tag "Latest" assegnato alla release sbagliata (IMPORTANTE)
 
@@ -235,13 +230,13 @@ npm run dist
 - [ ] `node_modules` ripristinati per main (Electron 36)
 - [ ] Build MAIN: `dist/MedReport-Setup-X.X.X.exe` + `dist/latest.yml`
 - [ ] Release MAIN creata con tag `vX.X.X` (**ULTIMA** — diventa "Latest")
-- [ ] **`win7.yml` con URL assoluti aggiunto alla release MAIN** (step 8b — necessario per auto-update W7!)
+- [ ] **Installer W7 + blockmap + win7.yml aggiunti alla release MAIN** (step 8b — necessario per auto-update W7!)
 - [ ] File `.yml` inclusi in entrambe le release (necessari per auto-update)
 
 ### Post-Release
 - [ ] Verificare che `vX.X.X` (main) sia marcata "Latest" su GitHub (`gh release list`)
 - [ ] Verificare asset nella release main: `gh release view vX.X.X --json assets --jq '.assets[].name'`
-      → deve contenere `latest.yml`, `MedReport-Setup-X.X.X.exe` **e `win7.yml`**
+      → deve contenere `latest.yml`, `MedReport-Setup-X.X.X.exe`, `MedReportAndSign-Setup-X.X.X.exe`, `MedReportAndSign-Setup-X.X.X.exe.blockmap` **e `win7.yml`**
 - [ ] `node_modules` ripristinati per il branch di lavoro corrente
 - [ ] Test auto-update su client Win7 e Win10/11
 
@@ -263,13 +258,11 @@ gh release create v1.0.73-win7 ...
 # Verificare asset di una release (devono esserci latest.yml + win7.yml + exe)
 gh release view v1.0.73 --json assets --jq '.assets[].name'
 
-# Aggiungere/sostituire win7.yml (con URL assoluti) alla release MAIN (step 8b)
-VER=1.0.73
-gh release download v${VER}-win7 --pattern "win7.yml" --output /tmp/win7-main.yml
-INSTALLER="MedReportAndSign-Setup-${VER}.exe"
-FULL_URL="https://github.com/DharmaHC/MedicalReportingElectronApp/releases/download/v${VER}-win7/${INSTALLER}"
-sed -i "s|url: ${INSTALLER}|url: ${FULL_URL}|g; s|path: ${INSTALLER}|path: ${FULL_URL}|g" /tmp/win7-main.yml
-cp /tmp/win7-main.yml /tmp/win7.yml
+# Aggiungere installer W7 + win7.yml alla release MAIN (step 8b)
+VER=1.0.77
+gh release upload v${VER} dist/MedReportAndSign-Setup-${VER}.exe --clobber
+gh release upload v${VER} dist/MedReportAndSign-Setup-${VER}.exe.blockmap --clobber
+cp dist/win7.yml /tmp/win7.yml
 gh release upload v${VER} /tmp/win7.yml --clobber
 
 # Verificare versione Electron installata
