@@ -771,6 +771,15 @@ function setupAutoUpdater() {
     return;
   }
 
+  // Blocca auto-update per versioni molto vecchie (< 1.0.50) che potrebbero
+  // avere configurazioni incompatibili e richiedere installazione manuale.
+  const currentVersion = app.getVersion();
+  const [, , patch] = currentVersion.split('.').map(Number);
+  if (patch < 50) {
+    log.info(`AutoUpdater disabilitato: versione ${currentVersion} < 1.0.50 — aggiornamento manuale richiesto`);
+    return;
+  }
+
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('checking-for-update', () => {
