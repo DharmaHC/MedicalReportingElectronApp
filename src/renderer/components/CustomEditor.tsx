@@ -47,10 +47,13 @@ const ZoomControls: React.FC<{ zoomLevel: number; setZoomLevel: (n: number) => v
 
 interface CustomEditorProps extends EditorProps {
   bodyWidthPt?: number; // Larghezza body del template RTF in pt (dal server)
+  bodyHeightPt?: number; // Altezza body del template RTF in pt (dal server)
+  lineSpacing?: number; // Line-spacing moltiplicatore (es. 1.25 per \sl300\slmult1)
+  spacingAfterPt?: number; // Space-after per paragrafo in pt (es. 9 per \sa180)
 }
 
 const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
-  const { bodyWidthPt, ...editorProps } = props;
+  const { bodyWidthPt, bodyHeightPt, lineSpacing, spacingAfterPt, ...editorProps } = props;
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const stored = sessionStorage.getItem(ZOOM_STORAGE_KEY);
     if (stored) {
@@ -65,13 +68,11 @@ const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
   const mutationObserverRef = useRef<MutationObserver | null>(null);
 
   const [useHighlight, setUseHighlight] = useState<boolean>(false);
-  const [rowsPerPage, setReportrowsPerPage] = useState<number>(30);
 
   useEffect(() => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
         setUseHighlight(settings.highlightPlaceholder ?? false);
-        setReportrowsPerPage(settings.rowsPerPage ?? 30);
       });
     }, []);
 
@@ -87,13 +88,22 @@ const renderPageBreaks = useCallback(() => {
   const proseMirror = content.querySelector('.ProseMirror') as HTMLElement | null;
   if (!proseMirror) return;
 
-  // Calcolo altezza riga da un <p>
-  const sampleParagraph = proseMirror.querySelector('p');
-  if (!sampleParagraph) return;
-  const lineHeight = parseFloat(window.getComputedStyle(sampleParagraph).lineHeight || "20") || 20;
+  // Altezza body dal template RTF (pt → px: 1pt = 96/72 px a schermo)
+  // Default 697.9pt ≈ A4 (841.89pt) meno 72pt margine sopra e sotto
+  const heightPt = bodyHeightPt && bodyHeightPt > 0 ? bodyHeightPt : 697.9;
+  // Compensazione: il PDF ha paragraph spacing (\sa) che l'editor non riproduce
+  // completamente → la pagina PDF si riempie prima rispetto all'editor.
+  // Fattore 3.3: lo \sa si accumula su più paragrafi per pagina di scarto.
+  const saCompensation = spacingAfterPt && spacingAfterPt > 0 ? spacingAfterPt * 3.3 : 0;
+  const adjustedHeightPt = heightPt - saCompensation;
+  const pageHeightPx = adjustedHeightPt * (96 / 72);
 
-  const totalHeight = proseMirror.scrollHeight;
-  const pageHeightPx = lineHeight * rowsPerPage; // rows per page configurabili
+
+  // Mostra i page break fino alla fine del contenuto o dell'area visibile,
+  // ma senza forzare minPages che causerebbe scrollbar artificiale.
+  const contentHeight = proseMirror.scrollHeight;
+  const visibleHeight = (content.clientHeight || 0) / zoomLevel;
+  const totalHeight = Math.max(contentHeight, visibleHeight);
   const overlayClass = "page-break-overlay-layer";
 
   let overlay = proseMirror.querySelector(`.${overlayClass}`) as HTMLElement | null;
@@ -124,29 +134,24 @@ const renderPageBreaks = useCallback(() => {
   // Con content-box, width = area testo; il padding è fuori.
   const editorWidthPt = bodyWidthPt && bodyWidthPt > 0 ? bodyWidthPt : 428;
   proseMirror.style.transform = `scale(${zoomLevel})`;
-    proseMirror.style.width = `${editorWidthPt}pt`;
     proseMirror.style.marginLeft = '100pt';
     proseMirror.style.overflowX = 'hidden';
     proseMirror.style.transformOrigin = "top left";
     proseMirror.style.height = `${100 / zoomLevel}%`;
 
-    // Dopo il layout, controlla se una scrollbar è apparsa e compensa.
-    // La scrollbar è causata da overflow verticale, quindi allargare
-    // ProseMirror non la fa scomparire → niente loop.
-    requestAnimationFrame(() => {
-      // Cerca scrollbar su ProseMirror e sui suoi antenati fino a k-editor-content
-      let el: HTMLElement | null = proseMirror;
-      let scrollbarW = 0;
-      while (el && !el.classList.contains('k-editor-content')) {
-        const sw = el.offsetWidth - el.clientWidth;
-        if (sw > scrollbarW) scrollbarW = sw;
-        el = el.parentElement;
-      }
-      if (scrollbarW > 0) {
-        proseMirror.style.width = `calc(${editorWidthPt}pt + ${scrollbarW}px)`;
-      }
-    });
-}, [zoomLevel, rowsPerPage, bodyWidthPt]);
+    // Imposta la larghezza compensando eventuale scrollbar verticale.
+    // Cerca scrollbar su ProseMirror e sui suoi antenati fino a k-editor-content.
+    let el: HTMLElement | null = proseMirror;
+    let scrollbarW = 0;
+    while (el && !el.classList.contains('k-editor-content')) {
+      const sw = el.offsetWidth - el.clientWidth;
+      if (sw > scrollbarW) scrollbarW = sw;
+      el = el.parentElement;
+    }
+    proseMirror.style.width = scrollbarW > 0
+      ? `calc(${editorWidthPt}pt + ${scrollbarW}px)`
+      : `${editorWidthPt}pt`;
+}, [zoomLevel, bodyHeightPt, bodyWidthPt, lineSpacing, spacingAfterPt]);
 
   useEffect(() => { sessionStorage.setItem(ZOOM_STORAGE_KEY, String(zoomLevel)); }, [zoomLevel]);
 

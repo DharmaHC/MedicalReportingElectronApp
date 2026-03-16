@@ -184,6 +184,7 @@ ul li button {
 .k-editor p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
+	line-height: 1.25 !important;
 }
 or-content {
 	height: 100% !important;
@@ -197,11 +198,13 @@ or-content {
 .k-editor .k-editor-content p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
+	line-height: 1.25 !important;
 }
 
 .k-splitter .k-editor-content p {
     font-family: Times New Roman !important;
 	font-size: 12pt !important;
+	line-height: 1.25 !important;
 }
 
 .editor-green-button {

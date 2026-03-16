@@ -511,6 +511,9 @@ const renderPinDialog = () =>
   const savedRtfBase64 = location.state?.savedRtfBase64 as string | undefined; // RTF salvato in precedenza (riapertura referto)
   const templateTextAlign = (location.state?.templateTextAlign as string) || "left"; // Allineamento del template RTF (justify, center, right, left)
   const templateBodyWidthPt = Number(location.state?.templateBodyWidthPt) || 0; // Larghezza body del template RTF in pt (0 = usa default)
+  const templateBodyHeightPt = Number(location.state?.templateBodyHeightPt) || 0; // Altezza body del template RTF in pt (0 = usa default)
+  const templateLineSpacing = Number(location.state?.templateLineSpacing) || 0; // Line-spacing del body RTF (es. 1.25 per \sl300\slmult1)
+  const templateSpacingAfterPt = Number(location.state?.templateSpacingAfterPt) || 0; // Space-after del body RTF in pt (es. 9 per \sa180)
 
   // Auto-attiva editor WPF se il template richiede RTF nativo (solo su Windows)
   useEffect(() => {
@@ -2942,6 +2945,9 @@ const handleResultClick = async (result: any) => {
           <CustomEditor
             ref={editorRef}
             bodyWidthPt={templateBodyWidthPt}
+            bodyHeightPt={templateBodyHeightPt}
+            lineSpacing={templateLineSpacing}
+            spacingAfterPt={templateSpacingAfterPt}
             defaultContent={(() => {
               const raw = location.state?.htmlContent || "<p></p><p></p><p></p>";
               // Rimuovi margin-left negativo dalle tabelle (non ha senso nell'editor senza section margins RTF).
