@@ -91,10 +91,35 @@ const renderPageBreaks = useCallback(() => {
   // Altezza body dal template RTF (pt → px: 1pt = 96/72 px a schermo)
   // Default 697.9pt ≈ A4 (841.89pt) meno 72pt margine sopra e sotto
   const heightPt = bodyHeightPt && bodyHeightPt > 0 ? bodyHeightPt : 697.9;
-  // Compensazione \sa: il PDF ha paragraph spacing che l'editor non riproduce.
-  const saCompensation = spacingAfterPt && spacingAfterPt > 0 ? spacingAfterPt * 0.5 : 0;
-  const adjustedHeightPt = heightPt - saCompensation;
+
+  // Compensazione dinamica: nel PDF ogni paragrafo aggiunge \sa (space-after)
+  // e il line-height può essere > 100%. L'editor HTML non li applica, quindi
+  // contiamo i paragrafi visibili e stimiamo lo spazio aggiuntivo per pagina.
+  const saPt = spacingAfterPt && spacingAfterPt > 0 ? spacingAfterPt : 0;
+  const lsMult = lineSpacing && lineSpacing > 0 ? lineSpacing : 1;
+
+  // Stima paragrafi per pagina: altezza pagina / (altezza riga media * lineSpacing + spaceAfter)
+  // Font 12pt ≈ 16px di altezza riga base
+  const avgLineHeightPt = 12 * lsMult;
+  const avgLinesPerPara = 2; // stima media: 2 righe per paragrafo
+  const paraHeightPt = avgLineHeightPt * avgLinesPerPara + saPt;
+  const parasPerPage = paraHeightPt > 0 ? Math.floor(heightPt / paraHeightPt) : 0;
+
+  // Compensazione totale: differenza tra line-height PDF e editor (CSS line-height 1.25 = 125%)
+  const cssLineHeight = 1.25; // forzato dal CSS EditorPage.css
+  const lhDiffPerLine = 12 * (lsMult - cssLineHeight); // differenza pt per riga
+  const lhCompensation = lhDiffPerLine * avgLinesPerPara * parasPerPage;
+
+  // Space-after: nel PDF aggiunge saPt per paragrafo, nell'editor margin-bottom è 0
+  const saCompensation = saPt * parasPerPage;
+
+  const totalCompensation = saCompensation + lhCompensation - 6; // -6pt: calibrazione fine (≈ mezza riga)
+  const adjustedHeightPt = heightPt - totalCompensation;
   const pageHeightPx = adjustedHeightPt * (96 / 72);
+
+  // Rimuovi eventuale style iniettato dalla versione precedente
+  const oldStyle = document.getElementById("prosemirror-paragraph-spacing");
+  if (oldStyle) oldStyle.remove();
 
 
   // Mostra i page break fino alla fine del contenuto o dell'area visibile,
