@@ -745,11 +745,19 @@ const renderPinDialog = () =>
   };
 
   const normalizePhraseForInsertion = (rawPhrase: string): string => {
-    return (rawPhrase ?? "")
+    // Normalizza vari tipi di spazio Unicode in spazio normale
+    let text = (rawPhrase ?? "")
       .replace(/&nbsp;/gi, " ")
       .replace(/\u00A0/g, " ")
       .replace(/\u202F/g, " ")
       .replace(/\u2007/g, " ");
+    // Preserva spazi multipli: converte sequenze di 2+ spazi in alternanza
+    // \u00A0 + spazio. ProseMirror preserva \u00A0 nel DOM e innerHTML
+    // lo serializza come &nbsp;, evitando il collasso spazi nel PDF.
+    text = text.replace(/ {2,}/g, (match) =>
+      match.split("").map((_, i) => (i % 2 === 0 ? "\u00A0" : " ")).join("")
+    );
+    return text;
   };
 
   // Inserisce la frase selezionata nell'editor (ProseMirror o WPF).
@@ -1162,10 +1170,18 @@ const renderPinDialog = () =>
       let content = editorRef.current.view.dom.innerHTML; // Contenuto HTML dall'editor.
       content = normalizeEditorHtmlForReport(content);
 
+      // Preserva spazi multipli nell'HTML: converte sequenze di 2+ spazi in &nbsp; alternati
+      // così il parser HTML lato server non li collassa a uno solo.
+      content = content.replace(/ {2,}/g, (match) =>
+        match.split("").map((_, i) => (i % 2 === 0 ? "&nbsp;" : " ")).join("")
+      );
+      // Preserva anche singoli \u00A0 (non-breaking space Unicode) come &nbsp;
+      content = content.replace(/\u00A0/g, "&nbsp;");
+
       // Conta tutti i paragrafi vuoti (con o senza &nbsp;)
       let emptyParaCount = 0;
 
-      // Prima rimuove &nbsp; dai paragrafi che lo contengono
+      // Prima rimuove &nbsp; dai paragrafi che lo contengono (solo se il paragrafo è interamente vuoto)
       content = content.replace(/<p([^>]*)>(&nbsp;|\s)+<\/p>/gi, (_match, attrs) => {
         return `<p${attrs}></p>`;
       });
