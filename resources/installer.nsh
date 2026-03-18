@@ -1,6 +1,7 @@
 ; Custom NSIS installer script for MedReport
 ; Handles auto-update (--updated flag from electron-updater) and manual installation
 ;
+; v1.0.82: Force SetSilent normal when electron-updater passes /S in auto-update
 ; v1.0.70: NON-SILENT auto-update with WMIC Job Object escape
 ;
 ; Fix 1 - WMIC self-relaunch to escape Chromium Job Object:
@@ -98,6 +99,12 @@ Var InstallationType
   ${EndIf}
   ${If} ${Silent}
     FileWrite $2 "Silent=YES$\r$\n"
+    ; Forza modalità non-silent per auto-update: electron-updater può passare /S
+    ; ma vogliamo mostrare la UI all'utente per seguire il progresso.
+    ${If} ${isUpdated}
+      SetSilent normal
+      FileWrite $2 "SetSilent normal (forced non-silent for auto-update)$\r$\n"
+    ${EndIf}
   ${Else}
     FileWrite $2 "Silent=NO$\r$\n"
   ${EndIf}
