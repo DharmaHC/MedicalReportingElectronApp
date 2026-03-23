@@ -46,8 +46,8 @@
     "namirial": {
       "enabled": true,
       "baseUrl": "https://sws-companynamesaas.test.namirialtsp.com/SignEngineWeb",
-      "clientCertPath": "D:/Lavoro/Sviluppo/MedicalReportingAPP/MedReportAndSign/MedReportAndSign/Documentazione/Namirial/sws_saas_COMPANYNAMESaaS_test.p12",
-      "clientCertPassword": "V9x^2G0e6*",
+      "clientCertPath": "D:/Lavoro/Documenti Dharma/Offerta Namirial/Certificato Server/sws_DharmaHealthcare.p12",
+      "clientCertPassword": "foo123",
       "proxyUrl": "",
       "noProxy": true,
       "onPremiseBaseUrl": "http://20.13.149.101:8080/SignEngineWeb",

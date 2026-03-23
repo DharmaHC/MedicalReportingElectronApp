@@ -412,6 +412,28 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
       // Per la firma CON OTP, usiamo openSession per creare una sessione reale
       log.info('[Namirial] Modalità con OTP: chiamata SOAP openSession...');
 
+      // Diagnostica health check (solo on-premises, per non rallentare SaaS)
+      if (this.isOnPremise) {
+        try {
+          const [healthResult] = await client.healthCheckAsync({});
+          const hr = healthResult?.return || healthResult;
+          const globalStatus = hr?.globalStatus ?? 'UNKNOWN';
+          const serviceChecks: any[] = Array.isArray(hr?.serviceChecks) ? hr.serviceChecks : [];
+          log.info(`[Namirial] Health check globalStatus: ${globalStatus}`);
+          for (const check of serviceChecks) {
+            const st = check?.status ?? 'UNKNOWN';
+            const name = check?.name ?? '?';
+            if (st !== 'UP' && st !== 'AVAILABLE') {
+              log.warn(`[Namirial] Servizio ${name}: ${st} — potrebbe causare errori di firma`);
+            } else {
+              log.info(`[Namirial] Servizio ${name}: ${st}`);
+            }
+          }
+        } catch (healthErr: any) {
+          log.warn('[Namirial] Health check non disponibile:', healthErr.message);
+        }
+      }
+
       const openSessionArgs = {
         credentials: swsCredentials
       };
@@ -432,24 +454,44 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
       }
 
       let result: any;
-      let rawRequest: any;
       try {
         const response = await client.openSessionAsync(openSessionArgs);
         result = response[0];
-        rawRequest = response[3];
         log.info('[Namirial] Risposta openSession ricevuta');
       } catch (soapError: any) {
         log.error('[Namirial] Errore chiamata SOAP openSession:', soapError.message || soapError);
-        log.error('[Namirial] Errore completo:', JSON.stringify(soapError, Object.getOwnPropertyNames(soapError), 2));
+        log.error('[Namirial] Raw SOAP request:', (client as any).lastRequest || 'non disponibile');
+        log.error('[Namirial] Errore body:', soapError.body || 'nessun body');
+
+        // Fallback stateless OTP: su on-premises, se openSession fallisce con
+        // "Could not send Message", proviamo a firmare direttamente con credenziali
+        // complete (username+password+otp) senza sessionKey.
+        if (this.isOnPremise && soapError.message?.includes('Could not send Message')) {
+          log.warn('[Namirial] openSession fallito on-premises → modalità OTP stateless (credenziali dirette a signPAdES)');
+          const virtualSessionId = `OTP_STATELESS_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+          this.currentCredentials = { ...swsCredentials };
+          const virtualSession: RemoteSignSession = {
+            sessionId: virtualSessionId,
+            providerId: this.providerId,
+            userId: credentials.username,
+            expiresAt,
+            certificate: { cn: credentials.username, serialNumber: 'N/A', issuer: 'Namirial S.p.A.' },
+            accessToken: undefined,
+            metadata: {
+              isAutomatic: false,
+              isStatelessOtp: true,
+              credentials: swsCredentials
+            }
+          };
+          log.info(`[Namirial] Sessione OTP stateless creata: ${virtualSessionId}`);
+          return virtualSession;
+        }
+
         throw soapError;
       }
 
       log.info('[Namirial] Risposta openSession:', JSON.stringify(result, null, 2));
-
-      // Log SOAP request/response per debug (solo in caso di problemi)
-      if (!result || (result?.return?.code && result.return.code !== '0')) {
-        log.debug('[Namirial] Raw SOAP request:', rawRequest);
-      }
 
       // Controlla errori nella risposta
       if (result?.return?.code && result.return.code !== '0') {
@@ -647,8 +689,26 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
           // NON includiamo sessionKey per firma automatica
         };
         log.info(`[Namirial] Usando credenziali dirette per firma automatica: ${credentials.username}`);
+      } else if (session.metadata?.isStatelessOtp) {
+        // Modalità OTP STATELESS (on-premises fallback): passa username + password + otp direttamente
+        // senza sessionKey — il server autentica ogni chiamata con le credenziali complete
+        const savedCreds = session.metadata?.credentials as SwsCredentials;
+        if (!savedCreds) {
+          throw new RemoteSignError(
+            'Credenziali non disponibili per firma OTP stateless',
+            'NO_CREDENTIALS',
+            this.providerId,
+            false
+          );
+        }
+        credentials = {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          otp: savedCreds.otp
+        };
+        log.info(`[Namirial] Usando credenziali OTP stateless per firma: ${credentials.username}`);
       } else {
-        // Modalità con OTP: usa sessionKey
+        // Modalità con OTP + sessionKey: usa sessionKey ottenuto da openSession
         credentials = {
           username: session.userId,
           password: '',  // Non serve con sessionKey
@@ -966,6 +1026,21 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
     }
 
     // Errori specifici SWS
+    // Errore generico Spring WS — certificato non trovato nell'HSM on-premises
+    // o errore interno del server. Fornisce un messaggio diagnostico chiaro.
+    if (message.includes('Could not send Message')) {
+      return new RemoteSignError(
+        'Il server SWS on-premises non riesce a elaborare la richiesta. ' +
+        'Possibili cause: (1) il certificato/dispositivo non è registrato nel server on-premises, ' +
+        '(2) credenziali errate (codice dispositivo, PIN o OTP), ' +
+        '(3) il servizio FRA o HSM non è attivo. ' +
+        'Verificare i log del server SWS e la configurazione del certificato.',
+        'SWS_SERVER_ERROR',
+        this.providerId,
+        false
+      );
+    }
+
     if (message.includes('ENOTFOUND') || message.includes('ECONNREFUSED')) {
       return new RemoteSignError(
         'Impossibile connettersi al server Namirial. Verificare la connessione.',
@@ -1044,6 +1119,17 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
       return new RemoteSignError(
         'Sessione scaduta',
         'SESSION_EXPIRED',
+        this.providerId,
+        false
+      );
+    }
+
+    if (message.includes('Could not send Message')) {
+      return new RemoteSignError(
+        'Il server SWS non riesce a completare la firma. ' +
+        'Possibili cause: certificato non registrato nel server on-premises, ' +
+        'PIN o OTP errati, oppure servizio HSM non disponibile.',
+        'SWS_SIGN_ERROR',
         this.providerId,
         false
       );

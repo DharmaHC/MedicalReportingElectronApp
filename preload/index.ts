@@ -14,6 +14,7 @@ console.log("PRELOAD PARTITO!");
     userCN?: string
   }) => ipcRenderer.invoke('sign-pdf', req),
   verifyPin: (pin: string) => ipcRenderer.invoke('verify-pin', pin),
+  checkDevice: () => ipcRenderer.invoke('check-pkcs11-device'),
   // Decora PDF senza firma (per "Salva da Firmare")
   decoratePdf: (req: {
     pdfBase64: string,
@@ -80,11 +81,23 @@ console.log("PRELOAD PARTITO!");
       isAutomatic?: boolean; // true per firma automatica senza OTP
     }) => ipcRenderer.invoke('remote-sign:authenticate', params),
 
-    // Recupera le credenziali salvate per firma automatica (password decriptata dal backend)
+    // Recupera le credenziali salvate per firma remota (password decriptata dal backend)
     getStoredCredentials: (params: {
       token: string;
       apiBaseUrl: string;
+      username: string;
     }) => ipcRenderer.invoke('remote-sign:get-stored-credentials', params),
+
+    // Firma un singolo documento con OTP (flusso "Termina Referto")
+    signSingleOtp: (params: {
+      pdfBase64: string;
+      providerId: string;
+      username: string;
+      password: string;
+      pin: string;
+      otp: string;
+      signedByName: string;
+    }) => ipcRenderer.invoke('remote-sign:sign-single-otp', params),
 
     // Ottiene lo stato della sessione corrente
     getSessionStatus: (params: { providerId: string }) =>

@@ -34,7 +34,8 @@ import {
   url_getPredefinedTexts,
   url_getPatientReportsNoPdf,
   url_getPatientSignedReport,
-  url_getCompiledRtfTemplate
+  url_getCompiledRtfTemplate,
+  getOriginalApiBaseUrl
 } from "../utility/urlLib";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { RootState } from "../store";
@@ -348,12 +349,20 @@ const logToFile = (msg: string, details?: any) => {
   const [isPinDialogVisible, setIsPinDialogVisible] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
-  
+
   // Callback per mostrare/nascondere la modale PIN
   const showPinDialog = () => setIsPinDialogVisible(true);
   const hidePinDialog = () => setIsPinDialogVisible(false);
-  
+
   const pinDialogResolver = useRef<((value: string | null) => void) | null>(null);
+
+  // Stato per il dialogo OTP firma remota
+  const [isOtpDialogVisible, setIsOtpDialogVisible] = useState(false);
+  const [otpInput, setOtpInput] = useState("");
+  const [otpDialogMessage, setOtpDialogMessage] = useState<string | null>(null);
+  const showOtpDialog = () => setIsOtpDialogVisible(true);
+  const hideOtpDialog = () => setIsOtpDialogVisible(false);
+  const otpDialogResolver = useRef<((value: string | null) => void) | null>(null);
 
   // Refs per cleanup dei Blob URL (evita memory leak)
   const pdfUrlRef = useRef<string | null>(null);
@@ -484,8 +493,66 @@ const renderPinDialog = () =>
         </Button>
       </DialogActionsBar>
     </Dialog>
-  ) : null;  
+  ) : null;
 
+  // Chiede all'utente il codice OTP per la firma remota
+  async function getOtpCode(message?: string): Promise<string | null> {
+    setOtpInput('');
+    setOtpDialogMessage(message ?? null);
+    showOtpDialog();
+    return new Promise(resolve => {
+      otpDialogResolver.current = resolve;
+    });
+  }
+
+  // Modale OTP firma remota
+  const renderOtpDialog = () =>
+    isOtpDialogVisible ? (
+      <Dialog
+        title="Inserisci codice OTP"
+        onClose={() => {
+          setOtpInput('');
+          hideOtpDialog();
+          if (otpDialogResolver.current) {
+            otpDialogResolver.current(null);
+            otpDialogResolver.current = null;
+          }
+        }}
+      >
+        {otpDialogMessage && (
+          <p style={{ marginBottom: '0.75em', color: '#444' }}>{otpDialogMessage}</p>
+        )}
+        <Input
+          type="text"
+          value={otpInput}
+          onChange={(e: InputChangeEvent) => setOtpInput(e.value)}
+          placeholder="Codice OTP (es. 123456)"
+          maxLength={8}
+        />
+        <DialogActionsBar>
+          <Button onClick={() => {
+            setOtpInput('');
+            hideOtpDialog();
+            if (otpDialogResolver.current) {
+              otpDialogResolver.current(null);
+              otpDialogResolver.current = null;
+            }
+          }}>
+            Annulla
+          </Button>
+          <Button themeColor="primary" onClick={() => {
+            const code = otpInput.trim();
+            hideOtpDialog();
+            if (otpDialogResolver.current) {
+              otpDialogResolver.current(code || null);
+              otpDialogResolver.current = null;
+            }
+          }}>
+            Conferma
+          </Button>
+        </DialogActionsBar>
+      </Dialog>
+    ) : null;
 
   // Stati del componente
   const [isDialogVisible, setIsDialogVisible] = useState(false); // Controlla la visibilità del dialogo per la dettatura.
@@ -567,7 +634,15 @@ const renderPinDialog = () =>
           if (!effectiveUseV2Assembly) {
             parts.push('line-height: 100%');
           }
-          if (textAlign) parts.push(textAlign);
+          if (textAlign) {
+            parts.push(textAlign);
+            // Fix: con text-align:justify il browser stira l'ultima riga incompleta
+            // producendo spazi abnormi durante la digitazione. text-align-last:left
+            // forza l'allineamento a sinistra sull'ultima riga (solo effetto visivo editor).
+            if (textAlign.includes('justify')) {
+              parts.push('text-align-last: left');
+            }
+          }
           const newStyle = parts.join("; ") + ";";
 
           if (currentStyle !== newStyle) {
@@ -1065,6 +1140,15 @@ const renderPinDialog = () =>
     container
       .querySelectorAll(".page-break-overlay-layer, .auto-page-break")
       .forEach((node) => node.remove());
+
+    // Rimuove gli span di evidenziazione dei segnaposto # (visivi, non documento)
+    container.querySelectorAll(".__hash-highlight").forEach((span) => {
+      const parent = span.parentNode;
+      if (parent) {
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+      }
+    });
 
     container.querySelectorAll("p").forEach((paragraph) => {
       const currentStyle = paragraph.getAttribute("style") || "";
@@ -2417,7 +2501,8 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     p7mBase64: string | null,       // File P7M (firma CAdES) in Base64, se disponibile.
     rtfTextContent: string,         // Contenuto RTF del report.
     isDraft: boolean,               // True se è un salvataggio bozza.
-    stayHere: boolean = false       // True per non navigare via dopo l'operazione.
+    stayHere: boolean = false,      // True per non navigare via dopo l'operazione.
+    signatureAudit?: { signatureType?: string; provider?: string; certificateCN?: string; bypassActive?: boolean }
   ) => {
     // Deduplica la lista degli esami aggiuntivi.
     const deduplicatedMoreExams = selectedMoreExams.filter(
@@ -2478,6 +2563,11 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       isReportFinalized: Boolean(!isDraft), // Boolean esplicito
       LinkedResultsList: linkedResultsList,
       isSavingDraft: Boolean(isDraft), // Boolean esplicito
+      // Audit trail (D.Lgs. 82/2005)
+      signatureType: signatureAudit?.signatureType ?? null,
+      provider: signatureAudit?.provider ?? null,
+      certificateCN: signatureAudit?.certificateCN ?? null,
+      bypassActive: signatureAudit?.bypassActive ?? false,
     };
 
     // LOG per debug: verifica i valori inviati al backend
@@ -2551,97 +2641,182 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
 
       // ⚠️ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
       // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
+      // -----------------------------------------------------------------------
+      // LOGICA DI FIRMA: 4 casi basati su signatureType e userCN
+      // -----------------------------------------------------------------------
+      let auditInfo: Parameters<typeof callProcessReportApi>[5] = undefined;
+
       if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
-        // 1. Salvataggio bozza "tecnica" prima della firma
-        await callProcessReportApi(
-        finalPdfToSend, // PDF originale da salvare come bozza prima della firma.
-        p7mFileToSend,
-        reportData.rtfContent,
-        true, // Salva come bozza prima di firmare IMPORTANTE
-        true // Resta qui dopo il salvataggio della bozza IMPORTANTE
-      );
+        const signatureType = reduxStore.getState().auth.signatureType; // 'otp' | 'automatic' | null
+        const userCN        = reduxStore.getState().auth.userCN;
 
-        
-        // Recupera il PIN (l'implementazione di getSessionPin è cruciale).
-      const pin = await getSessionPin();
-      if (!pin) {
-        // utente ha annullato o non ha fornito PIN
-        setErrorMessage("Firma annullata: PIN non fornito.");
-        setIsProcessing(false);
-        return;
-      }
-        try {
-          // Logica di firma (MRAS o endpoint locale).
-          if (useMRAS) { // Utilizza il servizio MRAS (Electron native).
-            const pin = reduxStore.getState().auth.pin;
-            const doctorFullName = reduxStore.getState().auth.doctorFullName;
-
-            const signResponse = await (window as any).nativeSign.signPdf({
-              pdfBase64 : reportData.pdfContent,
-              companyId : companyId,
-              footerText: null, // footerText è per i dati aziendali, non per il nome medico
-              useRemote : null,
-              otpCode   : null,
-              pin       : pin,
-              userCN    : reduxStore.getState().auth.userCN,
-              bypassSignature: BYPASS_SIGNATURE, // ⚠️ BYPASS: solo header/footer, no firma
-              signedByName: BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined, // Nome medico per dicitura firma
-              doctorName: doctorFullName, // Nome leggibile del medico per la dicitura di firma
-            });
-            finalPdfToSend = signResponse.signedPdfBase64; // PDF firmato.
-            p7mFileToSend  = signResponse.p7mBase64;      // File P7M.
-            setLastSignedPdfBase64(finalPdfToSend); // Salva il PDF firmato nello stato.
-          } else { // Utilizza l'endpoint di firma locale (vecchio metodo).
-            const signApiResponse = await fetch("http://localhost:5000/signpdf", {
-              method : "POST",
-              headers: { "Content-Type": "application/json" },
-              body   : JSON.stringify({
-                pdfBase64 : reportData.pdfContent,
-                FooterText: "prova footer", // Assicurarsi che i nomi dei parametri siano corretti.
-                CompanyId : companyId
-              })
-            });
-            if (!signApiResponse.ok) {
-              const errorBody = await signApiResponse.text();
-              console.error("Errore API durante la firma del PDF:", signApiResponse.status, errorBody);
-              setErrorMessage(`Errore firma PDF (${signApiResponse.status}): ${errorBody || signApiResponse.statusText}`);
-              setIsProcessing(false);
-              return;
-            }
-            const signData = await signApiResponse.json();
-            finalPdfToSend = signData.signedPdfBase64;
-            p7mFileToSend  = signData.p7mBase64;
-            // Salva il PDF firmato nello stato
-            setLastSignedPdfBase64(finalPdfToSend); // Salva il PDF firmato nello stato.
-          }
-          // setSignedPdfBase64(finalPdfToSend); // Rimosso: stato non utilizzato.
-          // setP7mBase64(p7mFileToSend);       // Rimosso: stato non utilizzato.
-
-        } catch (err: any) { // Errore durante il processo di firma.
-          const msg = err.message || '';
-          if (msg.includes('PIN non valido') || msg.includes('incorrect PIN')) {
-            setErrorMessage('Il PIN inserito non è corretto. Riprova.');
-            // apri di nuovo la dialog PIN
-            setIsProcessing(false);
-            showPinDialog();
-            return;
-          }
-          // altrimenti fallback generico
-          setErrorMessage(`Errore durante la firma: ${msg}`);
+        // Caso 3: firma automatica → blocca, il medico deve usare "Salva per Firma"
+        if (signatureType === 'automatic') {
+          setErrorMessage(
+            "Questo medico è configurato per la firma automatica. " +
+            "Usa 'Salva per Firma' per salvare il referto e firmarlo massivamente a fine sessione."
+          );
           setIsProcessing(false);
           return;
         }
-      }
-      // else: se la firma non è abilitata o è una bozza, `finalPdfToSend` rimane il PDF originale
-      // e `p7mFileToSend` rimane `null`.
 
-      // Chiama l'API per salvare/inviare il report con i dati (firmati o meno).
+        const hasLocalSign  = Boolean(userCN) || BYPASS_SIGNATURE;
+        const hasRemoteOtp  = signatureType === 'otp';
+
+        // Caso 4: nessuna firma configurata → salva senza firma (salta il blocco)
+        if (!hasLocalSign && !hasRemoteOtp) {
+          // nessuna azione: finalPdfToSend rimane il PDF originale, auditInfo rimane undefined
+        } else {
+          // Salvataggio bozza tecnica prima della firma (recupero in caso di errore)
+          await callProcessReportApi(finalPdfToSend, null, reportData.rtfContent, true, true);
+
+          let signedLocally = false;
+
+          // Caso 1: firma locale PKCS11 (userCN configurato o BYPASS)
+          if (useMRAS && hasLocalSign) {
+            // Verifica presenza fisica del device prima di chiedere il PIN
+            let skipLocalSign = false;
+            if (!BYPASS_SIGNATURE) {
+              const deviceCheck = await (window as any).nativeSign.checkDevice();
+              if (!deviceCheck.available) {
+                if (hasRemoteOtp) {
+                  // Nessun device ma OTP disponibile → fallback diretto, senza mostrare errore
+                  console.info('[Firma] Device non rilevato, fallback automatico a OTP remota');
+                  skipLocalSign = true;
+                } else {
+                  setErrorMessage('Dispositivo di firma non rilevato. Inserire la smart card o il token USB e riprovare.');
+                  setIsProcessing(false);
+                  return;
+                }
+              }
+            }
+
+            if (!skipLocalSign) {
+            const pin = await getSessionPin();
+            if (!pin) {
+              setErrorMessage("Firma annullata: PIN non fornito.");
+              setIsProcessing(false);
+              return;
+            }
+            try {
+              const doctorFullName = reduxStore.getState().auth.doctorFullName;
+              const signResponse = await (window as any).nativeSign.signPdf({
+                pdfBase64      : reportData.pdfContent,
+                companyId      : companyId,
+                footerText     : null,
+                useRemote      : null,
+                otpCode        : null,
+                pin            : pin,
+                userCN         : userCN,
+                bypassSignature: BYPASS_SIGNATURE,
+                signedByName   : BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined,
+                doctorName     : doctorFullName,
+              });
+              finalPdfToSend = signResponse.signedPdfBase64;
+              p7mFileToSend  = signResponse.p7mBase64;
+              setLastSignedPdfBase64(finalPdfToSend);
+              signedLocally  = true;
+              auditInfo = {
+                signatureType: 'LOCAL_PKCS11',
+                provider: undefined,
+                certificateCN: userCN ?? undefined,
+                bypassActive: BYPASS_SIGNATURE,
+              };
+            } catch (err: any) {
+              const msg = err.message || '';
+              if (msg.includes('PIN non valido') || msg.includes('incorrect PIN')) {
+                setErrorMessage('Il PIN inserito non è corretto. Riprova.');
+                setIsProcessing(false);
+                showPinDialog();
+                return;
+              }
+              // Se non ha OTP come fallback, blocca con errore
+              if (!hasRemoteOtp) {
+                setErrorMessage(`Errore durante la firma locale: ${msg}`);
+                setIsProcessing(false);
+                return;
+              }
+              // Altrimenti continua verso il fallback OTP remoto
+              console.warn('[Firma] Firma locale fallita, fallback a OTP remota:', msg);
+            }
+            } // end if (!skipLocalSign)
+          } // end if (useMRAS && hasLocalSign)
+
+          // Caso 2: firma remota OTP (diretta o fallback da locale)
+          if (!signedLocally && hasRemoteOtp) {
+            const remoteUsername = reduxStore.getState().auth.remoteSignUsername;
+            const remoteProvider = reduxStore.getState().auth.remoteSignProvider;
+            const authToken      = reduxStore.getState().auth.token;
+            const currentUser    = reduxStore.getState().auth.userName;
+
+            if (!remoteUsername || !remoteProvider) {
+              setErrorMessage('Credenziali firma remota non configurate per questo medico.');
+              setIsProcessing(false);
+              return;
+            }
+
+            // Recupera password e PIN decriptati dal backend
+            const credsResult = await (window as any).remoteSign.getStoredCredentials({
+              token     : authToken,
+              apiBaseUrl: getOriginalApiBaseUrl(),
+              username  : currentUser,
+            });
+
+            if (!credsResult.success) {
+              setErrorMessage(`Impossibile recuperare le credenziali remote: ${credsResult.error}`);
+              setIsProcessing(false);
+              return;
+            }
+
+            // Chiedi OTP all'utente
+            const otp = await getOtpCode(
+              `Inserisci il codice OTP dal tuo dispositivo Namirial (utente: ${remoteUsername})`
+            );
+            if (!otp) {
+              setErrorMessage('Firma OTP annullata.');
+              setIsProcessing(false);
+              return;
+            }
+
+            const doctorFullName = reduxStore.getState().auth.doctorFullName;
+            const signResult = await (window as any).remoteSign.signSingleOtp({
+              pdfBase64    : reportData.pdfContent,
+              providerId   : remoteProvider.toUpperCase(),
+              username     : remoteUsername,
+              password     : credsResult.password || '',
+              pin          : credsResult.pin || '',
+              otp,
+              signedByName : doctorFullName || remoteUsername,
+            });
+
+            if (!signResult.success) {
+              setErrorMessage(`Errore firma remota OTP: ${signResult.error}`);
+              setIsProcessing(false);
+              return;
+            }
+
+            finalPdfToSend = signResult.signedPdfBase64;
+            p7mFileToSend  = null; // PAdES: firma embedded nel PDF
+            setLastSignedPdfBase64(finalPdfToSend);
+            auditInfo = {
+              signatureType: 'REMOTE_OTP',
+              provider: remoteProvider,
+              certificateCN: remoteUsername,
+              bypassActive: false,
+            };
+          }
+        }
+      }
+      // else: bozza o firma non abilitata → finalPdfToSend rimane il PDF originale
+
+      // Salvataggio finale (firmato o meno)
       await callProcessReportApi(
         finalPdfToSend,
         p7mFileToSend,
         reportData.rtfContent,
         isDraft,
-        stayHere
+        stayHere,
+        auditInfo
       );
 
     } else { // Errore nella generazione dei dati del report.
@@ -2793,6 +2968,7 @@ const handleResultClick = async (result: any) => {
       </div>
     )}
     {renderPinDialog()}
+    {renderOtpDialog()}
     
       {/* Avviso se l'editor è in modalità sola lettura (per referto di altro medico o precedente ad oggi) */}
       {readOnly && openedByOtherDoctor && (

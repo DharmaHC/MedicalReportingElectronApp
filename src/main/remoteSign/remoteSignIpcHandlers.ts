@@ -267,17 +267,25 @@ export function registerRemoteSignIpcHandlers(): void {
       const provider = factory.getProvider('NAMIRIAL') as NamirialRemoteSignProvider;
 
       if (!provider) {
+        return { success: false, error: 'Provider Namirial non configurato' };
+      }
+
+      // (A) Blocca se c'è una sessione Namirial attiva
+      const sessionManager = getSessionManager();
+      const activeSessions = sessionManager.getActiveSessions();
+      const hasActiveNamirialSession = activeSessions.some(
+        s => s.providerId.toUpperCase() === 'NAMIRIAL'
+      );
+      if (hasActiveNamirialSession) {
+        log.warn('[RemoteSign] Impossibile cambiare endpoint: sessione Namirial attiva');
         return {
           success: false,
-          error: 'Provider Namirial non configurato'
+          error: 'Impossibile cambiare endpoint mentre è attiva una sessione di firma. Chiudere la sessione e riprovare.'
         };
       }
 
-      // Prima chiudi eventuali sessioni attive
-      const sessionManager = getSessionManager();
-      await sessionManager.closeProviderSessions('NAMIRIAL');
-
-      // Cambia endpoint
+      // Cambia endpoint in memoria
+      const previousEndpoint = provider.getEndpointInfo();
       const switched = provider.switchEndpoint(params.useOnPremise);
 
       if (!switched) {
@@ -289,22 +297,33 @@ export function registerRemoteSignIpcHandlers(): void {
         };
       }
 
+      // (B) Valida la connettività al nuovo endpoint prima di confermare
+      log.info('[RemoteSign] Test connettività nuovo endpoint Namirial...');
+      const reachable = await provider.testConnection();
+
+      if (!reachable) {
+        // Ripristina endpoint precedente
+        provider.switchEndpoint(previousEndpoint.isOnPremise);
+        log.warn('[RemoteSign] Connettività fallita, endpoint ripristinato a quello precedente');
+        return {
+          success: false,
+          error: `Impossibile raggiungere l'endpoint ${params.useOnPremise ? 'On-Premises' : 'SaaS'}. Verificare URL e connettività di rete.`
+        };
+      }
+
+      log.info('[RemoteSign] Connettività verificata, endpoint cambiato con successo');
       const info = provider.getEndpointInfo();
-      return {
-        success: true,
-        ...info
-      };
+      return { success: true, ...info };
+
     } catch (error: any) {
       log.error('[RemoteSign] Errore switch-namirial-endpoint:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   });
 
   // =========================================================================
   // SAVE NAMIRIAL ENDPOINT CONFIG (persiste useOnPremise in sign-settings.json)
+  // Chiamato solo dopo che switch-namirial-endpoint ha già verificato sessione e connettività
   // =========================================================================
   ipcMain.handle('remote-sign:save-namirial-endpoint-config', async (_event, params: {
     useOnPremise: boolean;
@@ -436,6 +455,11 @@ export function registerRemoteSignIpcHandlers(): void {
       };
     }
 
+    // Legge la concorrenza dalla config (default: 5)
+    const signSettings = loadConfigJson<any>('sign-settings.json', {});
+    const concurrency: number = signSettings?.remoteSign?.bulkSignConcurrency ?? 5;
+    log.info(`[RemoteSign] Concorrenza firma batch: ${concurrency} worker paralleli`);
+
     const results: Array<{
       examinationId: number;
       digitalReportId: string;
@@ -445,18 +469,21 @@ export function registerRemoteSignIpcHandlers(): void {
 
     let completed = 0;
     let failed = 0;
+    let sessionAborted = false; // flag condiviso: true quando la sessione scade
 
-    for (let i = 0; i < params.reports.length; i++) {
-      const report = params.reports[i];
+    // -----------------------------------------------------------------------
+    // Funzione per firmare un singolo referto (eseguita in parallelo dai worker)
+    // -----------------------------------------------------------------------
+    const signSingleReport = async (report: typeof params.reports[0]): Promise<void> => {
       const patientName = `${report.patientLastName} ${report.patientFirstName}`.trim();
 
-      // Notifica progresso
-      event.sender.send('remote-sign:progress', {
-        completed,
-        failed,
-        total: params.reports.length,
-        currentPatient: patientName
-      });
+      if (sessionAborted) {
+        failed++;
+        results.push({ examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: false, error: 'Batch interrotto (sessione scaduta)' });
+        event.sender.send('remote-sign:report-completed', { examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: false, error: 'Batch interrotto' });
+        event.sender.send('remote-sign:progress', { completed, failed, total: params.reports.length, currentPatient: patientName });
+        return;
+      }
 
       try {
         log.info(`[RemoteSign] Firmando referto ${report.digitalReportId} - ${patientName}`);
@@ -560,7 +587,13 @@ export function registerRemoteSignIpcHandlers(): void {
         const saveBody = {
           id: report.digitalReportId,
           signedPdfBase64: signResult.signature,
-          doctorCode: report.doctorCode
+          doctorCode: report.doctorCode,
+          // Audit trail (D.Lgs. 82/2005)
+          signatureMode: 'BULK',
+          signatureType: 'REMOTE',
+          provider: params.providerId,
+          certificateCN: session.certificate?.cn ?? null,
+          bypassActive: false
         };
 
         // Log body senza il base64 completo
@@ -589,45 +622,39 @@ export function registerRemoteSignIpcHandlers(): void {
         saveBody.signedPdfBase64 = null;
 
         completed++;
-
-        // Notifica singolo referto completato
-        event.sender.send('remote-sign:report-completed', {
-          examinationId: report.examinationId,
-          digitalReportId: report.digitalReportId,
-          success: true
-        });
-
-        results.push({
-          examinationId: report.examinationId,
-          digitalReportId: report.digitalReportId,
-          success: true
-        });
+        results.push({ examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: true });
+        event.sender.send('remote-sign:report-completed', { examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: true });
+        event.sender.send('remote-sign:progress', { completed, failed, total: params.reports.length, currentPatient: patientName });
 
       } catch (error: any) {
         log.error(`[RemoteSign] Errore firma referto ${report.digitalReportId}:`, error);
         failed++;
+        results.push({ examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: false, error: error.message });
+        event.sender.send('remote-sign:report-completed', { examinationId: report.examinationId, digitalReportId: report.digitalReportId, success: false, error: error.message || 'Errore firma' });
+        event.sender.send('remote-sign:progress', { completed, failed, total: params.reports.length, currentPatient: patientName });
 
-        event.sender.send('remote-sign:report-completed', {
-          examinationId: report.examinationId,
-          digitalReportId: report.digitalReportId,
-          success: false,
-          error: error.message || 'Errore firma'
-        });
-
-        results.push({
-          examinationId: report.examinationId,
-          digitalReportId: report.digitalReportId,
-          success: false,
-          error: error.message
-        });
-
-        // Se errore di sessione, interrompi
         if (error.code === 'SESSION_EXPIRED' || error.code === 'INVALID_SESSION') {
           log.warn('[RemoteSign] Sessione scaduta, interruzione batch');
-          break;
+          sessionAborted = true;
         }
       }
-    }
+    };
+
+    // -----------------------------------------------------------------------
+    // Worker pool: N worker paralleli che pescano referti dalla coda
+    // JS è single-thread quindi nextIndex++ è atomico tra gli await
+    // -----------------------------------------------------------------------
+    let nextIndex = 0;
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const i = nextIndex++;
+        if (i >= params.reports.length || sessionAborted) break;
+        await signSingleReport(params.reports[i]);
+      }
+    };
+
+    const workerCount = Math.min(concurrency, params.reports.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
     // Notifica completamento
     event.sender.send('remote-sign:completed', {
@@ -647,6 +674,93 @@ export function registerRemoteSignIpcHandlers(): void {
         failed
       }
     };
+  });
+
+  // =========================================================================
+  // SIGN SINGLE OTP
+  // Firma un singolo documento con OTP (per flusso "Termina Referto").
+  // Crea una sessione effimera, firma, chiude la sessione.
+  // =========================================================================
+  ipcMain.handle('remote-sign:sign-single-otp', async (_event, params: {
+    pdfBase64: string;
+    providerId: string;
+    username: string;
+    password: string;
+    pin: string;
+    otp: string;
+    signedByName: string;
+  }) => {
+    log.info(`[RemoteSign] Firma singola OTP - provider: ${params.providerId}, utente: ${params.username}`);
+
+    const factory = getProviderFactory();
+    const provider = factory.getProvider(params.providerId);
+    if (!provider) {
+      return { success: false, error: `Provider ${params.providerId} non trovato o non configurato` };
+    }
+
+    const sessionManager = getSessionManager();
+    let sessionCreated = false;
+
+    try {
+      // 1. Apri sessione con OTP (sessione breve, solo per questa firma)
+      const session = await sessionManager.createSession(
+        params.providerId,
+        {
+          username: params.username,
+          password: params.password,
+          pin: params.pin,
+          otp: params.otp
+        },
+        { durationMinutes: 5, isAutomatic: false }
+      );
+      sessionCreated = true;
+      log.info(`[RemoteSign] Sessione OTP aperta: ${session.sessionId}`);
+
+      // 2. Aggiungi dicitura firma al PDF
+      const noticeResult = await addSignatureNoticeToBuffer({
+        pdfBase64: params.pdfBase64,
+        signedByName: params.signedByName
+      });
+
+      // 3. Firma il documento (PAdES)
+      const activeSessions = sessionManager.getActiveSessions();
+      const activeSession = activeSessions.find(
+        s => s.providerId.toUpperCase() === params.providerId.toUpperCase() &&
+             s.userId === params.username
+      );
+      if (!activeSession) {
+        throw new Error('Sessione non trovata dopo autenticazione OTP');
+      }
+
+      const signResult = await provider.signDocument(activeSession, {
+        documentId: `single_otp_${Date.now()}`,
+        documentPayload: noticeResult.pdfWithNoticeBase64,
+        documentName: 'referto.pdf',
+        documentDescription: `Firma referto - ${params.signedByName}`,
+        signatureFormat: 'PAdES'
+      });
+
+      if (!signResult.signature) {
+        throw new Error('Firma non ricevuta dal provider remoto');
+      }
+
+      log.info('[RemoteSign] Firma singola OTP completata con successo');
+      return { success: true, signedPdfBase64: signResult.signature };
+
+    } catch (error: any) {
+      log.error('[RemoteSign] Errore firma singola OTP:', error);
+      return { success: false, error: error.message || 'Errore durante la firma OTP' };
+    } finally {
+      // Chiudi sempre la sessione dopo la firma singola
+      if (sessionCreated) {
+        try {
+          await sessionManager.closeProviderSessions(params.providerId);
+          log.info('[RemoteSign] Sessione OTP chiusa dopo firma singola');
+        } catch (e) {
+          log.warn('[RemoteSign] Errore chiusura sessione OTP:', e);
+        }
+      }
+    }
   });
 
   log.info('[RemoteSign] IPC handlers registrati');

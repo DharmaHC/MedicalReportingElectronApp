@@ -1,10 +1,10 @@
-import React, { useRef, useEffect, useState, forwardRef, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo, forwardRef, useCallback } from 'react';
 import { Editor, EditorProps, EditorTools, EditorMountEvent, ProseMirror } from '@progress/kendo-react-editor';
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
 
 // Usa TextSelection da ProseMirror esposto da Kendo per compatibilità v9
-const { TextSelection } = ProseMirror;
+const { TextSelection, Plugin, PluginKey, Decoration, DecorationSet } = ProseMirror;
 
 const ZOOM_STORAGE_KEY = 'medreport_editor_zoom';
 
@@ -67,14 +67,48 @@ const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
   const editorViewRef = useRef<any>(null);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
 
-  const [useHighlight, setUseHighlight] = useState<boolean>(false);
+  const highlightActiveRef = useRef<boolean>(false);
 
   useEffect(() => {
-      // Accedi ai settings globali esposti dal preload
-      window.appSettings.get().then(settings => {
-        setUseHighlight(settings.highlightPlaceholder ?? false);
-      });
-    }, []);
+    window.appSettings.get().then(settings => {
+      const shouldHighlight = settings.highlightPlaceholder ?? false;
+      highlightActiveRef.current = shouldHighlight;
+      // Forza ProseMirror a ricalcolare le decorazioni quando le impostazioni sono pronte
+      if (editorViewRef.current && shouldHighlight) {
+        editorViewRef.current.dispatch(editorViewRef.current.state.tr);
+      }
+    });
+  }, []);
+
+  // Plugin ProseMirror per evidenziare i segnaposto # tramite decorazioni (non DOM diretto)
+  const hashHighlightPlugin = useMemo(() => {
+    const key = new PluginKey('hashHighlight');
+    return new Plugin({
+      key,
+      props: {
+        decorations(state: any) {
+          if (!highlightActiveRef.current) return DecorationSet.empty;
+          const decos: any[] = [];
+          state.doc.descendants((node: any, pos: number) => {
+            if (node.isText && node.text) {
+              let idx = 0;
+              while ((idx = node.text.indexOf('#', idx)) !== -1) {
+                decos.push(
+                  Decoration.inline(pos + idx, pos + idx + 1, {
+                    class: '__hash-highlight',
+                    style: 'background-color: yellow; color: black; padding: 0 2px;',
+                  })
+                );
+                idx++;
+              }
+            }
+            return true;
+          });
+          return DecorationSet.create(state.doc, decos);
+        },
+      },
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 const renderPageBreaks = useCallback(() => {
@@ -205,13 +239,6 @@ const renderPageBreaks = useCallback(() => {
       }
 
       renderPageBreaks();
-      if (useHighlight) {
-        // Evita loop disconnettendo temporaneamente l'observer
-        observer.disconnect();
-        highlightHashes();
-        // Ricollega l'observer
-        observer.observe(proseMirror, { childList: true, subtree: true, characterData: true });
-      }
     });
 
     // Salva il riferimento per cleanup
@@ -313,63 +340,9 @@ useEffect(() => {
 
 
 
-  // Evidenziazione degli # nel testo
-  const highlightHashes = () => {
-    const content = editorBoxRef.current?.querySelector('.ProseMirror') as HTMLElement | null;
-    if (!content) return;
-
-    // Pulisce eventuali highlight esistenti
-    const oldSpans = content.querySelectorAll('span.__hash-highlight');
-    oldSpans.forEach(span => {
-      const parent = span.parentNode;
-      if (!parent) return;
-      parent.replaceChild(document.createTextNode(span.textContent || ''), span);
-    });
-
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null);
-    const nodes: Text[] = [];
-
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-      if (
-        node.nodeValue?.includes('#') &&
-        !node.parentElement?.classList.contains('__hash-highlight') // evita loop
-      ) {
-        nodes.push(node);
-      }
-    }
-
-    for (const textNode of nodes) {
-      const parent = textNode.parentElement;
-      if (!parent) continue;
-
-      const parts = textNode.nodeValue!.split(/(#)/); // mantiene i #
-      const frag = document.createDocumentFragment();
-
-      for (const part of parts) {
-        if (part === '#') {
-          const span = document.createElement('span');
-          span.className = '__hash-highlight';
-          span.textContent = '#';
-          span.style.backgroundColor = 'yellow';
-          span.style.color = 'black';
-          span.style.padding = '0 2px';
-          frag.appendChild(span);
-        } else {
-          frag.appendChild(document.createTextNode(part));
-        }
-      }
-
-      parent.replaceChild(frag, textNode);
-    }
-  };
-
   const handleEditorChange = (event: any, value?: any) => {
     setTimeout(() => {
       renderPageBreaks();
-      if (useHighlight) {
-        highlightHashes();
-      }
     }, 0);
     if (props.onChange) props.onChange(event);
   };
@@ -400,6 +373,13 @@ useEffect(() => {
 
   // Callback onMount per catturare l'EditorView correttamente (Kendo v9)
   const handleMount = (event: EditorMountEvent) => {
+    // Inietta il plugin decorativo per l'evidenziazione dei segnaposto #
+    // (deve avvenire prima di props.onMount che può aggiungere altri plugin via reconfigure)
+    const currentState = event.viewProps.state;
+    event.viewProps.state = currentState.reconfigure({
+      plugins: [...currentState.plugins, hashHighlightPlugin],
+    });
+
     // Salva il riferimento all'EditorView
     editorViewRef.current = event.viewProps.view;
 
