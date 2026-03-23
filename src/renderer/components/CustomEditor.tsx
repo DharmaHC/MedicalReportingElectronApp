@@ -167,6 +167,12 @@ const renderPageBreaks = useCallback(() => {
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.className = overlayClass;
+    // contentEditable=false impedisce al browser di navigare dentro l'overlay
+    // con i tasti freccia e impedisce a ProseMirror di confondersi sulla posizione
+    // del cursore quando l'overlay viene re-inserito dopo ogni digitazione.
+    overlay.contentEditable = 'false';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.userSelect = 'none';
     proseMirror.appendChild(overlay);
   }
 
