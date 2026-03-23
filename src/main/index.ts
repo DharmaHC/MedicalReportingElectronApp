@@ -412,6 +412,59 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
   }
 });
 
+// ============================================================================
+// CHECK PKCS11 DEVICE — verifica se un token/smartcard è fisicamente connesso
+// senza richiedere PIN né aprire sessione.
+// Ritorna { available: true, slotCount: N } oppure { available: false }
+// ============================================================================
+ipcMain.handle('check-pkcs11-device', async () => {
+  let pkcs11: any = null;
+  try {
+    const settings = await loadGlobalSettings();
+    pkcs11 = new pkcs11js.PKCS11();
+
+    const isWindows = process.platform === 'win32';
+    const isMac    = process.platform === 'darwin';
+    const pkcs11Libraries = [
+      settings.pkcs11Lib,
+      ...(isWindows ? [
+        'C:\\Windows\\System32\\bit4xpki.dll',
+        'C:\\Windows\\System32\\bit4ipki.dll',
+        'C:\\Windows\\System32\\bit4opki.dll',
+      ] : []),
+      ...(isMac ? [
+        '/usr/local/lib/libbit4xpki.dylib',
+        '/usr/local/lib/libbit4ipki.dylib',
+        '/Applications/Firma4NG Keyfour.app/Contents/Resources/utilities/mac/PKCS11/libbit4xpki.dylib',
+        '/usr/local/lib/opensc-pkcs11.so',
+        '/opt/homebrew/lib/opensc-pkcs11.so',
+      ] : []),
+    ].filter((lib, i, self) => lib && self.indexOf(lib) === i);
+
+    let loaded = false;
+    for (const libPath of pkcs11Libraries) {
+      try {
+        pkcs11.load(libPath);
+        pkcs11.C_Initialize();
+        loaded = true;
+        break;
+      } catch { /* prova la prossima */ }
+    }
+
+    if (!loaded) {
+      return { available: false };
+    }
+
+    const slots = pkcs11.C_GetSlotList(true); // true = solo slot con token presente
+    return { available: slots && slots.length > 0, slotCount: slots?.length ?? 0 };
+
+  } catch {
+    return { available: false };
+  } finally {
+    try { if (pkcs11) pkcs11.C_Finalize(); } catch {}
+  }
+});
+
 const logPath = path.join(app.getPath('userData'), 'medreport-editor.log');
 
 ipcMain.on('log-to-file', (event, logMsg, logOptions = {}) => {
