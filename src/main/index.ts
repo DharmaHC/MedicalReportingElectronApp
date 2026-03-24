@@ -878,34 +878,57 @@ function setupAutoUpdater() {
 
     const launchInstallerAndQuit = () => {
       // CRITICAL: On Windows, Electron/Chromium's Job Object kills child processes
-      // when the app exits. Using autoUpdater.quitAndInstall() spawns the installer
-      // as a child process that gets terminated when app.quit() is called.
-      // Fix: Use wmic to create the installer process via the WMI service,
-      // which runs independently of Electron's process hierarchy.
+      // when the app exits. Both wmic and PowerShell Start-Process create a process
+      // that is completely independent of Electron's process hierarchy.
+      // We pass --wmic-relaunched so the NSIS preInit skips its own redundant relaunch.
+      // Strategy: PowerShell first (works on Win11 where wmic is deprecated), then wmic
+      // as fallback, then quitAndInstall(NON-silent) as last resort.
       const installerPath = (info as any).downloadedFile
         || (autoUpdater as any).downloadedUpdateHelper?.file
         || (autoUpdater as any).installerPath;
 
       if (installerPath && process.platform === 'win32') {
-        log.info(`Launching installer via wmic (outside Job Object): ${installerPath}`);
+        const { execSync } = require('child_process');
+        let launched = false;
+
+        // 1. PowerShell Start-Process: creates independent process, works on Win10/11
         try {
-          const { execSync } = require('child_process');
-          // wmic process call create launches via WMI service - completely independent process
-          const wmicCmd = `wmic process call create '"${installerPath}" --updated --force-run'`;
-          log.info(`wmic command: ${wmicCmd}`);
-          execSync(wmicCmd, { stdio: 'ignore', windowsHide: true, timeout: 10000 });
-          log.info('Installer launched via wmic, quitting app...');
-        } catch (err: any) {
-          log.error('wmic failed, falling back to quitAndInstall:', err.message);
-          autoUpdater.quitAndInstall(true, true);
+          const escaped = installerPath.replace(/'/g, "''");
+          const psCmd = `powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '${escaped}' -ArgumentList '--updated','--force-run','--wmic-relaunched' -WindowStyle Normal"`;
+          log.info(`Launching installer via PowerShell: ${psCmd}`);
+          execSync(psCmd, { stdio: 'ignore', windowsHide: true, timeout: 10000 });
+          launched = true;
+          log.info('Installer launched via PowerShell');
+        } catch (psErr: any) {
+          log.warn(`PowerShell failed, trying wmic: ${psErr.message}`);
+        }
+
+        // 2. wmic fallback (Win10, deprecated on Win11)
+        if (!launched) {
+          try {
+            const wmicCmd = `wmic process call create '"${installerPath}" --updated --force-run --wmic-relaunched'`;
+            log.info(`Launching installer via wmic: ${wmicCmd}`);
+            execSync(wmicCmd, { stdio: 'ignore', windowsHide: true, timeout: 10000 });
+            launched = true;
+            log.info('Installer launched via wmic');
+          } catch (wmicErr: any) {
+            log.warn(`wmic failed: ${wmicErr.message}`);
+          }
+        }
+
+        if (launched) {
+          require('electron').autoUpdater.emit('before-quit-for-update');
+          setTimeout(() => app.quit(), 500);
           return;
         }
 
-        require('electron').autoUpdater.emit('before-quit-for-update');
-        setTimeout(() => app.quit(), 500);
+        // 3. Last resort: quitAndInstall NON-silent (isSilent=false → no /S flag)
+        // The installer may be killed by the Job Object, but at least it won't be silent.
+        log.warn('All external launchers failed, using quitAndInstall (non-silent)');
+        autoUpdater.quitAndInstall(false, true);
       } else {
-        // Non-Windows or no installer path: use standard quitAndInstall
-        autoUpdater.quitAndInstall(true, true);
+        // Non-Windows or no installer path
+        autoUpdater.quitAndInstall(false, true);
       }
     };
 
