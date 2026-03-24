@@ -518,12 +518,12 @@ function getCompanyAssets(companyId?: string) {
   // Normalizza l'ID: es. "ortasa" → "ORTASA", undefined → "DEFAULT"
   const id = (companyId ?? '').trim().toUpperCase() || 'DEFAULT';
 
-  // Logo: cerca Logo{ID}.png → fallback su LogoBlank.png (sempre nel bundle)
-  const logoPath = getImagePathWithFallback(`Logo${id}.png`, 'LogoBlank.png');
+  // Logo: cerca Logo{ID}.png → fallback su LogoAster.png (logo base, sempre disponibile)
+  const logoPath = getImagePathWithFallback(`Logo${id}.png`, 'LogoAster.png');
 
-  // Footer image: cerca Footer{ID}.png → fallback su LogoBlank.png (mai su immagine di altro cliente)
+  // Footer image: cerca Footer{ID}.png → fallback su FooterAster.png
   // (se le dimensioni dell'immagine footer sono 0 nel config, non verrà comunque caricata né disegnata)
-  const footerImgPath = getImagePathWithFallback(`Footer${id}.png`, 'LogoBlank.png');
+  const footerImgPath = getImagePathWithFallback(`Footer${id}.png`, 'FooterAster.png');
 
   console.log(`🏢 [getCompanyAssets] id="${id}" logo="${logoPath}" footer="${footerImgPath}"`);
 
