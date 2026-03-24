@@ -932,6 +932,11 @@ function setupAutoUpdater() {
       }
     };
 
+    // Notify renderer: download complete — dismiss the download progress overlay
+    if (mainWindow) {
+      mainWindow.webContents.send('update-download-complete');
+    }
+
     const showUpdateDialog = () => {
       if (!mainWindow) {
         setImmediate(() => launchInstallerAndQuit());
@@ -951,6 +956,10 @@ function setupAutoUpdater() {
           setImmediate(() => launchInstallerAndQuit());
         } else {
           log.info('User postponed update, will remind in 30 minutes');
+          // Notify renderer so the "download ready" banner is dismissed
+          if (mainWindow) {
+            mainWindow.webContents.send('update-postponed');
+          }
           setTimeout(showUpdateDialog, 30 * 60 * 1000);
         }
       });

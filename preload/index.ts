@@ -61,6 +61,10 @@ console.log("PRELOAD PARTITO!");
       ipcRenderer.on('update-available', (_event, info) => callback(info)),
     onDownloadProgress: (callback: (progress: any) => void) =>
       ipcRenderer.on('download-progress', (_event, progress) => callback(progress)),
+    onUpdateDownloaded: (callback: () => void) =>
+      ipcRenderer.on('update-download-complete', () => callback()),
+    onUpdatePostponed: (callback: () => void) =>
+      ipcRenderer.on('update-postponed', () => callback()),
   });
 
   // ============================================================================
