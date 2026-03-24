@@ -1,15 +1,9 @@
-import { ReportHandler } from 'web-vitals';
+// web-vitals: ReportHandler è stato rimosso dalla v3+.
+// Questo file è un residuo CRA non utilizzato nell'app Electron.
+type ReportHandler = (metric: Record<string, unknown>) => void;
 
-const reportWebVitals = (onPerfEntry?: ReportHandler) => {
-  if (onPerfEntry && onPerfEntry instanceof Function) {
-    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
-      getCLS(onPerfEntry);
-      getFID(onPerfEntry);
-      getFCP(onPerfEntry);
-      getLCP(onPerfEntry);
-      getTTFB(onPerfEntry);
-    });
-  }
+const reportWebVitals = (_onPerfEntry?: ReportHandler) => {
+  // no-op in Electron
 };
 
 export default reportWebVitals;

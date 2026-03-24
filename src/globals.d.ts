@@ -60,6 +60,7 @@ interface Settings {
   signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
   speechToText?: SpeechToTextConfig; // Configurazione dettatura vocale locale (Whisper)
+  preventClientUpdate?: boolean; // Se true, disabilita l'auto-update su questo client (default: false)
 }
 
 interface CompanyFooterSettings {

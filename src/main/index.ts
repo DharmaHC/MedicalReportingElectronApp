@@ -84,7 +84,8 @@ const DEFAULT_SETTINGS: Settings = {
     enabled: false,
     model: 'ggml-small.bin',
     language: 'it'
-  }
+  },
+  preventClientUpdate: false
 };
 
 /**
@@ -821,6 +822,13 @@ function setupAutoUpdater() {
   // Altrimenti causerebbe errori 404 cercando latest-mac.yml
   if (process.platform === 'darwin') {
     log.info('AutoUpdater disabilitato su macOS (app non firmata)');
+    return;
+  }
+
+  // Controlla se il client ha disabilitato l'auto-update localmente
+  const settings = loadGlobalSettings();
+  if (settings.preventClientUpdate === true) {
+    log.info('AutoUpdater disabilitato: preventClientUpdate=true in sign-settings.json');
     return;
   }
 

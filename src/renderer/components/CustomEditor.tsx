@@ -3,8 +3,7 @@ import { Editor, EditorProps, EditorTools, EditorMountEvent, ProseMirror } from 
 import { Button, ToolbarItem } from '@progress/kendo-react-buttons';
 import { minusIcon, plusIcon } from '@progress/kendo-svg-icons';
 
-// Usa TextSelection da ProseMirror esposto da Kendo per compatibilità v9
-const { TextSelection, Plugin, PluginKey, Decoration, DecorationSet } = ProseMirror;
+const { Plugin, PluginKey, Decoration, DecorationSet } = ProseMirror;
 
 const ZOOM_STORAGE_KEY = 'medreport_editor_zoom';
 
@@ -83,11 +82,22 @@ const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
   // Plugin ProseMirror per evidenziare i segnaposto # tramite decorazioni (non DOM diretto)
   const hashHighlightPlugin = useMemo(() => {
     const key = new PluginKey('hashHighlight');
+    // Memoize DecorationSet by doc reference: selection-only transactions don't change
+    // the doc, so they return the SAME cached set. PM detects "same object" and skips
+    // re-rendering the <span> wrappers — preventing the childList mutations inside PM
+    // that cause Chrome to asynchronously reposition the DOM cursor.
+    let lastDoc: any = null;
+    let lastHighlight: boolean | null = null;
+    let cachedSet: any = DecorationSet.empty;
     return new Plugin({
       key,
       props: {
         decorations(state: any) {
-          if (!highlightActiveRef.current) return DecorationSet.empty;
+          const highlight = highlightActiveRef.current;
+          if (!highlight) return DecorationSet.empty;
+          if (state.doc === lastDoc && lastHighlight === highlight) return cachedSet;
+          lastDoc = state.doc;
+          lastHighlight = highlight;
           const decos: any[] = [];
           state.doc.descendants((node: any, pos: number) => {
             if (node.isText && node.text) {
@@ -104,7 +114,8 @@ const CustomEditor = forwardRef<Editor, CustomEditorProps>((props, ref) => {
             }
             return true;
           });
-          return DecorationSet.create(state.doc, decos);
+          cachedSet = DecorationSet.create(state.doc, decos);
+          return cachedSet;
         },
       },
     });
@@ -163,32 +174,59 @@ const renderPageBreaks = useCallback(() => {
   const totalHeight = Math.max(contentHeight, visibleHeight);
   const overlayClass = "page-break-overlay-layer";
 
-  let overlay = proseMirror.querySelector(`.${overlayClass}`) as HTMLElement | null;
+  // DEFINITIVE FIX: Move overlay OUTSIDE ProseMirror, into .k-editor-content.
+  // PM's MutationObserver only observes proseMirror's own subtree — it never
+  // sees mutations on siblings. Chrome's contenteditable cursor repositioning
+  // only fires for mutations inside the contenteditable element (proseMirror),
+  // so mutations on an outside sibling never displace the cursor.
+  if (window.getComputedStyle(content).position === 'static') {
+    content.style.position = 'relative';
+  }
+
+  let overlay = content.querySelector(`:scope > .${overlayClass}`) as HTMLElement | null;
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.className = overlayClass;
-    // contentEditable=false impedisce al browser di navigare dentro l'overlay
-    // con i tasti freccia e impedisce a ProseMirror di confondersi sulla posizione
-    // del cursore quando l'overlay viene re-inserito dopo ogni digitazione.
-    overlay.contentEditable = 'false';
+    overlay.style.position = 'absolute';
     overlay.style.pointerEvents = 'none';
     overlay.style.userSelect = 'none';
-    proseMirror.appendChild(overlay);
+    overlay.style.overflow = 'hidden';
+    content.appendChild(overlay);
   }
 
-  // Pulizia precedenti marker
-  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+  // Position overlay to cover ProseMirror's visual area.
+  // offsetTop/Left are pre-transform layout values; with transform-origin:top-left
+  // the top-left corner stays at the same layout position after scale().
+  overlay.style.top = `${proseMirror.offsetTop}px`;
+  overlay.style.left = `${proseMirror.offsetLeft}px`;
+  overlay.style.width = `${proseMirror.offsetWidth * zoomLevel}px`;
+  overlay.style.height = `${totalHeight * zoomLevel}px`;
 
+  // Compute needed positions
+  const yPositions: number[] = [];
   for (let y = pageHeightPx; y < totalHeight; y += pageHeightPx) {
-    const marker = document.createElement("div");
-    marker.className = "auto-page-break";
-    marker.style.position = "absolute";
-    marker.style.top = `${y}px`;
-    marker.style.width = "100%";
-    marker.style.pointerEvents = "none";
-    marker.style.zIndex = "20";
-    marker.style.borderTop = "1.2pt dashed #ff0000";
-    overlay.appendChild(marker);
+    yPositions.push(y);
+  }
+
+  // Pool: grow only when needed
+  let poolSize = overlay.querySelectorAll('.auto-page-break').length;
+  while (poolSize < yPositions.length) {
+    const m = document.createElement("div");
+    m.className = "auto-page-break";
+    m.style.cssText = "position:absolute;display:none;width:100%;pointer-events:none;z-index:20;border-top:1.2pt dashed #ff0000";
+    overlay.appendChild(m);
+    poolSize++;
+  }
+
+  // Markers at y * zoomLevel — converts document-space Y to visual-space Y
+  // (ProseMirror is scaled by zoomLevel via CSS transform, overlay is not)
+  const markerEls = overlay.querySelectorAll('.auto-page-break') as NodeListOf<HTMLElement>;
+  yPositions.forEach((y, i) => {
+    markerEls[i].style.top = `${y * zoomLevel}px`;
+    markerEls[i].style.display = '';
+  });
+  for (let i = yPositions.length; i < markerEls.length; i++) {
+    markerEls[i].style.display = 'none';
   }
 
   // Apply scale & margin
@@ -234,16 +272,7 @@ const renderPageBreaks = useCallback(() => {
       mutationObserverRef.current = null;
     }
 
-    const observer = new MutationObserver((mutations) => {
-      const overlay = proseMirror.querySelector('.page-break-overlay-layer');
-      if (
-        mutations.some(m =>
-          (overlay && (m.target === overlay || overlay.contains(m.target as Node)))
-        )
-      ) {
-        return;
-      }
-
+    const observer = new MutationObserver(() => {
       renderPageBreaks();
     });
 
@@ -259,7 +288,7 @@ const renderPageBreaks = useCallback(() => {
         mutationObserverRef.current = null;
       }
       window.removeEventListener('resize', renderPageBreaks);
-      let overlay = proseMirror.querySelector('.page-break-overlay-layer') as HTMLElement | null;
+      let overlay = content.querySelector(':scope > .page-break-overlay-layer') as HTMLElement | null;
       if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
     };
     // eslint-disable-next-line
@@ -283,68 +312,47 @@ const renderPageBreaks = useCallback(() => {
     return () => editorElement.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  // Ref per tracciare l'ultima selezione di #
-  const lastHashPosRef = useRef<number | null>(null); // tiene traccia dell'ultima selezione
+  // Gestione tasto F3 per selezionare il prossimo segnaposto #
+  // Usa window.find() (API Chrome nativa) invece di view.dispatch/selectionToDOM:
+  // la selezione è impostata dal motore browser esattamente come Ctrl+F o una
+  // selezione manuale → PM la riceve via selectionchange senza alcun problema
+  // di cursor-repositioning asincrono.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'F3') return;
+      e.preventDefault();
+      e.stopPropagation();
 
-  // Gestione tasto F3 per selezionare il primo #
-useEffect(() => {
+      const tryFind = () => (window as any).find('#', false, false, true, false, false, false);
+      const isInEditor = () => {
+        const sel = window.getSelection();
+        return !!(sel?.anchorNode && editorBoxRef.current?.contains(sel.anchorNode));
+      };
+      const resetCursorToEditorStart = () => {
+        const proseMirror = editorBoxRef.current?.querySelector('.ProseMirror') as HTMLElement | null;
+        if (!proseMirror) return false;
+        const range = document.createRange();
+        range.setStart(proseMirror, 0);
+        range.collapse(true);
+        const sel = window.getSelection();
+        if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+        return true;
+      };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== 'F3') return;
+      tryFind();
 
-    e.preventDefault();
-    e.stopPropagation();
-
-    const view = editorViewRef.current;
-    if (!view || !view.state) return;
-
-    const { state } = view;
-    const { doc, selection } = state;
-    const cursorPos = selection.from;
-
-    const hashes: number[] = [];
-
-    // Trova tutte le posizioni assolute dei caratteri '#'
-    doc.descendants((node: any, nodePos: number) => {
-      if (node.isText && node.text) {
-        let idx = -1;
-        let offset = 0;
-        while ((idx = node.text.indexOf('#', offset)) !== -1) {
-          hashes.push(nodePos + idx);
-          offset = idx + 1;
+      // Se window.find è atterrato fuori dall'editor (es. un # nella UI della pagina),
+      // ripristina il cursore all'inizio dell'editor e riprova: così trova il primo
+      // segnaposto nel contenuto del documento.
+      if (!isInEditor()) {
+        if (resetCursorToEditorStart()) {
+          tryFind();
         }
       }
-      return true;
-    });
-
-    if (hashes.length === 0) return;
-
-    // Trova il prossimo hash dopo il cursore (o dopo l'ultimo visitato)
-    const current = lastHashPosRef.current;
-    const next = hashes.find(pos => (current !== null ? pos > current : pos > cursorPos));
-
-    const targetPos = next !== undefined ? next : hashes[0]; // wrap-around
-    lastHashPosRef.current = targetPos;
-
-    // Crea la transazione con la nuova selezione
-    const tr = state.tr.setSelection(
-      TextSelection.create(doc, targetPos, targetPos + 1)
-    ).scrollIntoView();
-
-    // Dispatch della transazione
-    view.dispatch(tr);
-
-    // Focus usando requestAnimationFrame per sincronizzarsi con Kendo v9
-    requestAnimationFrame(() => {
-      view.focus();
-    });
-  };
-
-  document.addEventListener('keydown', handleKeyDown);
-  return () => document.removeEventListener('keydown', handleKeyDown);
-}, []);
-
-
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleEditorChange = (event: any, value?: any) => {
     setTimeout(() => {

@@ -935,6 +935,35 @@ export function getImagePath(filename: string): string {
 }
 
 /**
+ * Come getImagePath, ma se il file richiesto non esiste né in custom né in default,
+ * restituisce il path del file di fallback (cercato con la stessa priorità custom→default).
+ * Garantisce sempre un path valido purché il fallback sia presente nel bundle.
+ *
+ * @param filename          Nome del file da cercare (es. "LogoOrtasa.png")
+ * @param fallbackFilename  Nome del file di fallback (es. "LogoBlank.png")
+ */
+export function getImagePathWithFallback(filename: string, fallbackFilename: string): string {
+  const customPath  = path.join(getCustomImagesDir(),  filename);
+  const defaultPath = path.join(getDefaultImagesDir(), filename);
+
+  if (fs.existsSync(customPath)) {
+    console.log(`🖼️ Caricamento ${filename} personalizzato da: ${customPath}`);
+    return customPath;
+  }
+  if (fs.existsSync(defaultPath)) {
+    console.log(`🖼️ Caricamento ${filename} default da: ${defaultPath}`);
+    return defaultPath;
+  }
+
+  // File non trovato → fallback
+  console.warn(`⚠️ Immagine "${filename}" non trovata — uso fallback "${fallbackFilename}"`);
+  const fbCustom  = path.join(getCustomImagesDir(),  fallbackFilename);
+  const fbDefault = path.join(getDefaultImagesDir(), fallbackFilename);
+  if (fs.existsSync(fbCustom))  return fbCustom;
+  return fbDefault; // LogoBlank.png è sempre nel bundle
+}
+
+/**
  * Copia un'immagine default nella cartella personalizzata se non esiste già
  *
  * @param filename Nome del file immagine (es. "FooterHW.png")

@@ -9,7 +9,7 @@ import * as asn1js from 'asn1js';     // v2
 import * as pkijs from 'pkijs';      // v2
 import { createHash } from 'crypto';
 import { Settings, CompanyFooterSettings } from '../globals';
-import { loadConfigJson, getImagePath, getDefaultConfigDir } from './configManager';
+import { loadConfigJson, getImagePath, getImagePathWithFallback, getDefaultConfigDir } from './configManager';
 
 /* █████████████████ SETTINGS █████████████████ */
 export function loadSettings(): Settings {
@@ -331,26 +331,27 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
     logoPath, footerImgPath, footerTextDefault
   } = getCompanyAssets(req.companyId);
 
-  console.log(`🖼️ Logo path: ${logoPath}`);
-  console.log(`🖼️ Footer image path: ${footerImgPath}`);
-
-  // ⭐ NUOVO: Carica settings specifici per company
+  // Carica settings PRIMA del caricamento immagini: servono per sapere se il footer image va usato
   const companyFooterSettings = getCompanyFooterSettings(req.companyId);
   console.log(`⚙️ Company footer settings loaded`);
 
-  let logoImg, footImg;
+  const hasFooterImage = (companyFooterSettings.footerImageWidth ?? 0) > 0
+                      && (companyFooterSettings.footerImageHeight ?? 0) > 0;
+
+  console.log(`🖼️ Logo path: ${logoPath}`);
+  console.log(`🖼️ Footer image: ${hasFooterImage ? footerImgPath : 'SKIP (dimensioni 0)'}`);
+
+  let logoImg, footImg: Awaited<ReturnType<typeof doc.embedPng>> | null = null;
   try {
-    const [logoBytes, footBytes] = await Promise.all([
-      readFileAsync(logoPath),
-      readFileAsync(footerImgPath)
-    ]);
-    console.log(`✓ Logo bytes: ${logoBytes.length}, Footer bytes: ${footBytes.length}`);
-
+    const logoBytes = await readFileAsync(logoPath);
     logoImg = await doc.embedPng(logoBytes);
-    console.log('✓ Logo image embedded');
+    console.log(`✓ Logo embedded (${logoBytes.length} bytes)`);
 
-    footImg = await doc.embedPng(footBytes);
-    console.log('✓ Footer image embedded');
+    if (hasFooterImage) {
+      const footBytes = await readFileAsync(footerImgPath);
+      footImg = await doc.embedPng(footBytes);
+      console.log(`✓ Footer image embedded (${footBytes.length} bytes)`);
+    }
   } catch (err: any) {
     console.error('❌ Errore nel caricamento delle immagini:', err.message);
     throw err;
@@ -399,17 +400,19 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
       height: logoHeight
     });
 
-    // Footer image - ⭐ USA settings company-specific
-    let footerX = (pageWidth - companyFooterSettings.footerImageWidth) / 2.0 +
-                  (companyFooterSettings.footerImageXPositionOffset || 0);
-    let footerY = companyFooterSettings.yPosFooterImage;
-    if (footerY > pageHeight) footerY = 10;
-    p.drawImage(footImg, {
-      x: footerX,
-      y: footerY,
-      width: companyFooterSettings.footerImageWidth,
-      height: companyFooterSettings.footerImageHeight
-    });
+    // Footer image — disegnata solo se le dimensioni sono > 0 e il file è stato caricato
+    if (hasFooterImage && footImg) {
+      let footerX = (pageWidth - companyFooterSettings.footerImageWidth) / 2.0 +
+                    (companyFooterSettings.footerImageXPositionOffset || 0);
+      let footerY = companyFooterSettings.yPosFooterImage;
+      if (footerY > pageHeight) footerY = 10;
+      p.drawImage(footImg, {
+        x: footerX,
+        y: footerY,
+        width: companyFooterSettings.footerImageWidth,
+        height: companyFooterSettings.footerImageHeight
+      });
+    }
   }
 
   const savedDoc = await doc.save();
@@ -478,43 +481,22 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
 /* ██████ GESTIONE ASSET E FONT ██████ */
 function getCompanyAssets(companyId?: string) {
-    // Carica il footerText dal file di configurazione
-    const companySettings = getCompanyFooterSettings(companyId);
-    const footerTextDefault = companySettings.footerText;
+  const companySettings = getCompanyFooterSettings(companyId);
+  const footerTextDefault = companySettings.footerText;
 
-    // Usa getImagePath per caricare immagini da ProgramData se disponibili
-    switch ((companyId ?? '').trim().toUpperCase()) {
-    case 'ASTER':
-      return {
-        logoPath: getImagePath('LogoAster.png'),
-        footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault
-      };
-    case 'RAD':
-      return {
-        logoPath: getImagePath('LogoAster.png'),
-        footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault
-      };
-    case 'HEALTHWAY':
-      return {
-        logoPath: getImagePath('LogoAster.png'),
-        footerImgPath: getImagePath('FooterHW.png'),
-        footerTextDefault
-      };
-    case 'CIN':
-      return {
-        logoPath: getImagePath('LogoAster.png'),
-        footerImgPath: getImagePath('FooterCin.png'),
-        footerTextDefault
-      };
-    default:
-      return {
-        logoPath: getImagePath('LogoAster.png'),
-        footerImgPath: getImagePath('FooterAster.png'),
-        footerTextDefault
-      };
-  }
+  // Normalizza l'ID: es. "ortasa" → "ORTASA", undefined → "DEFAULT"
+  const id = (companyId ?? '').trim().toUpperCase() || 'DEFAULT';
+
+  // Logo: cerca Logo{ID}.png → fallback su LogoBlank.png (sempre nel bundle)
+  const logoPath = getImagePathWithFallback(`Logo${id}.png`, 'LogoBlank.png');
+
+  // Footer image: cerca Footer{ID}.png → fallback su LogoBlank.png (mai su immagine di altro cliente)
+  // (se le dimensioni dell'immagine footer sono 0 nel config, non verrà comunque caricata né disegnata)
+  const footerImgPath = getImagePathWithFallback(`Footer${id}.png`, 'LogoBlank.png');
+
+  console.log(`🏢 [getCompanyAssets] id="${id}" logo="${logoPath}" footer="${footerImgPath}"`);
+
+  return { logoPath, footerImgPath, footerTextDefault };
 }
 
 async function embedFont(doc: PDFDocument, fontFamily: string): Promise<PDFFont> {
