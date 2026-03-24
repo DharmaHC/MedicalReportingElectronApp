@@ -693,9 +693,21 @@ export function registerRemoteSignIpcHandlers(): void {
     log.info(`[RemoteSign] Firma singola OTP - provider: ${params.providerId}, utente: ${params.username}`);
 
     const factory = getProviderFactory();
-    const provider = factory.getProvider(params.providerId);
+    let provider = factory.getProvider(params.providerId);
     if (!provider) {
       return { success: false, error: `Provider ${params.providerId} non trovato o non configurato` };
+    }
+
+    // Per Namirial: la firma OTP singola usa SEMPRE il SaaS (baseUrl), non l'on-premises.
+    // L'on-premises è riservato alla firma automatica bulk (certificati nell'HSM locale).
+    // Creiamo un provider temporaneo con useOnPremise: false per questo flusso.
+    if (params.providerId.toUpperCase() === 'NAMIRIAL') {
+      const signSettings = loadConfigJson<any>('sign-settings.json', {});
+      const namirialCfg = signSettings?.remoteSign?.namirial;
+      if (namirialCfg?.useOnPremise && namirialCfg?.baseUrl) {
+        log.info(`[RemoteSign] Firma OTP Namirial: uso SaaS endpoint (${namirialCfg.baseUrl}) invece di on-premises`);
+        provider = new NamirialRemoteSignProvider({ ...namirialCfg, useOnPremise: false });
+      }
     }
 
     const sessionManager = getSessionManager();

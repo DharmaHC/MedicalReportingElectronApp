@@ -28,7 +28,7 @@ import {
 } from "../store/examinationSlice";
 import { openModal as openBulkSignModal } from "../store/bulkSignSlice";
 import { RootState } from "../store";
-import { url_doctors_id, url_changePassword } from "../utility/urlLib"; // <== Assicurati di importare url_changePassword
+import { url_doctors_id, url_changePassword, url_getReportsToSign } from "../utility/urlLib";
 import { setFilters } from "../store/filtersSlice";
 
 import moment from "moment";
@@ -42,6 +42,9 @@ const dispatch = useDispatch();
   // Autenticazione
   const token = useSelector((state: RootState) => state.auth.token);
   const userName = useSelector((state: RootState) => state.auth.userName);
+  const doctorCode = useSelector((state: RootState) => state.auth.doctorCode);
+  const signatureType = useSelector((state: RootState) => state.auth.signatureType);
+  const allowMedicalReportDigitalSignature = useSelector((state: RootState) => state.auth.allowMedicalReportDigitalSignature);
 
   // Verifica se l'utente è amministratore
   const adminUsers = ["FRSRFL72R25H282U", "GRRLCU88P05H501J"];
@@ -55,6 +58,15 @@ const dispatch = useDispatch();
 
   // Stato per configurazione provider firma (solo admin)
   const [providersConfigVisible, setProvidersConfigVisible] = useState(false);
+
+  // Stato per il warning "referti in attesa di firma" al logout
+  const [pendingSignWarning, setPendingSignWarning] = useState<{
+    visible: boolean;
+    count: number;
+    dateFrom: string;
+    dateTo: string;
+    pendingLogout: (() => void) | null;
+  }>({ visible: false, count: 0, dateFrom: '', dateTo: '', pendingLogout: null });
 
   // Nome/descrizione medico
   const [doctorPropeName, setDoctorPropeName] = useState("");
@@ -138,8 +150,57 @@ const dispatch = useDispatch();
 
   // ---- FINE FUNZIONI CAMBIO PASSWORD ---------------------------
 
+  // Controlla referti in attesa di firma prima di eseguire il logout
+  const checkPendingReportsBeforeLogout = async (doLogout: () => void) => {
+    // Il warning si applica solo ai medici con firma automatica
+    if (!allowMedicalReportDigitalSignature || signatureType !== 'automatic' || !doctorCode || !token) {
+      doLogout();
+      return;
+    }
+    try {
+      const dateFrom = new Date();
+      dateFrom.setMonth(dateFrom.getMonth() - 1);
+      const dateTo = new Date();
+      const params = new URLSearchParams({
+        doctorCode,
+        dateFrom: dateFrom.toISOString().split('T')[0],
+        dateTo: dateTo.toISOString().split('T')[0],
+        states: '7'  // Solo "Da Firmare"
+      });
+      const response = await fetch(`${url_getReportsToSign()}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const reports: any[] = await response.json();
+        const count = reports?.length ?? 0;
+        if (count > 0) {
+          const printDates = reports
+            .map(r => r.printDate ? new Date(r.printDate) : null)
+            .filter(Boolean) as Date[];
+          const minDate = printDates.length > 0
+            ? new Date(Math.min(...printDates.map(d => d.getTime())))
+            : dateFrom;
+          const maxDate = printDates.length > 0
+            ? new Date(Math.max(...printDates.map(d => d.getTime())))
+            : dateTo;
+          setPendingSignWarning({
+            visible: true,
+            count,
+            dateFrom: minDate.toLocaleDateString('it-IT'),
+            dateTo: maxDate.toLocaleDateString('it-IT'),
+            pendingLogout: doLogout
+          });
+          return;
+        }
+      }
+    } catch {
+      // In caso di errore nella verifica, procedi comunque con il logout
+    }
+    doLogout();
+  };
+
   // LOGOUT
-  const handleLogout = () => {
+  const doLogout = () => {
     dispatch(logout());
     dispatch(clearSelectedMoreExams());
     dispatch(clearRegistrations());
@@ -148,7 +209,11 @@ const dispatch = useDispatch();
     persistor.purge();
     setTimeout(() => {
       window.location.reload();
-    }, 100); // oppure 0
+    }, 100);
+  };
+
+  const handleLogout = () => {
+    checkPendingReportsBeforeLogout(doLogout);
   };
 
 
@@ -204,20 +269,22 @@ const dispatch = useDispatch();
     }
   };
 
+  const doLogoutAndExit = () => {
+    if (window.electron && window.electron.ipcRenderer) {
+      window.electron.ipcRenderer.send('app-quit');
+      dispatch(logout());
+      dispatch(clearSelectedMoreExams());
+      dispatch(clearRegistrations());
+      dispatch(resetExaminationState());
+      persistor.purge();
+    } else {
+      window.location.reload();
+    }
+  };
+
   const handleLogoutAndExit = () => {
-
-  if (window.electron && window.electron.ipcRenderer) {
-    window.electron.ipcRenderer.send('app-quit');
-  dispatch(logout());
-  dispatch(clearSelectedMoreExams());
-  dispatch(clearRegistrations());
-  dispatch(resetExaminationState());
-  persistor.purge();
-
-  } else {
-    window.location.reload();
-  }
-};
+    checkPendingReportsBeforeLogout(doLogoutAndExit);
+  };
 
   // FetchDoctorInfo"
   const fetchDoctorInfo = async () => {
@@ -403,6 +470,51 @@ const dispatch = useDispatch();
             </button>
             <button onClick={handleChangePasswordSubmit}>
               Conferma
+            </button>
+          </DialogActionsBar>
+        </Dialog>
+      )}
+
+      {/* Warning: referti in attesa di firma al logout */}
+      {pendingSignWarning.visible && (
+        <Dialog
+          title="Referti in attesa di firma"
+          onClose={() => setPendingSignWarning(prev => ({ ...prev, visible: false }))}
+          style={{ maxWidth: '520px' }}
+        >
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>⚠️</div>
+            <p style={{ fontWeight: 'bold', fontSize: '16px', color: '#b71c1c', marginBottom: '8px' }}>
+              Ci sono <strong>{pendingSignWarning.count}</strong> referti in attesa di firma digitale
+            </p>
+            <p style={{ marginBottom: '8px' }}>
+              Periodo: <strong>{pendingSignWarning.dateFrom}</strong> – <strong>{pendingSignWarning.dateTo}</strong>
+            </p>
+            <p style={{ color: '#555', fontSize: '13px', marginTop: '12px' }}>
+              Questi referti sono stati salvati per la firma massiva ma non sono ancora stati firmati.<br />
+              Si consiglia di procedere alla firma prima di uscire.
+            </p>
+          </div>
+          <DialogActionsBar>
+            <button
+              className="k-button k-button-md k-rounded-md k-button-solid k-button-solid-primary"
+              style={{ fontWeight: 'bold' }}
+              onClick={() => {
+                setPendingSignWarning(prev => ({ ...prev, visible: false }));
+                dispatch(openBulkSignModal());
+              }}
+            >
+              Vai alla Firma Massiva
+            </button>
+            <button
+              className="k-button k-button-md k-rounded-md k-button-solid"
+              onClick={() => {
+                const fn = pendingSignWarning.pendingLogout;
+                setPendingSignWarning(prev => ({ ...prev, visible: false }));
+                fn?.();
+              }}
+            >
+              Esci Comunque
             </button>
           </DialogActionsBar>
         </Dialog>
