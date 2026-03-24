@@ -75,6 +75,8 @@ interface CompanyFooterSettings {
   footerText: string; // Testo dati aziendali (es. "Aster Diagnostica Srl - P.I. 06191121000")
   footerCompanyDataAlignment?: 'left' | 'center' | 'right'; // Override allineamento dati azienda per company
   signatureTextAlignment?: 'left' | 'center' | 'right'; // Override allineamento dicitura firma per company
+  logoFile?: string;   // Nome file logo (es. "LogoAster.png") — se assente: Logo{ID}.png → LogoAster.png
+  footerFile?: string; // Nome file footer (es. "FooterAster.png") — se assente: Footer{ID}.png → FooterAster.png
 }
 
 interface EmergencyWorkaround {

@@ -518,14 +518,16 @@ function getCompanyAssets(companyId?: string) {
   // Normalizza l'ID: es. "ortasa" → "ORTASA", undefined → "DEFAULT"
   const id = (companyId ?? '').trim().toUpperCase() || 'DEFAULT';
 
-  // Logo: cerca Logo{ID}.png → fallback su LogoAster.png (logo base, sempre disponibile)
-  const logoPath = getImagePathWithFallback(`Logo${id}.png`, 'LogoAster.png');
+  // Usa file espliciti da company-footer-settings.json se configurati,
+  // altrimenti prova Logo{ID}.png con fallback su LogoAster.png.
+  // I file espliciti garantiscono funzionamento anche se l'ID DB non corrisponde al nome file.
+  const logoFilename   = companySettings.logoFile   ?? `Logo${id}.png`;
+  const footerFilename = companySettings.footerFile ?? `Footer${id}.png`;
 
-  // Footer image: cerca Footer{ID}.png → fallback su FooterAster.png
-  // (se le dimensioni dell'immagine footer sono 0 nel config, non verrà comunque caricata né disegnata)
-  const footerImgPath = getImagePathWithFallback(`Footer${id}.png`, 'FooterAster.png');
+  const logoPath      = getImagePathWithFallback(logoFilename,   'LogoAster.png');
+  const footerImgPath = getImagePathWithFallback(footerFilename, 'FooterAster.png');
 
-  console.log(`🏢 [getCompanyAssets] id="${id}" logo="${logoPath}" footer="${footerImgPath}"`);
+  console.log(`🏢 [getCompanyAssets] id="${id}" logoFile="${logoFilename}" logo="${logoPath}" footerFile="${footerFilename}"`);
 
   return { logoPath, footerImgPath, footerTextDefault };
 }
