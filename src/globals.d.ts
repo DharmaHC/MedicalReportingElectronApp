@@ -63,6 +63,7 @@ interface Settings {
   signatureTextAlignment?: 'left' | 'center' | 'right'; // Allineamento dicitura firma (default: center)
   remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
   speechToText?: SpeechToTextConfig; // Configurazione dettatura vocale locale (Whisper)
+  preventClientUpdate?: boolean; // Se true, disabilita l'auto-update su questo client (default: false)
 }
 
 interface CompanyFooterSettings {

@@ -35,5 +35,6 @@
   "tsaUrl": "https://freetsa.org/tsr",
 
   "useMRAS": true,
-  "showAppMenu": true
+  "showAppMenu": true,
+  "preventClientUpdate": false
 }

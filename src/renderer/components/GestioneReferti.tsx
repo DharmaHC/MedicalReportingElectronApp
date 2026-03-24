@@ -77,8 +77,8 @@ const GestioneReferti: React.FC = () => {
   // State per il filtro degli esami
   const [examFilter, setExamFilter] = useState("");
 
-  const lastNameRef  = React.useRef<HTMLInputElement>(null);
-  const firstNameRef = React.useRef<HTMLInputElement>(null);
+  const lastNameRef  = React.useRef<any>(null);
+  const firstNameRef = React.useRef<any>(null);
 
 const [initialSearchDone, setInitialSearchDone] = useState(false);
 
@@ -823,7 +823,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
               filterable={true}
               autoClose={false}
               allowCustom={false}
-              header={() => {
+              header={(() => {
                 const selected = selectedExamNames || [];
                 const filtered = filteredExamNames;
                 const allFilteredSelected = filtered.length > 0 &&
@@ -857,7 +857,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
                     />
                   </div>
                 );
-              }}
+              })()}
             />
           </div>
         </div>
