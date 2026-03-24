@@ -563,6 +563,7 @@ const renderPinDialog = () =>
   const [pdfUrl, setPdfUrl] = useState<string | null>(null); // URL del Blob PDF per il componente PdfPreview.
   // const [rtfContent, setRtfContent] = useState<string | null>(null); // Rimosso: Lo stato RTF non era utilizzato, gestito tramite cachedReportData.
   const [errorMessage, setErrorMessage] = useState<string | null>(null); // Messaggio di errore da visualizzare all'utente.
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);   // Messaggio informativo (es. salvataggio riuscito).
   const [phrases, setPhrases] = useState<Phrase[]>([]); // Array delle frasi predefinite caricate dal backend.
   const [includeNotAssignedPhrases, setincludeNotAssignedPhrases] = useState(true); // Flag per includere frasi non assegnate a esami/medici.
   const [includeAllDoctorsPhrases, setIncludeAllDoctorsPhrases] = useState(true); // Flag per includere frasi di tutti i medici.
@@ -757,6 +758,9 @@ const renderPinDialog = () =>
   const allowMedicalReportDigitalSignature = useSelector( // Flag per abilitare la firma digitale.
     (state: RootState) => state.auth.allowMedicalReportDigitalSignature
   );
+  const authSignatureType     = useSelector((state: RootState) => state.auth.signatureType);
+  const authUserCN            = useSelector((state: RootState) => state.auth.userCN);
+  const authRemoteSignUsername = useSelector((state: RootState) => state.auth.remoteSignUsername);
 
   // Stati per la gestione dei referti precedenti e modali.
   const [previousResults, setPreviousResults] = useState<any[]>([]); // Array dei referti precedenti del paziente.
@@ -2467,6 +2471,7 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       if (response.ok) {
         console.log("✅ Referto salvato come 'Da Firmare' con successo");
         setErrorMessage(null);
+        setInfoMessage("Referto salvato tra i referti da firmare");
         setCachedReportData(null);
         setIsModified(false);
 
@@ -2475,12 +2480,14 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
           // Usa il PDF decorato per la stampa (non firmato ma con logo/footer)
           handlePrintReferto(decorateResponse.decoratedPdfBase64);
         } else {
-          // Se non stampa, naviga direttamente alla homepage
-          dispatch(clearSelectedMoreExams());
-          dispatch(resetExaminationState());
-          dispatch(clearRegistrations());
-          closeViewer();
-          navigate("/", { state: { reload: true } });
+          // Naviga alla homepage dopo una breve pausa (lascia il tempo di leggere il messaggio)
+          setTimeout(() => {
+            dispatch(clearSelectedMoreExams());
+            dispatch(resetExaminationState());
+            dispatch(clearRegistrations());
+            closeViewer();
+            navigate("/", { state: { reload: true } });
+          }, 1500);
         }
       } else {
         const errorData = await response.json().catch(() => ({ title: "Errore sconosciuto" }));
@@ -2630,6 +2637,14 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     setIsProcessing(true); // Mostra indicatore di caricamento.
     setIsDraftOperation(isDraft); // Imposta se l'operazione è una bozza (per il messaggio di caricamento).
 
+    // Se il medico è abilitato alla firma automatica e non è una bozza,
+    // "Termina e Invia" si comporta come "Salva da Firmare".
+    if (!isDraft && allowMedicalReportDigitalSignature && authSignatureType === 'automatic') {
+      setIsProcessing(false);
+      handleSaveForLaterSigning();
+      return;
+    }
+
     // Salva con parametri che generano i dati del report (PDF e RTF).
     // Il flag `isSigningProcess` è true solo se la firma è abilitata E non è una bozza.
     const reportData = await generateReportData(rtfNeedsToBeStored, (allowMedicalReportDigitalSignature && !isDraft));
@@ -2647,21 +2662,14 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       let auditInfo: Parameters<typeof callProcessReportApi>[5] = undefined;
 
       if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
-        const signatureType = reduxStore.getState().auth.signatureType; // 'otp' | 'automatic' | null
-        const userCN        = reduxStore.getState().auth.userCN;
+        const signatureType      = reduxStore.getState().auth.signatureType; // 'otp' | 'automatic' | null
+        const userCN             = reduxStore.getState().auth.userCN;
+        const remoteSignUsername = reduxStore.getState().auth.remoteSignUsername;
 
-        // Caso 3: firma automatica → blocca, il medico deve usare "Salva per Firma"
-        if (signatureType === 'automatic') {
-          setErrorMessage(
-            "Questo medico è configurato per la firma automatica. " +
-            "Usa 'Salva per Firma' per salvare il referto e firmarlo massivamente a fine sessione."
-          );
-          setIsProcessing(false);
-          return;
-        }
-
-        const hasLocalSign  = Boolean(userCN) || BYPASS_SIGNATURE;
-        const hasRemoteOtp  = signatureType === 'otp';
+        // Firma locale: solo se userCN è valorizzato (o bypass attivo)
+        const hasLocalSign = Boolean(userCN) || BYPASS_SIGNATURE;
+        // Firma OTP remota: solo se abilitato a OTP E username remoto configurato
+        const hasRemoteOtp = signatureType === 'otp' && Boolean(remoteSignUsername);
 
         // Caso 4: nessuna firma configurata → salva senza firma (salta il blocco)
         if (!hasLocalSign && !hasRemoteOtp) {
@@ -2967,6 +2975,12 @@ const handleResultClick = async (result: any) => {
         {errorMessage}
       </div>
     )}
+    {infoMessage && (
+      <div className="k-messagebox k-messagebox-success" style={{ backgroundColor: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7', padding: '8px 12px', borderRadius: '4px', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span className="k-icon k-i-check-circle"></span>
+        {infoMessage}
+      </div>
+    )}
     {renderPinDialog()}
     {renderOtpDialog()}
     
@@ -3259,8 +3273,8 @@ const handleResultClick = async (result: any) => {
                 Termina e Invia
               </Button>
 
-              {/* Mostra "Salva da Firmare" solo se il medico è abilitato alla firma digitale */}
-              {allowMedicalReportDigitalSignature && (
+              {/* "Salva da Firmare" solo per firma automatica (bulk remota senza OTP) */}
+              {allowMedicalReportDigitalSignature && authSignatureType === 'automatic' && (
                 <Button
                   svgIcon={saveIcon}
                   onClick={handleSaveForLaterSigning}
