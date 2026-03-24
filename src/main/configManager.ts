@@ -935,54 +935,32 @@ export function getImagePath(filename: string): string {
 }
 
 /**
- * Cerca un file in una directory in modo case-insensitive (scannerizza la dir).
- * Necessario perché getCompanyAssets genera nomi uppercase (es. "LogoASTER.png")
- * mentre i file sul disco usano mixed-case (es. "LogoAster.png"). Su alcuni sistemi
- * (o configurazioni NTFS con case-sensitivity abilitata) fs.existsSync è case-sensitive.
- *
- * @returns path completo se trovato, null altrimenti
- */
-function findFileCaseInsensitive(dir: string, filename: string): string | null {
-  if (!fs.existsSync(dir)) return null;
-  try {
-    const lower = filename.toLowerCase();
-    const match = fs.readdirSync(dir).find(e => e.toLowerCase() === lower);
-    return match ? path.join(dir, match) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Come getImagePath, ma se il file richiesto non esiste né in custom né in default,
  * restituisce il path del file di fallback (cercato con la stessa priorità custom→default).
  * Garantisce sempre un path valido purché il fallback sia presente nel bundle.
- * Il confronto è case-insensitive per gestire nomi file con casing diverso dal companyId.
  *
- * @param filename          Nome del file da cercare (es. "LogoASTER.png")
+ * @param filename          Nome del file da cercare (es. "LogoOrtasa.png")
  * @param fallbackFilename  Nome del file di fallback (es. "LogoBlank.png")
  */
 export function getImagePathWithFallback(filename: string, fallbackFilename: string): string {
-  const customDir  = getCustomImagesDir();
-  const defaultDir = getDefaultImagesDir();
+  const customPath  = path.join(getCustomImagesDir(),  filename);
+  const defaultPath = path.join(getDefaultImagesDir(), filename);
 
-  const customMatch = findFileCaseInsensitive(customDir, filename);
-  if (customMatch) {
-    console.log(`🖼️ Caricamento ${filename} personalizzato da: ${customMatch}`);
-    return customMatch;
+  if (fs.existsSync(customPath)) {
+    console.log(`🖼️ Caricamento ${filename} personalizzato da: ${customPath}`);
+    return customPath;
   }
-  const defaultMatch = findFileCaseInsensitive(defaultDir, filename);
-  if (defaultMatch) {
-    console.log(`🖼️ Caricamento ${filename} default da: ${defaultMatch}`);
-    return defaultMatch;
+  if (fs.existsSync(defaultPath)) {
+    console.log(`🖼️ Caricamento ${filename} default da: ${defaultPath}`);
+    return defaultPath;
   }
 
   // File non trovato → fallback
   console.warn(`⚠️ Immagine "${filename}" non trovata — uso fallback "${fallbackFilename}"`);
-  const fbCustom = findFileCaseInsensitive(customDir, fallbackFilename);
-  if (fbCustom) return fbCustom;
-  const fbDefault = findFileCaseInsensitive(defaultDir, fallbackFilename);
-  return fbDefault ?? path.join(defaultDir, fallbackFilename); // LogoBlank.png è sempre nel bundle
+  const fbCustom  = path.join(getCustomImagesDir(),  fallbackFilename);
+  const fbDefault = path.join(getDefaultImagesDir(), fallbackFilename);
+  if (fs.existsSync(fbCustom))  return fbCustom;
+  return fbDefault; // LogoBlank.png è sempre nel bundle
 }
 
 /**
