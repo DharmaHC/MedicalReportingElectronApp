@@ -524,8 +524,8 @@ function getCompanyAssets(companyId?: string) {
   const logoFilename   = companySettings.logoFile   ?? `Logo${id}.png`;
   const footerFilename = companySettings.footerFile ?? `Footer${id}.png`;
 
-  const logoPath      = getImagePathWithFallback(logoFilename,   'LogoAster.png');
-  const footerImgPath = getImagePathWithFallback(footerFilename, 'FooterAster.png');
+  const logoPath      = getImagePathWithFallback(logoFilename,   'LogoBlank.png');
+  const footerImgPath = getImagePathWithFallback(footerFilename, 'LogoBlank.png');
 
   console.log(`🏢 [getCompanyAssets] id="${id}" logoFile="${logoFilename}" logo="${logoPath}" footerFile="${footerFilename}"`);
 
