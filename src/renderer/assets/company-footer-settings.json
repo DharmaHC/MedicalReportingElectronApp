@@ -1,13 +1,13 @@
 {
   "DEFAULT": {
     "footerText": "",
-    "footerImageWidth": 160,
-    "footerImageHeight": 32,
+    "footerImageWidth": 0,
+    "footerImageHeight": 0,
     "blankFooterHeight": 15,
-    "yPosFooterImage": 15,
+    "yPosFooterImage": 0,
     "footerImageXPositionOffset": 0,
-    "logoFile": "LogoAster.png",
-    "footerFile": "FooterAster.png"
+    "logoFile": "LogoBlank.png",
+    "footerFile": "LogoBlank.png"
   },
   "ASTER": {
     "footerText": "Aster Diagnostica Srl a socio unico - P.I. e C.F. 06191121000",
