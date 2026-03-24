@@ -347,6 +347,28 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
       if (isAutomatic) {
         log.info('[Namirial] Modalità AUTOMATICA: skippo openSession, verifica credenziali con enable...');
 
+        // Diagnostica health check per on-premises automatica
+        if (this.isOnPremise) {
+          try {
+            const [healthResult] = await client.healthCheckAsync({});
+            const hr = healthResult?.return || healthResult;
+            const globalStatus = hr?.globalStatus ?? 'UNKNOWN';
+            const serviceChecks: any[] = Array.isArray(hr?.serviceChecks) ? hr.serviceChecks : [];
+            log.info(`[Namirial] Health check (automatica) globalStatus: ${globalStatus}`);
+            for (const check of serviceChecks) {
+              const st = check?.status ?? 'UNKNOWN';
+              const name = check?.name ?? '?';
+              if (st !== 'UP' && st !== 'AVAILABLE') {
+                log.warn(`[Namirial] Servizio ${name}: ${st}`);
+              } else {
+                log.info(`[Namirial] Servizio ${name}: ${st}`);
+              }
+            }
+          } catch (healthErr: any) {
+            log.warn('[Namirial] Health check non disponibile (automatica):', healthErr.message);
+          }
+        }
+
         // Proviamo a validare le credenziali con il metodo "enable" o facendo una firma di test
         // In modalità automatica, creiamo una "sessione virtuale" senza sessionKey
         // Le credenziali verranno passate direttamente ai metodi di firma
