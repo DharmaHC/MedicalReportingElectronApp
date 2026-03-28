@@ -56,8 +56,9 @@ const dispatch = useDispatch();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Stato per configurazione provider firma (solo admin)
+  // Stato per configurazione provider firma (admin o medico con showSignConfig)
   const [providersConfigVisible, setProvidersConfigVisible] = useState(false);
+  const [showSignConfig, setShowSignConfig] = useState(false);
 
   // Stato per il warning "referti in attesa di firma" al logout
   const [pendingSignWarning, setPendingSignWarning] = useState<{
@@ -312,6 +313,13 @@ const dispatch = useDispatch();
     }
   };
 
+  // Carica showSignConfig dalle impostazioni globali
+  useEffect(() => {
+    window.appSettings?.get().then(settings => {
+      setShowSignConfig(settings.showSignConfig !== false);  // default true
+    }).catch(() => setShowSignConfig(true));
+  }, []);
+
   // useEffect Principale (filtri)
   useEffect(() => {
     if (location.state?.reload === false) {
@@ -408,7 +416,7 @@ const dispatch = useDispatch();
                   isAdmin={isAdmin}
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
                   onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
-                  onConfigureProviders={isAdmin ? handleOpenProvidersConfig : undefined}
+                  onConfigureProviders={(isAdmin || (showSignConfig && !!doctorCode)) ? handleOpenProvidersConfig : undefined}
                 />
               </div>
             </div>

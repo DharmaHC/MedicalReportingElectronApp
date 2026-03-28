@@ -60,13 +60,8 @@ const STATUS_OPTIONS = [
 
 // Funzione per ottenere date di default (ultimi 15 giorni)
 const getDefaultDateRange = () => {
-  const today = new Date();
-  const fifteenDaysAgo = new Date(today);
-  fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-  return {
-    dateFrom: fifteenDaysAgo.toISOString().split('T')[0],
-    dateTo: today.toISOString().split('T')[0]
-  };
+  const today = new Date().toISOString().split('T')[0];
+  return { dateFrom: today, dateTo: today };
 };
 
 /**
@@ -125,12 +120,23 @@ const BulkSignModal: React.FC = () => {
   // EFFECTS
   // =========================================================================
 
-  // Carica provider all'apertura
+  // Carica provider all'apertura e pre-seleziona il provider dell'utente loggato
   useEffect(() => {
     if (isModalOpen && availableProviders.length === 0) {
       dispatch(fetchAvailableProviders());
     }
   }, [isModalOpen, availableProviders.length, dispatch]);
+
+  // Pre-seleziona il provider dell'utente (remoteSignProvider dal DB) se disponibile
+  useEffect(() => {
+    if (!remoteSignProvider || !availableProviders.length) return;
+    const matchingProvider = availableProviders.find(
+      p => p.id.toUpperCase() === remoteSignProvider.toUpperCase() && p.enabled && p.configured
+    );
+    if (matchingProvider) {
+      dispatch(setSelectedProvider(matchingProvider.id));
+    }
+  }, [availableProviders, remoteSignProvider, dispatch]);
 
   // Imposta date di default (ultimi 15 giorni) quando la modal si apre per la prima volta
   useEffect(() => {

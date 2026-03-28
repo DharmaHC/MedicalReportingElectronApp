@@ -341,93 +341,62 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
     try {
       const client = await this.getClient();
 
-      // Per la firma AUTOMATICA (senza OTP), NON usiamo openSession
-      // Le credenziali demo (DEMO/foo123) sono configurate per firma automatica
-      // e openSession non è permesso. Passiamo le credenziali direttamente a signPAdES.
+      // Per la firma AUTOMATICA (senza OTP):
+      // - On-premises SWS: chiamiamo openSession senza OTP per ottenere sessionKey reale
+      // - SaaS: sessione virtuale (openSession non permesso in automatic mode SaaS)
       if (isAutomatic) {
-        log.info('[Namirial] Modalità AUTOMATICA: skippo openSession, verifica credenziali con enable...');
-
-        // Diagnostica health check per on-premises automatica
         if (this.isOnPremise) {
+          // On-premises AHI: openSession senza OTP → sessionKey reale per signPAdES
+          log.info('[Namirial] Modalità AUTOMATICA on-premises: openSession senza OTP per ottenere sessionKey...');
           try {
-            const [healthResult] = await client.healthCheckAsync({});
-            const hr = healthResult?.return || healthResult;
-            const globalStatus = hr?.globalStatus ?? 'UNKNOWN';
-            const serviceChecks: any[] = Array.isArray(hr?.serviceChecks) ? hr.serviceChecks : [];
-            log.info(`[Namirial] Health check (automatica) globalStatus: ${globalStatus}`);
-            for (const check of serviceChecks) {
-              const st = check?.status ?? 'UNKNOWN';
-              const name = check?.name ?? '?';
-              if (st !== 'UP' && st !== 'AVAILABLE') {
-                log.warn(`[Namirial] Servizio ${name}: ${st}`);
-              } else {
-                log.info(`[Namirial] Servizio ${name}: ${st}`);
-              }
+            const openSessionArgs = { credentials: swsCredentials };
+            log.info('[Namirial] Args openSession (AHI automatica):', JSON.stringify({
+              credentials: { username: swsCredentials.username, password: '***' }
+            }));
+            const response = await client.openSessionAsync(openSessionArgs);
+            const result = response[0];
+            log.info('[Namirial] openSession (AHI automatica) risposta:', JSON.stringify(result, null, 2));
+
+            const sessionKey = result?.sessionKey || result?.return?.sessionKey;
+            if (!sessionKey) {
+              throw new Error('SessionKey non ricevuto da SWS per AHI automatica');
             }
-          } catch (healthErr: any) {
-            log.warn('[Namirial] Health check non disponibile (automatica):', healthErr.message);
-          }
-        }
 
-        // Proviamo a validare le credenziali con il metodo "enable" o facendo una firma di test
-        // In modalità automatica, creiamo una "sessione virtuale" senza sessionKey
-        // Le credenziali verranno passate direttamente ai metodi di firma
-
-        // Verifichiamo se il metodo enable esiste
-        if (typeof client.enableAsync === 'function') {
-          log.info('[Namirial] Chiamata SOAP enable per verifica credenziali...');
-          try {
-            const enableArgs = {
-              credentials: swsCredentials
+            const expiresAt = new Date(Date.now() + sessionDurationMinutes * 60 * 1000);
+            this.currentCredentials = { ...swsCredentials };
+            const session: RemoteSignSession = {
+              sessionId: sessionKey,
+              providerId: this.providerId,
+              userId: credentials.username,
+              expiresAt,
+              certificate: { cn: credentials.username, serialNumber: 'N/A', issuer: 'Namirial S.p.A.' },
+              accessToken: undefined,
+              metadata: { isAutomatic: true, hasSessionKey: true, credentials: swsCredentials }
             };
-            const [enableResult] = await client.enableAsync(enableArgs);
-            log.info('[Namirial] Risposta enable:', JSON.stringify(enableResult, null, 2));
-
-            // Controlla errori
-            if (enableResult?.return?.code && enableResult.return.code !== '0') {
-              throw new RemoteSignError(
-                enableResult.return.description || `Errore enable: ${enableResult.return.code}`,
-                enableResult.return.code,
-                this.providerId,
-                false
-              );
-            }
-          } catch (enableError: any) {
-            // Se enable fallisce, logghiamo ma proviamo comunque a creare la sessione virtuale
-            // Alcune configurazioni potrebbero non supportare enable
-            log.warn('[Namirial] Metodo enable fallito:', enableError.message);
-            log.info('[Namirial] Procedo comunque con sessione virtuale (le credenziali verranno verificate alla prima firma)');
+            log.info(`[Namirial] Sessione AHI on-premises aperta con sessionKey: ${sessionKey}`);
+            return session;
+          } catch (openErr: any) {
+            log.warn('[Namirial] openSession AHI on-premises fallito, fallback a sessione virtuale:', openErr.message);
+            // fallback sotto
           }
         } else {
-          log.info('[Namirial] Metodo enable non disponibile, creo sessione virtuale senza verifica preventiva');
+          log.info('[Namirial] Modalità AUTOMATICA SaaS: sessione virtuale (openSession non permesso)');
         }
 
-        // Crea una "sessione virtuale" per firma automatica
-        // Le credenziali verranno passate direttamente a signPAdES
+        // Sessione virtuale (SaaS o fallback on-premises)
         const virtualSessionId = `AUTO_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
-
-        // Salva credenziali per uso nelle firme
         this.currentCredentials = { ...swsCredentials };
-
         const session: RemoteSignSession = {
           sessionId: virtualSessionId,
           providerId: this.providerId,
           userId: credentials.username,
           expiresAt,
-          certificate: {
-            cn: credentials.username,
-            serialNumber: 'N/A',
-            issuer: 'Namirial S.p.A.'
-          },
-          accessToken: undefined,  // Nessun token per sessione automatica
-          metadata: {
-            isAutomatic: true,
-            credentials: swsCredentials  // Credenziali da usare nelle firme
-          }
+          certificate: { cn: credentials.username, serialNumber: 'N/A', issuer: 'Namirial S.p.A.' },
+          accessToken: undefined,
+          metadata: { isAutomatic: true, credentials: swsCredentials }
         };
-
-        log.info(`[Namirial] Sessione AUTOMATICA creata: ${virtualSessionId}, scade: ${expiresAt.toISOString()}`);
+        log.info(`[Namirial] Sessione AUTOMATICA virtuale creata: ${virtualSessionId}`);
         return session;
       }
 
@@ -694,8 +663,16 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
       let credentials: SwsCredentials;
 
       if (isAutomatic) {
-        // Modalità AUTOMATICA: passa username + password direttamente
-        // Le credenziali sono salvate nei metadata della sessione
+        // Modalità AUTOMATICA on-premises: usa sessionKey reale ottenuto da openSession
+        // Modalità AUTOMATICA SaaS o fallback: usa credenziali dirette
+        if (session.metadata?.hasSessionKey && !session.sessionId.startsWith('AUTO_')) {
+          credentials = {
+            username: session.userId,
+            password: '',
+            sessionKey: session.sessionId
+          };
+          log.info(`[Namirial] Firma AHI on-premises con sessionKey: ${session.sessionId}`);
+        } else {
         const savedCreds = session.metadata?.credentials as SwsCredentials;
         if (!savedCreds) {
           throw new RemoteSignError(
@@ -708,9 +685,9 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         credentials = {
           username: savedCreds.username,
           password: savedCreds.password
-          // NON includiamo sessionKey per firma automatica
         };
         log.info(`[Namirial] Usando credenziali dirette per firma automatica: ${credentials.username}`);
+        }
       } else if (session.metadata?.isStatelessOtp) {
         // Modalità OTP STATELESS (on-premises fallback): passa username + password + otp direttamente
         // senza sessionKey — il server autentica ogni chiamata con le credenziali complete
@@ -825,27 +802,35 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         );
       }
 
-      // Cerca il buffer firmato in tutti i possibili campi
-      // Il nome del campo può variare in base alla versione SWS
-      // NOTA: SWS SaaS restituisce il PDF firmato direttamente in 'return' (non in signedBuffer)
-      let signedBuffer = result?.return  // Campo principale per SWS SaaS
-                      || result?.signedBuffer
-                      || result?.return?.signedBuffer
-                      || result?.buffer
-                      || result?.return?.buffer
-                      || result?.signedPDF
-                      || result?.return?.signedPDF
-                      || result?.pdfSigned
-                      || result?.return?.pdfSigned;
+      // Cerca il buffer firmato nella risposta SWS.
+      // NOTA: la struttura varia tra SaaS e on-premises:
+      //   - SaaS: result.return è direttamente la stringa base64 del PDF firmato
+      //   - On-premises: result.return è un oggetto { code, signedBuffer, ... }
+      let signedBuffer: string | null = null;
 
-      // Se non trovato nei campi standard, cerca qualsiasi campo stringa che sembri un PDF base64
-      if (!signedBuffer && result) {
-        for (const key of Object.keys(result)) {
-          const val = result[key];
-          if (typeof val === 'string' && val.length > 1000) {
-            // Verifica se inizia con header PDF in base64 (JVBERi0 = %PDF-)
-            if (val.startsWith('JVBERi0') || val.startsWith('/9j/')) {
-              log.info(`[Namirial] Buffer firmato trovato nel campo '${key}' (${val.length} caratteri)`);
+      // Caso 1: SaaS → result.return è una stringa base64
+      if (typeof result?.return === 'string' && result.return.length > 100) {
+        log.info('[Namirial] Buffer firmato trovato in result.return (stringa, modalità SaaS)');
+        signedBuffer = result.return;
+      }
+      // Caso 2: On-premises → result.return è un oggetto con campo signedBuffer/buffer/pdfSigned/...
+      else if (typeof result?.return === 'object' && result?.return !== null) {
+        const ret = result.return;
+        for (const field of ['signedBuffer', 'buffer', 'signedPDF', 'pdfSigned', 'pdf', 'data']) {
+          if (typeof ret[field] === 'string' && ret[field].length > 100) {
+            log.info(`[Namirial] Buffer firmato trovato in result.return.${field} (modalità on-premises)`);
+            signedBuffer = ret[field];
+            break;
+          }
+        }
+        // Se non trovato nei campi noti, scansiona tutto l'oggetto return cercando base64 PDF
+        if (!signedBuffer) {
+          for (const key of Object.keys(ret)) {
+            if (key === 'code' || key === 'description' || key === 'errorCode') continue;
+            const val = ret[key];
+            if (typeof val === 'string' && val.length > 1000 &&
+                (val.startsWith('JVBERi0') || val.startsWith('/9j/'))) {
+              log.info(`[Namirial] Buffer firmato trovato in result.return.${key} (scan fallback)`);
               signedBuffer = val;
               break;
             }
@@ -853,7 +838,31 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         }
       }
 
-      // Ultimo tentativo: controlla se result stesso è una stringa (buffer diretto)
+      // Caso 3: campi direttamente su result (fuori da return)
+      if (!signedBuffer) {
+        for (const field of ['signedBuffer', 'buffer', 'signedPDF', 'pdfSigned']) {
+          if (typeof result?.[field] === 'string' && result[field].length > 100) {
+            log.info(`[Namirial] Buffer firmato trovato in result.${field}`);
+            signedBuffer = result[field];
+            break;
+          }
+        }
+      }
+
+      // Caso 4: scan generico su result cercando base64 PDF
+      if (!signedBuffer && result && typeof result === 'object') {
+        for (const key of Object.keys(result)) {
+          const val = result[key];
+          if (typeof val === 'string' && val.length > 1000 &&
+              (val.startsWith('JVBERi0') || val.startsWith('/9j/'))) {
+            log.info(`[Namirial] Buffer firmato trovato in result.${key} (scan fallback)`);
+            signedBuffer = val;
+            break;
+          }
+        }
+      }
+
+      // Caso 5: result stesso è una stringa (buffer diretto)
       if (!signedBuffer && typeof result === 'string' && result.length > 1000) {
         log.info(`[Namirial] Risposta è direttamente il buffer (${result.length} caratteri)`);
         signedBuffer = result;

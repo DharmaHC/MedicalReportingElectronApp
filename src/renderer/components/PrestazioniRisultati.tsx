@@ -1026,6 +1026,11 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
         onClick={() => {
           if (showReportButton) {
             handleIconClick(subExamTypeId, props.dataItem);
+          } else if (!isTechnician) {
+            alert(
+              "Impossibile aprire l'editor: il codice medico non è configurato per questo utente.\n\n" +
+              "Si prega di contattare l'assistenza tecnica per completare la configurazione."
+            );
           }
         }}
         title={showReportButton ? "Apri editor referto" : ""}

@@ -28,6 +28,10 @@ interface AuthState {
   hasRemoteSignPassword: boolean;
   /** ➜ Indica se il PIN di firma è configurato nel DB (Namirial richiede password + PIN separati) */
   hasRemoteSignPin: boolean;
+  /** ➜ Codice dispositivo RHI (firma remota con OTP, Namirial) */
+  codCertRHI: string | null;
+  /** ➜ Indica se il PIN RHI è configurato nel DB */
+  hasRhiPin: boolean;
 }
 
 const initialState: AuthState = {
@@ -49,6 +53,8 @@ const initialState: AuthState = {
   remoteSignProvider: null,
   hasRemoteSignPassword: false,
   hasRemoteSignPin: false,
+  codCertRHI: null,
+  hasRhiPin: false,
 };
 
 const authSlice = createSlice({
@@ -75,6 +81,8 @@ const authSlice = createSlice({
       state.remoteSignProvider = null;
       state.hasRemoteSignPassword = false;
       state.hasRemoteSignPin = false;
+      state.codCertRHI = null;
+      state.hasRhiPin = false;
     },
     setToken(state, action: PayloadAction<string | null>) {
       state.token = action.payload;
@@ -121,6 +129,12 @@ const authSlice = createSlice({
     setHasRemoteSignPin(state, action: PayloadAction<boolean>) {
       state.hasRemoteSignPin = action.payload;
     },
+    setCodCertRHI(state, action: PayloadAction<string | null>) {
+      state.codCertRHI = action.payload;
+    },
+    setHasRhiPin(state, action: PayloadAction<boolean>) {
+      state.hasRhiPin = action.payload;
+    },
   },
 });
 
@@ -142,6 +156,8 @@ export const {
   setRemoteSignProvider,
   setHasRemoteSignPassword,
   setHasRemoteSignPin,
+  setCodCertRHI,
+  setHasRhiPin,
 } = authSlice.actions;
 
 export default authSlice.reducer;
