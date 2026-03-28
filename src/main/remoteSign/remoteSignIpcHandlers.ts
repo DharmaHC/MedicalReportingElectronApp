@@ -740,7 +740,7 @@ export function registerRemoteSignIpcHandlers(): void {
       const decorateResult = await decoratePdfOnly({
         pdfBase64: params.pdfBase64,
         companyId: params.companyId,
-        footerText: params.footerText ?? null
+        footerText: params.footerText ?? undefined
       });
 
       // 3. Aggiungi dicitura firma al PDF decorato
