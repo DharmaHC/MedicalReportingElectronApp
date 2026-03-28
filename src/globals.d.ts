@@ -51,6 +51,7 @@ interface Settings {
   tsaUrl: string;
   useMRAS: boolean;
   showAppMenu: boolean;
+  showSignConfig?: boolean; // Se true (default), mostra UI configurazione credenziali firma remota
   reportPageWidth: number;
   reportPageHeight: number;
   editorZoomDefault: number;

@@ -35,7 +35,8 @@ import {
   url_getPatientReportsNoPdf,
   url_getPatientSignedReport,
   url_getCompiledRtfTemplate,
-  getOriginalApiBaseUrl
+  getOriginalApiBaseUrl,
+  getApiBaseUrl
 } from "../utility/urlLib";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { RootState } from "../store";
@@ -758,7 +759,6 @@ const renderPinDialog = () =>
   const allowMedicalReportDigitalSignature = useSelector( // Flag per abilitare la firma digitale.
     (state: RootState) => state.auth.allowMedicalReportDigitalSignature
   );
-  const authSignatureType     = useSelector((state: RootState) => state.auth.signatureType);
   const authUserCN            = useSelector((state: RootState) => state.auth.userCN);
   const authRemoteSignUsername = useSelector((state: RootState) => state.auth.remoteSignUsername);
 
@@ -2541,12 +2541,16 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     //       3. Inviare anche il file CAdES (p7m) separato dal PDF firmato
 
     // Calcola isPdfSigned con cast esplicito a boolean per evitare errori di serializzazione
+    // - PKCS11 CAdES: p7mBase64 presente
+    // - Remote PAdES (AHI/RHI): nessun p7m ma signatureAudit è definito
     const isPdfSigned = Boolean(
       allowMedicalReportDigitalSignature &&
       !isDraft &&
       !BYPASS_SIGNATURE &&
-      p7mBase64 !== null &&
-      p7mBase64 !== ''
+      (
+        (p7mBase64 !== null && p7mBase64 !== '') ||
+        signatureAudit !== undefined
+      )
     );
 
     // LOG pre-body per debug dei valori
@@ -2605,11 +2609,30 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
         setCachedReportData(null); // Pulisce la cache dopo un salvataggio/invio riuscito.
         setIsModified(false);      // Resetta il flag di modifica.
 
+        // Se il report è firmato, recupera il PDF dal DB e mostralo nell'anteprima inline.
+        // Questo garantisce che l'anteprima rifletta esattamente ciò che è stato salvato
+        // (incluso il timbro PAdES di Namirial).
+        if (!isDraft && isPdfSigned && responseData?.digitalReportId) {
+          try {
+            const signedPdfResponse = await fetch(
+              `${getApiBaseUrl()}reports/${responseData.digitalReportId}/pdf`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (signedPdfResponse.ok) {
+              const pdfBlob = await signedPdfResponse.blob();
+              const blobUrl = URL.createObjectURL(pdfBlob);
+              if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+              pdfUrlRef.current = blobUrl;
+              setPdfUrl(blobUrl);
+              console.log("✅ Anteprima PDF firmato caricata dal DB (digitalReportId:", responseData.digitalReportId, ")");
+            }
+          } catch (e) {
+            console.warn("⚠️ Impossibile caricare anteprima PDF firmato dal DB:", e);
+          }
+        }
+
         // Se il report è finalizzato (non bozza) e l'utente ha l'opzione attiva, stampa il referto.
         if (!isDraft && printReportWhenFinished) {
-          // Decide quale PDF stampare: se firmato, usa quello, altrimenti quello originale.
-          // Attualmente handlePrintReferto rigenera il PDF non firmato,
-          // potrebbe essere necessario adattare se si vuole stampare il PDF firmato `signedPdfBase64`.
           handlePrintReferto(signedPdfBase64 ? signedPdfBase64 : undefined)
         }
 
@@ -2637,14 +2660,6 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
     setIsProcessing(true); // Mostra indicatore di caricamento.
     setIsDraftOperation(isDraft); // Imposta se l'operazione è una bozza (per il messaggio di caricamento).
 
-    // Se il medico è abilitato alla firma automatica e non è una bozza,
-    // "Termina e Invia" si comporta come "Salva da Firmare".
-    if (!isDraft && allowMedicalReportDigitalSignature && authSignatureType === 'automatic') {
-      setIsProcessing(false);
-      handleSaveForLaterSigning();
-      return;
-    }
-
     // Salva con parametri che generano i dati del report (PDF e RTF).
     // Il flag `isSigningProcess` è true solo se la firma è abilitata E non è una bozza.
     const reportData = await generateReportData(rtfNeedsToBeStored, (allowMedicalReportDigitalSignature && !isDraft));
@@ -2654,42 +2669,45 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
       let finalPdfToSend: string | null = reportData.pdfContent; // PDF da inviare (inizialmente quello generato).
       let p7mFileToSend: string | null = null; // File P7M (firma CAdES), inizialmente null.
 
-      // ⚠️ BYPASS: Se bypass è attivo, forza la "firma" (che in realtà è solo decorazione)
-      // Se la firma digitale è abilitata E non è una bozza, procedi con la firma.
       // -----------------------------------------------------------------------
-      // LOGICA DI FIRMA: 4 casi basati su signatureType e userCN
+      // LOGICA DI FIRMA: fallback chain PKCS11 → RHI OTP → AHI automatica → nessuna
       // -----------------------------------------------------------------------
       let auditInfo: Parameters<typeof callProcessReportApi>[5] = undefined;
 
       if ((allowMedicalReportDigitalSignature && !isDraft) || BYPASS_SIGNATURE) {
-        const signatureType      = reduxStore.getState().auth.signatureType; // 'otp' | 'automatic' | null
         const userCN             = reduxStore.getState().auth.userCN;
-        const remoteSignUsername = reduxStore.getState().auth.remoteSignUsername;
+        const codCertRHI         = (reduxStore.getState().auth as any).codCertRHI as string | null;
+        const remoteSignUsername = reduxStore.getState().auth.remoteSignUsername; // AHI code
+        const remoteProvider     = reduxStore.getState().auth.remoteSignProvider;
+        const authToken          = reduxStore.getState().auth.token;
+        const currentUser        = reduxStore.getState().auth.userName;
+        const doctorFullName     = reduxStore.getState().auth.doctorFullName;
 
         // Firma locale: solo se userCN è valorizzato (o bypass attivo)
         const hasLocalSign = Boolean(userCN) || BYPASS_SIGNATURE;
-        // Firma OTP remota: solo se abilitato a OTP E username remoto configurato
-        const hasRemoteOtp = signatureType === 'otp' && Boolean(remoteSignUsername);
+        // Firma RHI OTP remota: solo se codCertRHI configurato
+        const hasRHI = Boolean(codCertRHI);
+        // Firma AHI automatica: solo se remoteSignUsername (AHI) configurato
+        const hasAHI = Boolean(remoteSignUsername) && Boolean(remoteProvider);
 
-        // Caso 4: nessuna firma configurata → salva senza firma (salta il blocco)
-        if (!hasLocalSign && !hasRemoteOtp) {
-          // nessuna azione: finalPdfToSend rimane il PDF originale, auditInfo rimane undefined
+        const hasAnySigning = hasLocalSign || hasRHI || hasAHI;
+
+        if (!hasAnySigning) {
+          // Nessuna firma configurata → salva senza firma
         } else {
           // Salvataggio bozza tecnica prima della firma (recupero in caso di errore)
           await callProcessReportApi(finalPdfToSend, null, reportData.rtfContent, true, true);
 
-          let signedLocally = false;
+          let signedOk = false;
 
-          // Caso 1: firma locale PKCS11 (userCN configurato o BYPASS)
-          if (useMRAS && hasLocalSign) {
-            // Verifica presenza fisica del device prima di chiedere il PIN
+          // ---- Caso 1: firma locale PKCS11 ----
+          if (!signedOk && useMRAS && hasLocalSign) {
             let skipLocalSign = false;
             if (!BYPASS_SIGNATURE) {
               const deviceCheck = await (window as any).nativeSign.checkDevice();
               if (!deviceCheck.available) {
-                if (hasRemoteOtp) {
-                  // Nessun device ma OTP disponibile → fallback diretto, senza mostrare errore
-                  console.info('[Firma] Device non rilevato, fallback automatico a OTP remota');
+                if (hasRHI || hasAHI) {
+                  console.info('[Firma] Device non rilevato, fallback a firma remota');
                   skipLocalSign = true;
                 } else {
                   setErrorMessage('Dispositivo di firma non rilevato. Inserire la smart card o il token USB e riprovare.');
@@ -2700,70 +2718,55 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
             }
 
             if (!skipLocalSign) {
-            const pin = await getSessionPin();
-            if (!pin) {
-              setErrorMessage("Firma annullata: PIN non fornito.");
-              setIsProcessing(false);
-              return;
-            }
-            try {
-              const doctorFullName = reduxStore.getState().auth.doctorFullName;
-              const signResponse = await (window as any).nativeSign.signPdf({
-                pdfBase64      : reportData.pdfContent,
-                companyId      : companyId,
-                footerText     : null,
-                useRemote      : null,
-                otpCode        : null,
-                pin            : pin,
-                userCN         : userCN,
-                bypassSignature: BYPASS_SIGNATURE,
-                signedByName   : BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined,
-                doctorName     : doctorFullName,
-              });
-              finalPdfToSend = signResponse.signedPdfBase64;
-              p7mFileToSend  = signResponse.p7mBase64;
-              setLastSignedPdfBase64(finalPdfToSend);
-              signedLocally  = true;
-              auditInfo = {
-                signatureType: 'LOCAL_PKCS11',
-                provider: undefined,
-                certificateCN: userCN ?? undefined,
-                bypassActive: BYPASS_SIGNATURE,
-              };
-            } catch (err: any) {
-              const msg = err.message || '';
-              if (msg.includes('PIN non valido') || msg.includes('incorrect PIN')) {
-                setErrorMessage('Il PIN inserito non è corretto. Riprova.');
-                setIsProcessing(false);
-                showPinDialog();
-                return;
-              }
-              // Se non ha OTP come fallback, blocca con errore
-              if (!hasRemoteOtp) {
-                setErrorMessage(`Errore durante la firma locale: ${msg}`);
+              const pin = await getSessionPin();
+              if (!pin) {
+                setErrorMessage("Firma annullata: PIN non fornito.");
                 setIsProcessing(false);
                 return;
               }
-              // Altrimenti continua verso il fallback OTP remoto
-              console.warn('[Firma] Firma locale fallita, fallback a OTP remota:', msg);
+              try {
+                const signResponse = await (window as any).nativeSign.signPdf({
+                  pdfBase64      : reportData.pdfContent,
+                  companyId      : companyId,
+                  footerText     : null,
+                  useRemote      : null,
+                  otpCode        : null,
+                  pin,
+                  userCN,
+                  bypassSignature: BYPASS_SIGNATURE,
+                  signedByName   : BYPASS_SIGNATURE ? OVERRIDE_USER_CN : undefined,
+                  doctorName     : doctorFullName,
+                });
+                finalPdfToSend = signResponse.signedPdfBase64;
+                p7mFileToSend  = signResponse.p7mBase64;
+                setLastSignedPdfBase64(finalPdfToSend);
+                signedOk = true;
+                auditInfo = {
+                  signatureType: 'LOCAL_PKCS11',
+                  provider: undefined,
+                  certificateCN: userCN ?? undefined,
+                  bypassActive: BYPASS_SIGNATURE,
+                };
+              } catch (err: any) {
+                const msg = err.message || '';
+                if (msg.includes('PIN non valido') || msg.includes('incorrect PIN')) {
+                  setErrorMessage('Il PIN inserito non è corretto. Riprova.');
+                  setIsProcessing(false);
+                  showPinDialog();
+                  return;
+                }
+                if (!hasRHI && !hasAHI) {
+                  setErrorMessage(`Errore durante la firma locale: ${msg}`);
+                  setIsProcessing(false);
+                  return;
+                }
+                console.warn('[Firma] Firma locale fallita, fallback a firma remota:', msg);
+              }
             }
-            } // end if (!skipLocalSign)
-          } // end if (useMRAS && hasLocalSign)
+          }
 
-          // Caso 2: firma remota OTP (diretta o fallback da locale)
-          if (!signedLocally && hasRemoteOtp) {
-            const remoteUsername = reduxStore.getState().auth.remoteSignUsername;
-            const remoteProvider = reduxStore.getState().auth.remoteSignProvider;
-            const authToken      = reduxStore.getState().auth.token;
-            const currentUser    = reduxStore.getState().auth.userName;
-
-            if (!remoteUsername || !remoteProvider) {
-              setErrorMessage('Credenziali firma remota non configurate per questo medico.');
-              setIsProcessing(false);
-              return;
-            }
-
-            // Recupera password e PIN decriptati dal backend
+          // ---- Caso 2: firma remota RHI con OTP ----
+          if (!signedOk && hasRHI) {
             const credsResult = await (window as any).remoteSign.getStoredCredentials({
               token     : authToken,
               apiBaseUrl: getOriginalApiBaseUrl(),
@@ -2771,47 +2774,106 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
             });
 
             if (!credsResult.success) {
-              setErrorMessage(`Impossibile recuperare le credenziali remote: ${credsResult.error}`);
+              if (!hasAHI) {
+                setErrorMessage(`Impossibile recuperare credenziali RHI: ${credsResult.error}`);
+                setIsProcessing(false);
+                return;
+              }
+              console.warn('[Firma] Credenziali RHI non disponibili, fallback ad AHI');
+            } else {
+              const otp = await getOtpCode(
+                `Inserisci il codice OTP Namirial per il dispositivo RHI: ${codCertRHI}`
+              );
+              if (!otp) {
+                if (!hasAHI) {
+                  setErrorMessage('Firma OTP annullata.');
+                  setIsProcessing(false);
+                  return;
+                }
+                console.info('[Firma] OTP non fornito, fallback ad AHI automatica');
+              } else {
+                const signResult = await (window as any).remoteSign.signSingleOtp({
+                  pdfBase64   : reportData.pdfContent,
+                  providerId  : (remoteProvider || 'NAMIRIAL').toUpperCase(),
+                  username    : codCertRHI,
+                  password    : credsResult.password || '',
+                  pin         : credsResult.pinRHI || '',
+                  otp,
+                  signedByName: doctorFullName || codCertRHI,
+                  isAutomatic : false,
+                  companyId,
+                });
+
+                if (!signResult.success) {
+                  if (!hasAHI) {
+                    setErrorMessage(`Errore firma RHI OTP: ${signResult.error}`);
+                    setIsProcessing(false);
+                    return;
+                  }
+                  console.warn('[Firma] Firma RHI fallita, fallback ad AHI:', signResult.error);
+                } else {
+                  finalPdfToSend = signResult.signedPdfBase64;
+                  p7mFileToSend  = null;
+                  setLastSignedPdfBase64(finalPdfToSend);
+                  signedOk = true;
+                  auditInfo = {
+                    signatureType: 'REMOTE_OTP',
+                    provider: remoteProvider || 'NAMIRIAL',
+                    certificateCN: codCertRHI ?? undefined,
+                    bypassActive: false,
+                  };
+                }
+              }
+            }
+          }
+
+          // ---- Caso 3: firma AHI automatica (con avviso all'utente) ----
+          if (!signedOk && hasAHI) {
+            const credsResult = await (window as any).remoteSign.getStoredCredentials({
+              token     : authToken,
+              apiBaseUrl: getOriginalApiBaseUrl(),
+              username  : currentUser,
+            });
+
+            if (!credsResult.success) {
+              setErrorMessage(`Impossibile recuperare credenziali AHI: ${credsResult.error}`);
               setIsProcessing(false);
               return;
             }
 
-            // Chiedi OTP all'utente
-            const otp = await getOtpCode(
-              `Inserisci il codice OTP dal tuo dispositivo Namirial (utente: ${remoteUsername})`
-            );
-            if (!otp) {
-              setErrorMessage('Firma OTP annullata.');
-              setIsProcessing(false);
-              return;
-            }
+            console.info('[Firma] Firma automatica AHI in corso...');
 
-            const doctorFullName = reduxStore.getState().auth.doctorFullName;
             const signResult = await (window as any).remoteSign.signSingleOtp({
-              pdfBase64    : reportData.pdfContent,
-              providerId   : remoteProvider.toUpperCase(),
-              username     : remoteUsername,
-              password     : credsResult.password || '',
-              pin          : credsResult.pin || '',
-              otp,
-              signedByName : doctorFullName || remoteUsername,
+              pdfBase64   : reportData.pdfContent,
+              providerId  : remoteProvider!.toUpperCase(),
+              username    : remoteSignUsername,
+              password    : credsResult.password || '',
+              pin         : credsResult.pin || '',
+              otp         : '',
+              signedByName: doctorFullName || remoteSignUsername,
+              isAutomatic : true,
+              companyId,
             });
 
             if (!signResult.success) {
-              setErrorMessage(`Errore firma remota OTP: ${signResult.error}`);
+              setErrorMessage(`Errore firma automatica AHI: ${signResult.error}`);
               setIsProcessing(false);
               return;
             }
 
             finalPdfToSend = signResult.signedPdfBase64;
-            p7mFileToSend  = null; // PAdES: firma embedded nel PDF
+            p7mFileToSend  = null;
             setLastSignedPdfBase64(finalPdfToSend);
+            signedOk = true;
             auditInfo = {
               signatureType: 'REMOTE_OTP',
-              provider: remoteProvider,
-              certificateCN: remoteUsername,
+              provider: remoteProvider!,
+              certificateCN: remoteSignUsername ?? undefined,
               bypassActive: false,
             };
+
+            // Mostra avviso firma automatica AHI
+            setInfoMessage('Referto firmato automaticamente con certificato AHI.');
           }
         }
       }
@@ -3273,8 +3335,8 @@ const handleResultClick = async (result: any) => {
                 Termina e Invia
               </Button>
 
-              {/* "Salva da Firmare" solo per firma automatica (bulk remota senza OTP) */}
-              {allowMedicalReportDigitalSignature && authSignatureType === 'automatic' && (
+              {/* "Salva da Firmare" solo se utente ha AHI configurato (firma massiva remota) */}
+              {allowMedicalReportDigitalSignature && !!authRemoteSignUsername && (
                 <Button
                   svgIcon={saveIcon}
                   onClick={handleSaveForLaterSigning}

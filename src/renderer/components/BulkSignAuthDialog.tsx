@@ -38,8 +38,10 @@ const BulkSignAuthDialog: React.FC = () => {
   // Auth state per precompilare e per token/apiBaseUrl
   const {
     token,
+    userName,
     doctorCode,
     remoteSignUsername,
+    hasRemoteSignPassword,
     hasRemoteSignPin
   } = useSelector((state: RootState) => state.auth);
 
@@ -106,21 +108,29 @@ const BulkSignAuthDialog: React.FC = () => {
     setSessionMinutes(isNamirial ? 3 : 45);
   }, [isNamirial]);
 
-  // Carica PIN salvato dal backend (se presente)
+  // Carica credenziali salvate dal backend (password e/o PIN)
   useEffect(() => {
     const loadSavedCredentials = async () => {
       if (!token || !isNamirial) return;
-      if (!hasRemoteSignPin) return;
+      if (!hasRemoteSignPassword && !hasRemoteSignPin) return;
 
       setIsLoadingCredentials(true);
       try {
         const result = await (window as any).remoteSign?.getStoredCredentials({
           token,
-          apiBaseUrl: getOriginalApiBaseUrl()
+          apiBaseUrl: getOriginalApiBaseUrl(),
+          username: userName  // Codice fiscale per lookup nel DB
         });
 
-        if (result?.success && result.pin && hasRemoteSignPin) {
-          setPin(result.pin);
+        if (result?.success) {
+          // PIN separato (es. Namirial SaaS con password + PIN distinti)
+          if (result.pin && hasRemoteSignPin) {
+            setPin(result.pin);
+          }
+          // Password usata come PIN/Password (es. firma automatica on-premises: DHARMAHEALTHCARE/foo123)
+          else if (result.password && hasRemoteSignPassword && !hasRemoteSignPin) {
+            setPin(result.password);
+          }
         }
       } catch (error) {
         console.error('Errore caricamento credenziali salvate:', error);
@@ -130,7 +140,7 @@ const BulkSignAuthDialog: React.FC = () => {
     };
 
     loadSavedCredentials();
-  }, [token, isNamirial, hasRemoteSignPin]);
+  }, [token, isNamirial, hasRemoteSignPassword, hasRemoteSignPin]);
 
   // =========================================================================
   // HANDLERS

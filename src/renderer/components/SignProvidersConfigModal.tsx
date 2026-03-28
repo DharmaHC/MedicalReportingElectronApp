@@ -30,7 +30,9 @@ import {
   setRemoteSignUsername,
   setRemoteSignProvider,
   setHasRemoteSignPassword,
-  setHasRemoteSignPin
+  setHasRemoteSignPin,
+  setCodCertRHI,
+  setHasRhiPin
 } from '../store/authSlice';
 import { getApiBaseUrl } from '../utility/urlLib';
 import './SignProvidersConfigModal.css';
@@ -688,16 +690,22 @@ const NamirialTab: React.FC = () => {
     remoteSignUsername: currentUsername,
     remoteSignProvider: currentProvider,
     hasRemoteSignPassword: currentHasPassword,
-    hasRemoteSignPin: currentHasPin
+    hasRemoteSignPin: currentHasPin,
+    codCertRHI: currentCodCertRHI,
+    hasRhiPin: currentHasRhiPin
   } = useSelector((state: RootState) => state.auth);
 
   // State locale per il form
-  // Namirial SWS richiede: username (codice dispositivo RHI), password (=PIN), OTP
+  // AHI: username (cod. cert. AHI), pin (=PIN AHI per firma automatica)
+  // RHI: codCertRHI (cod. cert. RHI), pinRHI (=PIN RHI per firma con OTP)
   const [formData, setFormData] = useState({
-    username: currentUsername || '',
-    pin: '',           // In SWS "password" = PIN del dispositivo
+    username: currentUsername || '',   // Cod. Cert. AHI (firma automatica)
+    pin: '',                           // PIN AHI
     confirmPin: '',
-    signatureType: currentSignatureType || 'otp'
+    signatureType: currentSignatureType || 'otp',
+    codCertRHI: currentCodCertRHI || '',  // Cod. Cert. RHI (firma con OTP)
+    pinRHI: '',                            // PIN RHI
+    confirmPinRHI: ''
   });
 
   // State per configurazione endpoint (SaaS vs On-Premises)
@@ -719,9 +727,10 @@ const NamirialTab: React.FC = () => {
     setFormData(prev => ({
       ...prev,
       username: currentUsername || '',
-      signatureType: currentSignatureType || 'otp'
+      signatureType: currentSignatureType || 'otp',
+      codCertRHI: currentCodCertRHI || ''
     }));
-  }, [currentUsername, currentSignatureType]);
+  }, [currentUsername, currentSignatureType, currentCodCertRHI]);
 
   // Carica informazioni endpoint Namirial
   useEffect(() => {
@@ -795,24 +804,42 @@ const NamirialTab: React.FC = () => {
    * Namirial SWS richiede: username (codice dispositivo RHI), password=PIN
    */
   const handleSaveCredentials = async () => {
-    // Validazione
-    if (!formData.username || formData.username.trim().length < 3) {
-      showErrorMsg('Inserire un codice dispositivo valido (almeno 3 caratteri)');
+    // Validazione: almeno AHI o RHI deve essere valorizzato
+    const hasAhi = formData.username.trim().length >= 3;
+    const hasRhi = formData.codCertRHI.trim().length >= 3;
+
+    if (!hasAhi && !hasRhi) {
+      showErrorMsg('Inserire almeno un codice dispositivo (Cod. Cert. AHI o Cod. Cert. RHI)');
       return;
     }
 
-    // Se sta inserendo un nuovo PIN, verifica che corrispondano
+    if (hasAhi && formData.username.trim().length < 3) {
+      showErrorMsg('Cod. Cert. AHI non valido (almeno 3 caratteri)');
+      return;
+    }
+
+    // Se sta inserendo un nuovo PIN AHI, verifica che corrispondano
     if (formData.pin && formData.pin !== formData.confirmPin) {
-      showErrorMsg('I PIN non corrispondono');
+      showErrorMsg('I PIN AHI non corrispondono');
       return;
     }
 
-    // Se firma automatica, PIN obbligatorio (se non gia salvato)
-    if (formData.signatureType === 'automatic') {
-      if (!formData.pin && !currentHasPin) {
-        showErrorMsg('Per la firma automatica e obbligatorio inserire il PIN');
-        return;
-      }
+    // Se sta inserendo un nuovo PIN RHI, verifica che corrispondano
+    if (formData.pinRHI && formData.pinRHI !== formData.confirmPinRHI) {
+      showErrorMsg('I PIN RHI non corrispondono');
+      return;
+    }
+
+    // PIN AHI obbligatorio se AHI configurato e non già salvato
+    if (hasAhi && !formData.pin && !currentHasPin) {
+      showErrorMsg('Il PIN AHI è obbligatorio');
+      return;
+    }
+
+    // PIN RHI obbligatorio se RHI configurato e non già salvato
+    if (hasRhi && !formData.pinRHI && !currentHasRhiPin) {
+      showErrorMsg('Il PIN RHI è obbligatorio');
+      return;
     }
 
     setLoading(true);
@@ -823,19 +850,25 @@ const NamirialTab: React.FC = () => {
 
       const requestBody: any = {
         userName: userName,
-        signatureType: formData.signatureType,
-        remoteSignUsername: formData.username.trim(),
-        remoteSignProvider: 'NAMIRIAL'
+        signatureType: hasAhi ? formData.signatureType : 'otp',
+        remoteSignUsername: hasAhi ? formData.username.trim() : null,
+        remoteSignProvider: 'NAMIRIAL',
+        codCertRHI: formData.codCertRHI.trim() || null
       };
 
-      // Per Namirial SWS, il PIN è la "password" - lo salviamo in entrambi i campi per compatibilità
+      // Per Namirial SWS, il PIN AHI è la "password" - lo salviamo in entrambi i campi per compatibilità
       if (formData.pin) {
         requestBody.remoteSignPin = formData.pin;
         requestBody.remoteSignPassword = formData.pin;  // SWS usa "password" = PIN
       }
 
+      // PIN RHI (separato)
+      if (formData.pinRHI) {
+        requestBody.pinCodeRHI = formData.pinRHI;
+      }
+
       console.log('[NamirialTab] Saving credentials to:', apiUrl);
-      console.log('[NamirialTab] Request body:', JSON.stringify(requestBody, null, 2));
+      console.log('[NamirialTab] Request body:', JSON.stringify({ ...requestBody, remoteSignPin: '***', remoteSignPassword: '***', pinCodeRHI: '***' }, null, 2));
 
       const response = await fetch(apiUrl, {
         method: 'PUT',
@@ -853,22 +886,20 @@ const NamirialTab: React.FC = () => {
 
       const result = await response.json();
       console.log('[NamirialTab] Save result:', result);
-      console.log('[NamirialTab] signatureType inviato:', formData.signatureType);
-      console.log('[NamirialTab] signatureType restituito:', result.signatureType);
 
       // Aggiorna lo store Redux
-      // Normalizza signatureType a lowercase per compatibilità con il backend C#
       const savedSignatureType = (result.signatureType?.toLowerCase() || formData.signatureType) as 'otp' | 'automatic';
-      console.log('[NamirialTab] signatureType normalizzato:', savedSignatureType);
 
       dispatch(setSignatureType(savedSignatureType));
-      dispatch(setRemoteSignUsername(formData.username.trim()));
+      dispatch(setRemoteSignUsername(result.remoteSignUsername || null));
       dispatch(setRemoteSignProvider('NAMIRIAL'));
       dispatch(setHasRemoteSignPassword(result.hasPassword === true));
       dispatch(setHasRemoteSignPin(result.hasPin === true));
+      dispatch(setCodCertRHI(result.codCertRHI || null));
+      dispatch(setHasRhiPin(result.hasRhiPin === true));
 
-      // Pulisci campo PIN
-      setFormData(prev => ({ ...prev, pin: '', confirmPin: '' }));
+      // Pulisci campi PIN
+      setFormData(prev => ({ ...prev, pin: '', confirmPin: '', pinRHI: '', confirmPinRHI: '' }));
 
       showSuccessMsg('Credenziali Namirial salvate con successo!');
 
@@ -973,13 +1004,18 @@ const NamirialTab: React.FC = () => {
       dispatch(setRemoteSignProvider(null));
       dispatch(setHasRemoteSignPassword(false));
       dispatch(setHasRemoteSignPin(false));
+      dispatch(setCodCertRHI(null));
+      dispatch(setHasRhiPin(false));
 
       // Pulisci form
       setFormData({
         username: '',
         pin: '',
         confirmPin: '',
-        signatureType: 'otp'
+        signatureType: 'otp',
+        codCertRHI: '',
+        pinRHI: '',
+        confirmPinRHI: ''
       });
 
       showSuccessMsg('Credenziali eliminate');
@@ -1028,18 +1064,29 @@ const NamirialTab: React.FC = () => {
       </section>
 
       {/* Stato attuale */}
-      {currentProvider === 'NAMIRIAL' && currentUsername && (
+      {currentProvider === 'NAMIRIAL' && (currentUsername || currentCodCertRHI) && (
         <section className="status-section">
-          <div className="status-badge status-configured">
-            <SvgIcon icon={checkIcon} />
-            <span>Configurato: {currentUsername}</span>
-            <span className="status-type">
-              ({currentSignatureType === 'automatic' ? 'Firma Automatica' : 'Con OTP'})
-            </span>
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-            PIN/Password: {currentHasPin ? '✓ Salvato' : '✗ Non configurato'}
-          </div>
+          {currentUsername && (
+            <div className="status-badge status-configured">
+              <SvgIcon icon={checkIcon} />
+              <span>AHI: {currentUsername}</span>
+              <span className="status-type">
+                ({currentSignatureType === 'automatic' ? 'Firma Automatica' : 'Con OTP'})
+              </span>
+              <span style={{ marginLeft: 8, fontSize: 12, color: '#666' }}>
+                — PIN: {currentHasPin ? '✓' : '✗'}
+              </span>
+            </div>
+          )}
+          {currentCodCertRHI && (
+            <div className="status-badge status-configured" style={{ marginTop: 4 }}>
+              <SvgIcon icon={checkIcon} />
+              <span>RHI: {currentCodCertRHI}</span>
+              <span style={{ marginLeft: 8, fontSize: 12, color: '#666' }}>
+                — PIN: {currentHasRhiPin ? '✓' : '✗'}
+              </span>
+            </div>
+          )}
         </section>
       )}
 
@@ -1102,22 +1149,13 @@ const NamirialTab: React.FC = () => {
         </section>
       )}
 
-      {/* Form Credenziali */}
+      {/* Form Credenziali - sezione AHI (firma automatica) */}
       <section className="config-section">
         <h4>Configurazione Credenziali</h4>
         <div className="namirial-form-grid">
-          <div className="form-field">
-            <label>Codice Dispositivo (RHI...) *</label>
-            <Input
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.value || '' })}
-              placeholder="Es: RHIP26011648243800"
-              disabled={loading}
-            />
-            <small>Il codice RHI del tuo certificato Namirial (ricevuto via email)</small>
-          </div>
 
-          <div className="form-field">
+          {/* ---- Tipo di Firma (sempre visibile in cima) ---- */}
+          <div className="form-field" style={{ gridColumn: '1 / -1' }}>
             <label>Tipo di Firma *</label>
             <DropDownList
               data={signatureTypeOptions}
@@ -1130,44 +1168,111 @@ const NamirialTab: React.FC = () => {
             <small>
               {formData.signatureType === 'automatic'
                 ? 'La firma automatica non richiede OTP ma necessita PIN salvato'
-                : 'Verra richiesto un codice OTP per ogni sessione di firma'}
+                : 'Verrà richiesto un codice OTP per ogni sessione di firma'}
             </small>
           </div>
 
+          {/* ---- Riga AHI: Cod. Cert. AHI (label read-only) | Pin per AHI ---- */}
           <div className="form-field">
-            <label>
-              PIN / Password {formData.signatureType === 'automatic' && !currentHasPin ? '*' : '(opzionale)'}
-            </label>
+            <label>Cod. Cert. AHI</label>
+            <div style={{
+              padding: '6px 8px',
+              background: '#f5f5f5',
+              border: '1px solid #ccc',
+              borderRadius: 3,
+              fontFamily: 'monospace',
+              fontSize: 13,
+              minHeight: 32,
+              color: currentUsername ? '#222' : '#999'
+            }}>
+              {currentUsername || '(non configurato)'}
+            </div>
+            <small>Codice dispositivo AHI per firma automatica (senza OTP)</small>
+          </div>
+
+          <div className="form-field">
+            <label>Pin per AHI *</label>
             <div className="password-input-wrapper">
               <Input
                 type={showPin ? 'text' : 'password'}
                 value={formData.pin}
                 onChange={(e) => setFormData({ ...formData, pin: e.value || '' })}
-                placeholder={currentHasPin ? '(PIN gia salvato)' : 'Inserisci PIN'}
-                disabled={loading}
+                placeholder={currentHasPin ? '(PIN già salvato)' : 'Inserisci PIN AHI'}
+                disabled={loading || !currentUsername}
               />
               <Button
                 fillMode="flat"
                 svgIcon={eyeIcon}
                 onClick={() => setShowPin(!showPin)}
                 title={showPin ? 'Nascondi' : 'Mostra'}
+                disabled={!currentUsername}
               />
             </div>
             <small>
               {currentHasPin
                 ? 'Lascia vuoto per mantenere il PIN esistente'
-                : 'La password del dispositivo RHI (ricevuta via email)'}
+                : 'Il PIN del certificato AHI (ricevuto via email)'}
             </small>
           </div>
 
-          {formData.pin && (
-            <div className="form-field">
-              <label>Conferma PIN *</label>
+          {formData.pin && currentUsername && (
+            <div className="form-field" style={{ gridColumn: '2' }}>
+              <label>Conferma Pin AHI *</label>
               <Input
                 type={showPin ? 'text' : 'password'}
                 value={formData.confirmPin}
                 onChange={(e) => setFormData({ ...formData, confirmPin: e.value || '' })}
-                placeholder="Ripeti PIN"
+                placeholder="Ripeti PIN AHI"
+                disabled={loading}
+              />
+            </div>
+          )}
+
+          {/* ---- Riga RHI: Cod. Cert. RHI (textbox) | Pin per RHI ---- */}
+          <div className="form-field" style={{ marginTop: 12, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+            <label>Cod. Cert. RHI</label>
+            <Input
+              value={formData.codCertRHI}
+              onChange={(e) => setFormData({ ...formData, codCertRHI: e.value || '' })}
+              placeholder="Es: RHIP26011648243800"
+              disabled={loading}
+            />
+            <small>Codice dispositivo RHI (firma con OTP) — lascia vuoto se non disponibile</small>
+          </div>
+
+          <div className="form-field" style={{ marginTop: 12, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+            <label>Pin per RHI *</label>
+            <div className="password-input-wrapper">
+              <Input
+                type={showPin ? 'text' : 'password'}
+                value={formData.pinRHI}
+                onChange={(e) => setFormData({ ...formData, pinRHI: e.value || '' })}
+                placeholder={currentHasRhiPin ? '(PIN già salvato)' : 'Inserisci PIN RHI'}
+                disabled={loading || (!formData.codCertRHI.trim() && !currentCodCertRHI)}
+              />
+              <Button
+                fillMode="flat"
+                svgIcon={eyeIcon}
+                onClick={() => setShowPin(!showPin)}
+                title={showPin ? 'Nascondi' : 'Mostra'}
+                disabled={!formData.codCertRHI.trim() && !currentCodCertRHI}
+              />
+            </div>
+            <small>
+              {currentHasRhiPin
+                ? 'Lascia vuoto per mantenere il PIN esistente'
+                : 'Il PIN del certificato RHI (ricevuto via email)'}
+            </small>
+          </div>
+
+          {formData.pinRHI && (formData.codCertRHI.trim().length >= 3 || currentCodCertRHI) && (
+            <div className="form-field" style={{ gridColumn: '2' }}>
+              <label>Conferma Pin RHI *</label>
+              <Input
+                type={showPin ? 'text' : 'password'}
+                value={formData.confirmPinRHI}
+                onChange={(e) => setFormData({ ...formData, confirmPinRHI: e.value || '' })}
+                placeholder="Ripeti PIN RHI"
                 disabled={loading}
               />
             </div>
@@ -1180,7 +1285,7 @@ const NamirialTab: React.FC = () => {
             themeColor="primary"
             svgIcon={checkIcon}
             onClick={handleSaveCredentials}
-            disabled={loading || !formData.username}
+            disabled={loading || (!formData.username && !formData.codCertRHI)}
           >
             Salva Credenziali
           </Button>
@@ -1190,11 +1295,11 @@ const NamirialTab: React.FC = () => {
               onClick={handleTestConnection}
               disabled={loading}
             >
-              Testa Connessione
+              Testa Connessione AHI
             </Button>
           )}
 
-          {currentUsername && (
+          {(currentUsername || currentCodCertRHI) && (
             <Button
               svgIcon={trashIcon}
               onClick={handleClearCredentials}
@@ -1211,11 +1316,11 @@ const NamirialTab: React.FC = () => {
       <section className="info-section">
         <h4>Informazioni sulle Credenziali Namirial SWS</h4>
         <ul>
-          <li><strong>Codice Dispositivo:</strong> Il codice RHI del tuo certificato (es. RHIP26011648243800), ricevuto via email.</li>
-          <li><strong>PIN/Password:</strong> La password del dispositivo RHI, ricevuta via email al momento dell'attivazione.</li>
+          <li><strong>Cod. Cert. AHI:</strong> Codice dispositivo per firma automatica (es. AHI7789383744609). Non richiede OTP.</li>
+          <li><strong>Pin per AHI:</strong> Il PIN del certificato AHI, salvato criptato (AES-256). Obbligatorio per firma automatica.</li>
+          <li><strong>Cod. Cert. RHI:</strong> Codice dispositivo per firma con OTP (es. RHIP26011648243800). Ricevuto via email.</li>
+          <li><strong>Pin per RHI:</strong> Il PIN del certificato RHI, salvato criptato. Richiesto insieme all'OTP per ogni sessione.</li>
           <li><strong>OTP:</strong> Codice temporaneo generato dall'app Namirial Sign o ricevuto via SMS.</li>
-          <li><strong>Firma con OTP:</strong> Ogni sessione richiede OTP. La sessione dura massimo 3 minuti.</li>
-          <li><strong>Firma Automatica:</strong> Il PIN viene salvato criptato. Non richiede OTP (solo per certificati AHI).</li>
           <li><strong>Sicurezza:</strong> Tutte le credenziali sono criptate con AES-256 e non vengono mai trasmesse in chiaro.</li>
         </ul>
       </section>

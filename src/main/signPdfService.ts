@@ -35,6 +35,7 @@ export function loadSettings(): Settings {
     tsaUrl: '',
     useMRAS: false,
     showAppMenu: false,
+    showSignConfig: true,
     reportPageWidth: 0,
     reportPageHeight: 0,
     editorZoomDefault: 0,

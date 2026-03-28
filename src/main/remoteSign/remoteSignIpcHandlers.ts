@@ -9,7 +9,7 @@ import log from 'electron-log';
 import { createHash } from 'crypto';
 
 import { getProviderFactory, RemoteSignProviderFactory } from './RemoteSignProviderFactory';
-import { addSignatureNoticeToBuffer } from '../signPdfService';
+import { addSignatureNoticeToBuffer, decoratePdfOnly } from '../signPdfService';
 import { getSessionManager, RemoteSignSessionManager } from './RemoteSignSessionManager';
 import { ArubaRemoteSignProvider } from './providers/ArubaRemoteSignProvider';
 import { InfoCertRemoteSignProvider } from './providers/InfoCertRemoteSignProvider';
@@ -151,11 +151,11 @@ export function registerRemoteSignIpcHandlers(): void {
         throw new Error(`Errore recupero credenziali: ${response.status} - ${errorText}`);
       }
 
-      const result = await response.json() as { password?: string; pin?: string };
+      const result = await response.json() as { password?: string; pin?: string; pinRHI?: string; codCertRHI?: string };
 
-      // Per Namirial servono sia password che PIN
+      // Per Namirial servono sia password che PIN (AHI) oppure pinRHI (RHI)
       // Per altri provider basta la password
-      if (!result.password && !result.pin) {
+      if (!result.password && !result.pin && !result.pinRHI) {
         return {
           success: false,
           error: 'Credenziali non configurate'
@@ -163,12 +163,15 @@ export function registerRemoteSignIpcHandlers(): void {
       }
 
       log.info('[RemoteSign] Credenziali recuperate con successo (password: ' +
-        (result.password ? 'si' : 'no') + ', pin: ' + (result.pin ? 'si' : 'no') + ')');
+        (result.password ? 'si' : 'no') + ', pin: ' + (result.pin ? 'si' : 'no') +
+        ', pinRHI: ' + (result.pinRHI ? 'si' : 'no') + ')');
 
       return {
         success: true,
         password: result.password || undefined,
-        pin: result.pin || undefined  // PIN separato per Namirial
+        pin: result.pin || undefined,       // PIN AHI
+        pinRHI: result.pinRHI || undefined, // PIN RHI separato
+        codCertRHI: result.codCertRHI || undefined
       };
     } catch (error: any) {
       log.error('[RemoteSign] Errore recupero credenziali:', error);
@@ -689,6 +692,9 @@ export function registerRemoteSignIpcHandlers(): void {
     pin: string;
     otp: string;
     signedByName: string;
+    isAutomatic?: boolean;
+    companyId?: string;
+    footerText?: string;
   }) => {
     log.info(`[RemoteSign] Firma singola OTP - provider: ${params.providerId}, utente: ${params.username}`);
 
@@ -698,15 +704,16 @@ export function registerRemoteSignIpcHandlers(): void {
       return { success: false, error: `Provider ${params.providerId} non trovato o non configurato` };
     }
 
-    // Per Namirial: la firma OTP singola usa SEMPRE il SaaS (baseUrl), non l'on-premises.
-    // L'on-premises è riservato alla firma automatica bulk (certificati nell'HSM locale).
-    // Creiamo un provider temporaneo con useOnPremise: false per questo flusso.
+    // Per Namirial: sia RHI OTP che AHI automatica usano il server SWS on-premises.
     if (params.providerId.toUpperCase() === 'NAMIRIAL') {
       const signSettings = loadConfigJson<any>('sign-settings.json', {});
       const namirialCfg = signSettings?.remoteSign?.namirial;
-      if (namirialCfg?.useOnPremise && namirialCfg?.baseUrl) {
-        log.info(`[RemoteSign] Firma OTP Namirial: uso SaaS endpoint (${namirialCfg.baseUrl}) invece di on-premises`);
-        provider = new NamirialRemoteSignProvider({ ...namirialCfg, useOnPremise: false });
+      if (namirialCfg?.onPremiseBaseUrl) {
+        const mode = params.isAutomatic === true ? 'AHI automatica' : 'RHI OTP';
+        log.info(`[RemoteSign] Firma ${mode}: uso on-premises SWS (${namirialCfg.onPremiseBaseUrl})`);
+        provider = new NamirialRemoteSignProvider({ ...namirialCfg, useOnPremise: true });
+      } else {
+        log.warn('[RemoteSign] onPremiseBaseUrl non configurato in sign-settings.json, uso provider corrente');
       }
     }
 
@@ -714,7 +721,7 @@ export function registerRemoteSignIpcHandlers(): void {
     let sessionCreated = false;
 
     try {
-      // 1. Apri sessione con OTP (sessione breve, solo per questa firma)
+      // 1. Apri sessione (OTP per RHI, automatica per AHI)
       const session = await sessionManager.createSession(
         params.providerId,
         {
@@ -723,18 +730,26 @@ export function registerRemoteSignIpcHandlers(): void {
           pin: params.pin,
           otp: params.otp
         },
-        { durationMinutes: 5, isAutomatic: false }
+        { durationMinutes: 5, isAutomatic: params.isAutomatic === true }
       );
       sessionCreated = true;
       log.info(`[RemoteSign] Sessione OTP aperta: ${session.sessionId}`);
 
-      // 2. Aggiungi dicitura firma al PDF
-      const noticeResult = await addSignatureNoticeToBuffer({
+      // 2. Decora il PDF (logo + footer) — stesso percorso di Firma Massiva
+      log.info(`[RemoteSign] Decorazione PDF (companyId=${params.companyId ?? 'DEFAULT'})`);
+      const decorateResult = await decoratePdfOnly({
         pdfBase64: params.pdfBase64,
+        companyId: params.companyId,
+        footerText: params.footerText ?? null
+      });
+
+      // 3. Aggiungi dicitura firma al PDF decorato
+      const noticeResult = await addSignatureNoticeToBuffer({
+        pdfBase64: decorateResult.decoratedPdfBase64,
         signedByName: params.signedByName
       });
 
-      // 3. Firma il documento (PAdES)
+      // 4. Firma il documento (PAdES)
       const activeSessions = sessionManager.getActiveSessions();
       const activeSession = activeSessions.find(
         s => s.providerId.toUpperCase() === params.providerId.toUpperCase() &&

@@ -29,6 +29,7 @@
   "tsaUrl": "https://freetsa.org/tsr",
   "useMRAS": true,
   "showAppMenu": true,
+  "showSignConfig": true,
   "remoteSign": {
     "defaultProvider": "NAMIRIAL",
     "sessionTimeoutMinutes": 45,

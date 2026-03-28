@@ -78,6 +78,7 @@ const DEFAULT_SETTINGS: Settings = {
   tsaUrl: "https://freetsa.org/tsr",
   useMRAS: true,
   showAppMenu: false,
+  showSignConfig: true,
   signatureTextLine1: "Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ",
   signatureTextLine2: "{signedBy} in data: {date}",
   speechToText: {

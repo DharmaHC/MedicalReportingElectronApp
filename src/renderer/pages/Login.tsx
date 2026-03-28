@@ -25,6 +25,8 @@ import {
   setRemoteSignProvider,
   setHasRemoteSignPassword,
   setHasRemoteSignPin,
+  setCodCertRHI,
+  setHasRhiPin,
 } from "../store/authSlice";
 import "./Login.css";
 import { useNavigate } from "react-router-dom";
@@ -224,6 +226,8 @@ const Login = () => {
         const remoteSignProvider = result.remoteSignProvider;
         const hasRemoteSignPassword = !!result.hasRemoteSignPassword;
         const hasRemoteSignPin = !!result.hasRemoteSignPin;
+        const codCertRHI = result.codCertRHI || null;
+        const hasRhiPin = !!result.hasRhiPin;
 
         dispatch(setUserId(userId));
         dispatch(setDoctorCode(doctorCode));
@@ -237,6 +241,8 @@ const Login = () => {
         dispatch(setRemoteSignProvider(remoteSignProvider));
         dispatch(setHasRemoteSignPassword(hasRemoteSignPassword));
         dispatch(setHasRemoteSignPin(hasRemoteSignPin));
+        dispatch(setCodCertRHI(codCertRHI));
+        dispatch(setHasRhiPin(hasRhiPin));
 
         if (doctorCode) {
           fetchDoctorSignatureInfo(doctorCode.trim());
