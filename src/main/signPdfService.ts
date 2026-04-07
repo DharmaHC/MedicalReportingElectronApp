@@ -128,6 +128,22 @@ export function getCompanyFooterSettings(companyId?: string): CompanyFooterSetti
   };
 }
 
+/* █████████████████ ALIGNMENT HELPER █████████████████ */
+const LEFT_MARGIN = 40; // margine sinistro in punti PDF
+
+function calcAlignedX(
+  pageWidth: number,
+  textWidth: number,
+  alignment: 'left' | 'center' | 'right'
+): number {
+  switch (alignment) {
+    case 'left':   return LEFT_MARGIN;
+    case 'right':  return pageWidth - textWidth - LEFT_MARGIN;
+    case 'center':
+    default:       return (pageWidth - textWidth) / 2;
+  }
+}
+
 /* █████████████████ LOG █████████████████ */
 function log(msg: string) {
   const dir  = path.join(app.getPath('userData'), 'signlog');
@@ -182,7 +198,7 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
       if (overrideDate) {
         console.log(`📅 Data firma forzata: ${overrideDate.toLocaleString()}`);
       }
-      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings, overrideDate);
+      pdfBuf = await addSignatureNotice(pdfBuf, signedBy, currentSettings, overrideDate, req.companyId);
 
       log('success (bypass mode)');
       return {
@@ -206,7 +222,7 @@ export async function signPdfService(req: SignPdfRequest): Promise<SignPdfRespon
     // 3. Aggiungi dicitura del firmatario nell'ultima pagina del PDF
     // Usa doctorName se presente, altrimenti usa il CN del certificato
     const finalSignedBy = req.doctorName || signedBy;
-    pdfBuf = await addSignatureNotice(pdfBuf, finalSignedBy, currentSettings);
+    pdfBuf = await addSignatureNotice(pdfBuf, finalSignedBy, currentSettings, undefined, req.companyId);
 
     // 4. Marca temporale
     const tspBuf = await timestampCms(cmsBuf, currentSettings);
@@ -281,7 +297,7 @@ export async function addSignatureNoticeToBuffer(req: AddSignatureNoticeRequest)
     console.log('[addSignatureNoticeToBuffer] Aggiunta dicitura firma');
 
     let pdfBuf: Buffer = Buffer.from(req.pdfBase64, 'base64');
-    pdfBuf = await addSignatureNotice(pdfBuf, req.signedByName, currentSettings);
+    pdfBuf = await addSignatureNotice(pdfBuf, req.signedByName, currentSettings, undefined, undefined);
 
     console.log('[addSignatureNoticeToBuffer] Dicitura aggiunta con successo');
 
@@ -367,6 +383,12 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
     footerCompanyDataPointFromBottom, footerCompanyDataMultiline, footerTextFontSize
   } = settings;
 
+  // Risolvi allineamenti: company-specific → globale → default 'center'
+  const companyDataAlign = companyFooterSettings.footerCompanyDataAlignment
+    || settings.footerCompanyDataAlignment || 'center';
+  const signatureAlign = companyFooterSettings.signatureTextAlignment
+    || settings.signatureTextAlignment || 'center';
+
   const pages = doc.getPages();
   if (pages.length === 0) throw new Error("PDF senza pagine effettive!");
 
@@ -379,7 +401,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
 
     // Draw dati azienda (footerText)
     const textW = font.widthOfTextAtSize(footerTxt, footerTextFontSize);
-    const textX = (pageWidth - textW) / 2;
+    const textX = calcAlignedX(pageWidth, textW, companyDataAlign);
 
     // Dati azienda: usa footerCompanyDataPointFromBottom
     const textY = footerCompanyDataPointFromBottom;
@@ -421,7 +443,7 @@ async function decoratePdf(pdf: Buffer, req: SignPdfRequest, settings: Settings)
 }
 
 /* ██████ AGGIUNGI DICITURA CN ULTIMA PAGINA ██████ */
-async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Settings, overrideDate?: Date): Promise<Buffer> {
+async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Settings, overrideDate?: Date, companyId?: string): Promise<Buffer> {
   const doc = await PDFDocument.load(pdfBuf);
   const font = await embedFont(doc, settings.footerTextFontFamily);
 
@@ -434,25 +456,30 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
 
   // Usa i template configurabili da sign-settings.json
   // Applica la sostituzione dei placeholder a ENTRAMBE le linee
-  // Fallback ai valori di default se i campi sono undefined (file configurazione vecchio)
-  if (!settings.signatureTextLine1 || !settings.signatureTextLine2) {
+  // Fallback ai valori di default se i campi sono undefined/null (file configurazione vecchio)
+  // NOTA: usa ?? (nullish coalescing) per rispettare "" come valore intenzionale (riga vuota = non disegnare)
+  if (settings.signatureTextLine1 == null || settings.signatureTextLine2 == null) {
     console.warn('⚠️ signatureTextLine1 o signatureTextLine2 mancanti in sign-settings.json, uso valori di default');
     console.warn('   Questo può accadere con file di configurazione vecchi. Eseguire Reset_Configurazioni.bat per aggiornare.');
   }
 
-  const line1Template = settings.signatureTextLine1 ||
+  const line1Template = settings.signatureTextLine1 ??
     'Referto firmato digitalmente ai sensi degli art. 20, 21 n.2, 23 e 24 del d.Lgs. n.82 del 7.3.2015 e successive modifiche da: ';
-  const line2Template = settings.signatureTextLine2 ||
+  const line2Template = settings.signatureTextLine2 ??
     '{signedBy} in data: {date}';
+
+  const includeTime = settings.signatureDateIncludeTime !== false; // default true
+  const dateStr = includeTime ? now.toLocaleString() : now.toLocaleDateString();
 
   const line1 = line1Template
     .replace('{signedBy}', signedBy)
-    .replace('{date}', now.toLocaleString());
+    .replace('{date}', dateStr);
   const line2 = line2Template
     .replace('{signedBy}', signedBy)
-    .replace('{date}', now.toLocaleString());
+    .replace('{date}', dateStr);
 
-  const digitalNoteLines = [line1, line2];
+  // Filtra righe vuote: se il template è "" la riga non viene disegnata
+  const digitalNoteLines = [line1, line2].filter(l => l.trim() !== '');
 
   let lines;
   if (settings.footerCompanyDataMultiline) {
@@ -464,10 +491,14 @@ async function addSignatureNotice(pdfBuf: Buffer, signedBy: string, settings: Se
   // — La stringa lines[0] è *una riga sola*!
   // Se la vedi spezzata nel PDF è solo un problema di spazio e font size.
 
+  const noticeCompanySettings = companyId ? getCompanyFooterSettings(companyId) : null;
+  const sigAlign = noticeCompanySettings?.signatureTextAlignment
+    || settings.signatureTextAlignment || 'center';
+
   let baseY = settings.footerTextPointFromBottom;
   for (const line of lines.reverse()) {
     const w = font.widthOfTextAtSize(line, 8); // o 7, o 6
-    const x = (width - w) / 2;
+    const x = calcAlignedX(width, w, sigAlign);
     lastPage.drawText(line, {
       x, y: baseY,
       size: 8, // diminuisci se serve
@@ -671,8 +702,18 @@ export async function signViaPkcs11WithCN(
           if (userCN && userCN.trim() !== '' && certCN) {
             foundCertificates.push(certCN); // Salva il certificato trovato
 
-            if (certCN.toLowerCase() !== userCN.toLowerCase()) {
+            const normalizedCertCN = certCN.trim().replace(/[\u200B\uFEFF\u00A0]/g, '');
+            const normalizedUserCN = userCN.trim().replace(/[\u200B\uFEFF\u00A0]/g, '');
+
+            if (normalizedCertCN.toLowerCase() !== normalizedUserCN.toLowerCase()) {
               console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
+              const certHex = Buffer.from(certCN, 'utf8').toString('hex');
+              const userHex = Buffer.from(userCN, 'utf8').toString('hex');
+              console.log(`     📋 certCN hex: ${certHex}`);
+              console.log(`     📋 userCN hex: ${userHex}`);
+              log(`[PKCS11] CN MISMATCH - certCN="${certCN}" vs userCN="${userCN}"`);
+              log(`[PKCS11] certCN hex: ${certHex}`);
+              log(`[PKCS11] userCN hex: ${userHex}`);
               continue;
             }
           }
@@ -715,9 +756,10 @@ export async function signViaPkcs11WithCN(
             throw new Error("Tipo non supportato per signedAttrsDER");
           }
 
-          // Firma
+          // Firma - determina la dimensione della chiave per allocare il buffer corretto
           pkcs11.C_SignInit(sess, { mechanism: pkcs11js.CKM_SHA256_RSA_PKCS }, privKey);
-          const signature = pkcs11.C_Sign(sess, signedAttrsBuffer, Buffer.alloc(256));
+          // Prima chiamata con buffer grande per determinare la dimensione reale della firma
+          const signature = pkcs11.C_Sign(sess, signedAttrsBuffer, Buffer.alloc(1024));
 
           // SignedData CMS
           const sd = new pkijs.SignedData({
@@ -767,6 +809,8 @@ export async function signViaPkcs11WithCN(
         // Se errore, tenta clean-up su sessione
         console.error(`❌ ERRORE su slot ${slot}: ${e.message}`);
         console.error(`   Stack trace: ${e.stack}`);
+        log(`[PKCS11] ERRORE su slot ${slot}: ${e.message}`);
+        log(`[PKCS11] Stack: ${e.stack}`);
         if (sess) {
           try { pkcs11.C_Logout(sess); } catch {}
           try { pkcs11.C_CloseSession(sess); } catch {}

@@ -42,8 +42,23 @@ const BulkSignAuthDialog: React.FC = () => {
     doctorCode,
     remoteSignUsername,
     hasRemoteSignPassword,
-    hasRemoteSignPin
+    hasRemoteSignPin,
+    signatureType
   } = useSelector((state: RootState) => state.auth);
+  const codCertRHI = useSelector((state: RootState) => (state.auth as any).codCertRHI as string | null);
+  const hasRhiPin = useSelector((state: RootState) => (state.auth as any).hasRhiPin as boolean);
+
+  // Determina modalità di firma basata su signatureType (fonte: DB)
+  // signatureType='otp' → usa RHI (codCertRHI + pinRHI), richiede OTP
+  // signatureType='automatic' → usa AHI (remoteSignUsername + password/pin), senza OTP
+  // Fallback: se signatureType non è impostato, determina dalla presenza dei dati
+  const hasCompleteAHI = Boolean(remoteSignUsername) && (hasRemoteSignPassword || hasRemoteSignPin);
+  const hasCompleteRHI = Boolean(codCertRHI) && hasRhiPin;
+  const useRHIMode = signatureType === 'otp'
+    ? hasCompleteRHI   // signatureType=otp → usa RHI se completo
+    : signatureType === 'automatic'
+      ? false          // signatureType=automatic → usa sempre AHI
+      : !hasCompleteAHI && hasCompleteRHI;  // fallback: RHI solo se AHI incompleto
 
   // Provider selezionato
   const selectedProvider = availableProviders.find(p => p.id === selectedProviderId);
@@ -51,8 +66,8 @@ const BulkSignAuthDialog: React.FC = () => {
   // Determina se è Namirial (sessione max 3 minuti)
   const isNamirial = selectedProviderId?.toUpperCase() === 'NAMIRIAL';
 
-  // Stato locale form - precompila username con remoteSignUsername
-  const [username, setUsername] = useState(remoteSignUsername || '');
+  // Stato locale form - precompila username: RHI se disponibile, altrimenti AHI
+  const [username, setUsername] = useState(useRHIMode ? (codCertRHI || '') : (remoteSignUsername || ''));
   const [pin, setPin] = useState('');
   const [otp, setOtp] = useState('');
   const [sessionMinutes, setSessionMinutes] = useState(isNamirial ? 3 : 45);
@@ -96,23 +111,40 @@ const BulkSignAuthDialog: React.FC = () => {
     loadEndpointInfo();
   }, [isNamirial]);
 
-  // Aggiorna username quando cambia remoteSignUsername
+  // Aggiorna username quando cambiano le credenziali configurate
   useEffect(() => {
-    if (remoteSignUsername && !username) {
-      setUsername(remoteSignUsername);
+    if (!username) {
+      if (useRHIMode && codCertRHI) {
+        setUsername(codCertRHI);
+      } else if (remoteSignUsername) {
+        setUsername(remoteSignUsername);
+      }
     }
-  }, [remoteSignUsername]);
+  }, [remoteSignUsername, codCertRHI, useRHIMode]);
 
   // Aggiorna durata sessione se cambia provider
   useEffect(() => {
     setSessionMinutes(isNamirial ? 3 : 45);
   }, [isNamirial]);
 
+  // Focus sul campo OTP in modalità RHI (dopo che il dialog è montato e i campi precompilati)
+  useEffect(() => {
+    if (useRHIMode) {
+      setTimeout(() => {
+        const otpInput = document.getElementById('auth-otp');
+        if (otpInput) {
+          (otpInput as HTMLInputElement).focus();
+        }
+      }, 150);
+    }
+  }, [useRHIMode]);
+
   // Carica credenziali salvate dal backend (password e/o PIN)
   useEffect(() => {
     const loadSavedCredentials = async () => {
       if (!token || !isNamirial) return;
-      if (!hasRemoteSignPassword && !hasRemoteSignPin) return;
+      // Serve almeno una credenziale salvata (AHI password/pin oppure RHI pin)
+      if (!hasRemoteSignPassword && !hasRemoteSignPin && !hasRhiPin) return;
 
       setIsLoadingCredentials(true);
       try {
@@ -123,13 +155,18 @@ const BulkSignAuthDialog: React.FC = () => {
         });
 
         if (result?.success) {
-          // PIN separato (es. Namirial SaaS con password + PIN distinti)
-          if (result.pin && hasRemoteSignPin) {
-            setPin(result.pin);
-          }
-          // Password usata come PIN/Password (es. firma automatica on-premises: DHARMAHEALTHCARE/foo123)
-          else if (result.password && hasRemoteSignPassword && !hasRemoteSignPin) {
-            setPin(result.password);
+          if (useRHIMode) {
+            // Modalità RHI: usa pinRHI come PIN
+            if (result.pinRHI) {
+              setPin(result.pinRHI);
+            }
+          } else {
+            // Modalità AHI: PIN separato o password come PIN
+            if (result.pin && hasRemoteSignPin) {
+              setPin(result.pin);
+            } else if (result.password && hasRemoteSignPassword && !hasRemoteSignPin) {
+              setPin(result.password);
+            }
           }
         }
       } catch (error) {
@@ -140,7 +177,7 @@ const BulkSignAuthDialog: React.FC = () => {
     };
 
     loadSavedCredentials();
-  }, [token, isNamirial, hasRemoteSignPassword, hasRemoteSignPin]);
+  }, [token, isNamirial, hasRemoteSignPassword, hasRemoteSignPin, hasRhiPin, useRHIMode]);
 
   // =========================================================================
   // HANDLERS
@@ -162,7 +199,10 @@ const BulkSignAuthDialog: React.FC = () => {
       setLocalError('PIN obbligatorio');
       return;
     }
-    // OTP è opzionale per firma automatica (es. credenziali demo DEMO/foo123)
+    if (useRHIMode && !otp.trim()) {
+      setLocalError('OTP obbligatorio per la firma RHI');
+      return;
+    }
 
     setIsAuthenticating(true);
     setLocalError(null);
@@ -284,13 +324,31 @@ const BulkSignAuthDialog: React.FC = () => {
       className="bulk-sign-auth-dialog"
     >
       <div className="auth-form" onKeyDown={handleKeyDown}>
+        {/* Warning se nessuna configurazione completa per la modalità selezionata */}
+        {isNamirial && (
+          (signatureType === 'otp' && !hasCompleteRHI) ? (
+            <div className="auth-error">
+              Configurazione RHI incompleta. Verificare che codice dispositivo RHI e PIN siano configurati nelle impostazioni del profilo.
+            </div>
+          ) : (signatureType === 'automatic' && !hasCompleteAHI) ? (
+            <div className="auth-error">
+              Configurazione AHI incompleta. Verificare che codice dispositivo AHI e password siano configurati nelle impostazioni del profilo.
+            </div>
+          ) : (!signatureType && !hasCompleteAHI && !hasCompleteRHI) ? (
+            <div className="auth-error">
+              Firma remota non configurata. Configurare le credenziali AHI (firma automatica) o RHI (firma con OTP) nelle impostazioni del profilo.
+            </div>
+          ) : null
+        )}
+
         {/* Info */}
         <div className="auth-info">
-          Inserisci le credenziali per avviare una sessione di firma.
-          {isNamirial ? (
-            <><br /><strong>Nota:</strong> La sessione Namirial dura massimo 3 minuti.</>
+          {useRHIMode ? (
+            <>Firma con OTP (dispositivo RHI). Inserisci il codice OTP per avviare una sessione di 3 minuti.</>
+          ) : isNamirial ? (
+            <>Firma automatica (dispositivo AHI). La sessione Namirial dura massimo 3 minuti.</>
           ) : (
-            <> La sessione permette di firmare pi&ugrave; referti senza reinserire OTP.</>
+            <>Inserisci le credenziali per avviare una sessione di firma.</>
           )}
         </div>
 
@@ -338,25 +396,32 @@ const BulkSignAuthDialog: React.FC = () => {
         {/* Username / Codice Dispositivo */}
         <div className="auth-form-group">
           <label htmlFor="auth-username">
-            {isNamirial ? 'Codice Dispositivo (RHI...)' : 'Username Certificato'}
+            {isNamirial
+              ? (useRHIMode ? 'Codice Dispositivo RHI' : 'Codice Dispositivo AHI')
+              : 'Username Certificato'}
           </label>
           <Input
             id="auth-username"
             value={username}
             onChange={(e) => setUsername(e.value as string)}
-            placeholder={isNamirial ? 'es. RHIP26011648243800' : 'Username del certificato remoto'}
+            placeholder={isNamirial
+              ? (useRHIMode ? 'es. RHIP26011648243800' : 'es. AHI7789383744609')
+              : 'Username del certificato remoto'}
             disabled={isAuthenticating}
-            autoFocus={!username}
+            autoFocus={!username && !useRHIMode}
           />
           {isNamirial && (
-            <small>Il codice RHI del tuo certificato Namirial</small>
+            <small>{useRHIMode
+              ? 'Il codice RHI del tuo certificato Namirial (firma con OTP)'
+              : 'Il codice AHI del tuo certificato Namirial (firma automatica)'
+            }</small>
           )}
         </div>
 
         {/* PIN */}
         <div className="auth-form-group">
           <label htmlFor="auth-pin">
-            {isNamirial ? 'PIN / Password' : 'PIN'} {hasRemoteSignPin && isNamirial ? '(salvato)' : ''}
+            {isNamirial ? 'PIN' : 'PIN'} {((useRHIMode && hasRhiPin) || (!useRHIMode && (hasRemoteSignPin || hasRemoteSignPassword))) && isNamirial ? '(salvato)' : ''}
           </label>
           <div className="input-with-icon">
             <Input
@@ -364,9 +429,9 @@ const BulkSignAuthDialog: React.FC = () => {
               type={showPin ? 'text' : 'password'}
               value={pin}
               onChange={(e) => setPin(e.value as string)}
-              placeholder={hasRemoteSignPin && isNamirial ? '(caricato automaticamente)' : 'PIN del certificato'}
+              placeholder={isLoadingCredentials ? '(caricamento...)' : 'PIN del certificato'}
               disabled={isAuthenticating || isLoadingCredentials}
-              autoFocus={!!username && !pin}
+              autoFocus={!!username && !pin && !useRHIMode}
               style={{ flex: 1 }}
             />
             <Button
@@ -380,25 +445,30 @@ const BulkSignAuthDialog: React.FC = () => {
             </Button>
           </div>
           {isNamirial && (
-            <small>La password del dispositivo RHI</small>
+            <small>{useRHIMode ? 'Il PIN del dispositivo RHI' : 'La password del dispositivo AHI'}</small>
           )}
         </div>
 
         {/* OTP */}
         <div className="auth-form-group">
-          <label htmlFor="auth-otp">OTP (codice SMS/App) - <em>opzionale</em></label>
+          <label htmlFor="auth-otp">
+            OTP (codice SMS/App){useRHIMode ? ' - obbligatorio' : ' - opzionale'}
+          </label>
           <Input
             id="auth-otp"
             value={otp}
             onChange={(e) => setOtp(e.value as string)}
-            placeholder="Lascia vuoto per firma automatica"
+            placeholder={useRHIMode ? 'Inserisci il codice OTP' : 'Lascia vuoto per firma automatica'}
             maxLength={8}
             disabled={isAuthenticating}
+            autoFocus={useRHIMode}
           />
           <small>
-            {isNamirial
-              ? "Codice OTP dall'app Namirial Sign o ricevuto via SMS. Lascia vuoto per firma automatica (es. credenziali DEMO)"
-              : "Il codice OTP ti è stato inviato via SMS o è disponibile nell'app"
+            {useRHIMode
+              ? "Codice OTP dall'app Namirial Sign o ricevuto via SMS. Obbligatorio per la firma RHI."
+              : isNamirial
+                ? "Codice OTP dall'app Namirial Sign o ricevuto via SMS. Lascia vuoto per firma automatica."
+                : "Il codice OTP ti è stato inviato via SMS o è disponibile nell'app"
             }
           </small>
         </div>

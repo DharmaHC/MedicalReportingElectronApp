@@ -59,6 +59,9 @@ interface Settings {
   highlightPlaceholder: boolean;
   signatureTextLine1?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
   signatureTextLine2?: string; // Opzionale per retrocompatibilità con vecchie configurazioni
+  signatureDateIncludeTime?: boolean; // Se true, {date} include l'orario (default: true per retrocompatibilità)
+  footerCompanyDataAlignment?: 'left' | 'center' | 'right'; // Allineamento dati azienda (default: center)
+  signatureTextAlignment?: 'left' | 'center' | 'right'; // Allineamento dicitura firma (default: center)
   remoteSign?: RemoteSignConfig; // Configurazione firma remota massiva
   speechToText?: SpeechToTextConfig; // Configurazione dettatura vocale locale (Whisper)
   preventClientUpdate?: boolean; // Se true, disabilita l'auto-update su questo client (default: false)

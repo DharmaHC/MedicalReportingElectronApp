@@ -105,6 +105,10 @@ const BulkSignModal: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewReportInfo, setPreviewReportInfo] = useState<{ patientName: string; examNames: string[] } | null>(null);
 
+  // Admin: solo per utente specifico (codice fiscale)
+  const isAdmin = userName === 'FRSRFL72R25H282U';
+  const [adminActionLoading, setAdminActionLoading] = useState<string | null>(null);
+
   // Conteggi
   const selectedCount = useMemo(() => reports.filter(r => r.selected).length, [reports]);
   const totalCount = reports.length;
@@ -426,9 +430,11 @@ const BulkSignModal: React.FC = () => {
     });
 
     try {
-      // 1. Recupera il PDF non firmato dall'API
-      const pdfUrl = `${getApiBaseUrl()}ExamResults/GetUnsignedPdf/${report.digitalReportId}`;
-      console.log('[Preview] Fetching unsigned PDF from:', pdfUrl);
+      const isSigned = report.examinationState === 5 || report.signStatus === 'signed';
+      // Per referti firmati usa GetReportPdf (qualsiasi stato), per non firmati GetUnsignedPdf (stati 2,7)
+      const endpoint = isSigned ? 'GetReportPdf' : 'GetUnsignedPdf';
+      const pdfUrl = `${getApiBaseUrl()}ExamResults/${endpoint}/${report.digitalReportId}`;
+      console.log(`[Preview] Fetching PDF (${isSigned ? 'signed' : 'unsigned'}) from:`, pdfUrl);
 
       const response = await fetch(pdfUrl, {
         headers: {
@@ -447,17 +453,19 @@ const BulkSignModal: React.FC = () => {
         throw new Error('PDF non disponibile');
       }
 
-      // 2. Aggiungi la dicitura firma al PDF usando il servizio IPC
-      const signedByName = session.signedByCN || 'Firma Digitale';
-      console.log('[Preview] Adding signature notice:', signedByName);
+      // Per referti non firmati, aggiungi la dicitura firma come anteprima
+      if (!isSigned) {
+        const signedByName = session.signedByCN || 'Firma Digitale';
+        console.log('[Preview] Adding signature notice:', signedByName);
 
-      const noticeResult = await (window as any).nativeSign?.addSignatureNotice({
-        pdfBase64: pdfBase64,
-        signedByName: signedByName
-      });
+        const noticeResult = await (window as any).nativeSign?.addSignatureNotice({
+          pdfBase64: pdfBase64,
+          signedByName: signedByName
+        });
 
-      if (noticeResult?.pdfWithNoticeBase64) {
-        pdfBase64 = noticeResult.pdfWithNoticeBase64;
+        if (noticeResult?.pdfWithNoticeBase64) {
+          pdfBase64 = noticeResult.pdfWithNoticeBase64;
+        }
       }
 
       console.log('[Preview] PDF ready for preview');
@@ -480,6 +488,52 @@ const BulkSignModal: React.FC = () => {
     setPreviewError(null);
     setPreviewReportInfo(null);
   }, []);
+
+  // =========================================================================
+  // ADMIN ACTIONS
+  // =========================================================================
+
+  const handleResetToUnsigned = useCallback(async (report: ReportToSign) => {
+    if (!confirm(`Riportare il referto di ${report.patientLastName} ${report.patientFirstName} allo stato "Da Firmare"?`)) return;
+    setAdminActionLoading(report.digitalReportId);
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}ExamResults/ResetToUnsigned/${report.digitalReportId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Errore ${resp.status}`);
+      }
+      // Ricarica lista
+      dispatch(fetchReportsToSign({ doctorCode: doctorCode!, token: token! }));
+    } catch (e: any) {
+      alert(`Errore reset: ${e.message}`);
+    } finally {
+      setAdminActionLoading(null);
+    }
+  }, [token, doctorCode, dispatch]);
+
+  const handleDeleteReport = useCallback(async (report: ReportToSign) => {
+    if (!confirm(`ATTENZIONE: Eliminare definitivamente il referto firmato di ${report.patientLastName} ${report.patientFirstName}?\n\nQuesta azione non è reversibile.`)) return;
+    setAdminActionLoading(report.digitalReportId);
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}ExamResults/DeleteSignedReport/${report.digitalReportId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Errore ${resp.status}`);
+      }
+      // Ricarica lista
+      dispatch(fetchReportsToSign({ doctorCode: doctorCode!, token: token! }));
+    } catch (e: any) {
+      alert(`Errore eliminazione: ${e.message}`);
+    } finally {
+      setAdminActionLoading(null);
+    }
+  }, [token, doctorCode, dispatch]);
 
   // =========================================================================
   // CELL RENDERERS
@@ -644,7 +698,7 @@ const BulkSignModal: React.FC = () => {
       <Dialog
         title="Firma Remota Massiva"
         onClose={handleClose}
-        width={1100}
+        width={1210}
         height={750}
         className="bulk-sign-dialog"
       >
@@ -798,6 +852,46 @@ const BulkSignModal: React.FC = () => {
                 width={120}
                 cell={SignStatusCell}
               />
+              {isAdmin && (
+                <GridColumn
+                  title="Azioni"
+                  width={100}
+                  cell={(props: GridCellProps) => {
+                    const item = props.dataItem as ReportToSign;
+                    const isSigned = item.examinationState === 5;
+                    const loading = adminActionLoading === item.digitalReportId;
+
+                    if (!isSigned) return <td></td>;
+
+                    return (
+                      <td style={{ textAlign: 'center' }}>
+                        {loading ? <Loader size="small" type="pulsing" /> : (
+                          <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
+                            <Button
+                              fillMode="flat"
+                              size="small"
+                              title="Riporta a Da Firmare"
+                              onClick={(e) => { e.stopPropagation(); handleResetToUnsigned(item); }}
+                              style={{ padding: '2px 4px', color: '#f59e0b' }}
+                            >
+                              ↩
+                            </Button>
+                            <Button
+                              fillMode="flat"
+                              size="small"
+                              title="Elimina referto"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteReport(item); }}
+                              style={{ padding: '2px 4px', color: '#ef4444' }}
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  }}
+                />
+              )}
             </Grid>
           )}
         </div>

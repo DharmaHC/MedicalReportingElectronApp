@@ -761,6 +761,7 @@ const renderPinDialog = () =>
   );
   const authUserCN            = useSelector((state: RootState) => state.auth.userCN);
   const authRemoteSignUsername = useSelector((state: RootState) => state.auth.remoteSignUsername);
+  const authCodCertRHI        = useSelector((state: RootState) => (state.auth as any).codCertRHI);
 
   // Stati per la gestione dei referti precedenti e modali.
   const [previousResults, setPreviousResults] = useState<any[]>([]); // Array dei referti precedenti del paziente.
@@ -3335,8 +3336,8 @@ const handleResultClick = async (result: any) => {
                 Termina e Invia
               </Button>
 
-              {/* "Salva da Firmare" solo se utente ha AHI configurato (firma massiva remota) */}
-              {allowMedicalReportDigitalSignature && !!authRemoteSignUsername && (
+              {/* "Salva da Firmare" se utente ha firma remota configurata (AHI o RHI) */}
+              {allowMedicalReportDigitalSignature && (!!authRemoteSignUsername || !!authCodCertRHI) && (
                 <Button
                   svgIcon={saveIcon}
                   onClick={handleSaveForLaterSigning}
