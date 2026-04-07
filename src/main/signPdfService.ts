@@ -702,8 +702,18 @@ export async function signViaPkcs11WithCN(
           if (userCN && userCN.trim() !== '' && certCN) {
             foundCertificates.push(certCN); // Salva il certificato trovato
 
-            if (certCN.toLowerCase() !== userCN.toLowerCase()) {
+            const normalizedCertCN = certCN.trim().replace(/[\u200B\uFEFF\u00A0]/g, '');
+            const normalizedUserCN = userCN.trim().replace(/[\u200B\uFEFF\u00A0]/g, '');
+
+            if (normalizedCertCN.toLowerCase() !== normalizedUserCN.toLowerCase()) {
               console.log(`     ⚠️ Certificato CN="${certCN}" non matcha userCN="${userCN}", SKIP`);
+              const certHex = Buffer.from(certCN, 'utf8').toString('hex');
+              const userHex = Buffer.from(userCN, 'utf8').toString('hex');
+              console.log(`     📋 certCN hex: ${certHex}`);
+              console.log(`     📋 userCN hex: ${userHex}`);
+              log(`[PKCS11] CN MISMATCH - certCN="${certCN}" vs userCN="${userCN}"`);
+              log(`[PKCS11] certCN hex: ${certHex}`);
+              log(`[PKCS11] userCN hex: ${userHex}`);
               continue;
             }
           }
@@ -746,9 +756,10 @@ export async function signViaPkcs11WithCN(
             throw new Error("Tipo non supportato per signedAttrsDER");
           }
 
-          // Firma
+          // Firma - determina la dimensione della chiave per allocare il buffer corretto
           pkcs11.C_SignInit(sess, { mechanism: pkcs11js.CKM_SHA256_RSA_PKCS }, privKey);
-          const signature = pkcs11.C_Sign(sess, signedAttrsBuffer, Buffer.alloc(256));
+          // Prima chiamata con buffer grande per determinare la dimensione reale della firma
+          const signature = pkcs11.C_Sign(sess, signedAttrsBuffer, Buffer.alloc(1024));
 
           // SignedData CMS
           const sd = new pkijs.SignedData({
@@ -798,6 +809,8 @@ export async function signViaPkcs11WithCN(
         // Se errore, tenta clean-up su sessione
         console.error(`❌ ERRORE su slot ${slot}: ${e.message}`);
         console.error(`   Stack trace: ${e.stack}`);
+        log(`[PKCS11] ERRORE su slot ${slot}: ${e.message}`);
+        log(`[PKCS11] Stack: ${e.stack}`);
         if (sess) {
           try { pkcs11.C_Logout(sess); } catch {}
           try { pkcs11.C_CloseSession(sess); } catch {}

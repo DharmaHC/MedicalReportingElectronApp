@@ -34,7 +34,7 @@ import log from 'electron-log';
 interface SwsCredentials {
   username: string;     // Codice dispositivo (es. RHIP...)
   password: string;     // Password/PIN del dispositivo
-  idOtp?: string;       // ID richiesta OTP (opzionale, per sendOtpBySMS)
+  idOtp?: number;       // ID dispositivo OTP (risolto da getOTPList, campo obbligatorio xs:int nel WSDL)
   otp?: string;         // Codice OTP 6 cifre (dall'app o SMS)
   sessionKey?: string;  // Session key (dopo openSession)
 }
@@ -425,13 +425,44 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         }
       }
 
+      // Recupera idOtp dal dispositivo OTP associato all'utente RHI
+      // Il WSDL richiede idOtp (int) — senza di esso il server usa 0 che potrebbe non corrispondere
+      let resolvedIdOtp = 0;
+      try {
+        log.info('[Namirial] Recupero lista dispositivi OTP per utente:', swsCredentials.username);
+        const otpListArgs = { credentials: { username: swsCredentials.username, password: swsCredentials.password, idOtp: 0 } };
+        const [otpListResponse] = await client.getOTPListAsync(otpListArgs);
+        const otpDevices = Array.isArray(otpListResponse?.return) ? otpListResponse.return
+          : otpListResponse?.return ? [otpListResponse.return] : [];
+        log.info(`[Namirial] Dispositivi OTP trovati: ${otpDevices.length}`);
+        for (const dev of otpDevices) {
+          log.info(`[Namirial]   idOtp=${dev.idOtp}, type=${dev.type}, serial=${dev.serialNumber}`);
+        }
+        // Preferisci OTP GENERATOR, poi SMS, poi qualsiasi
+        const preferred = otpDevices.find((d: any) => d.type === 'OTP GENERATOR')
+          || otpDevices.find((d: any) => d.type === 'SMS')
+          || otpDevices[0];
+        if (preferred?.idOtp) {
+          resolvedIdOtp = Number(preferred.idOtp);
+          log.info(`[Namirial] Usando idOtp=${resolvedIdOtp} (${preferred.type})`);
+        } else {
+          log.warn('[Namirial] Nessun dispositivo OTP trovato, uso idOtp=0');
+        }
+      } catch (otpListErr: any) {
+        log.warn('[Namirial] getOTPList fallito (non critico):', otpListErr.message);
+      }
+
+      // Salva idOtp nelle credenziali per riutilizzarlo in signPAdES
+      swsCredentials.idOtp = resolvedIdOtp;
+
       const openSessionArgs = {
-        credentials: swsCredentials
+        credentials: { ...swsCredentials, idOtp: resolvedIdOtp }
       };
 
       log.info('[Namirial] Args openSession:', JSON.stringify({
         credentials: {
           ...swsCredentials,
+          idOtp: resolvedIdOtp,
           password: '***',
           otp: swsCredentials.otp ? '***' : undefined
         }
@@ -494,8 +525,15 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         );
       }
 
-      const sessionKey = result?.sessionKey || result?.return?.sessionKey;
-      if (!sessionKey) {
+      // Il sessionKey può essere in diversi campi a seconda della versione SWS:
+      // - result.return (stringa diretta, on-premises SWS 3.x)
+      // - result.sessionKey
+      // - result.return.sessionKey (oggetto strutturato)
+      const sessionKey = (typeof result?.return === 'string' && result.return.length > 20)
+        ? result.return
+        : result?.sessionKey || result?.return?.sessionKey || result?.return;
+      if (!sessionKey || typeof sessionKey !== 'string') {
+        log.error('[Namirial] SessionKey non trovato nella risposta. result:', JSON.stringify(result, null, 2));
         throw new RemoteSignError(
           'SessionKey non ricevuto da SWS',
           'NO_SESSION_KEY',
@@ -708,12 +746,15 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
         log.info(`[Namirial] Usando credenziali OTP stateless per firma: ${credentials.username}`);
       } else {
         // Modalità con OTP + sessionKey: usa sessionKey ottenuto da openSession
+        // IMPORTANTE: SWS on-premises richiede password (PIN) anche con sessionKey
+        const savedCreds2 = session.metadata?.credentials as SwsCredentials | undefined;
         credentials = {
           username: session.userId,
-          password: '',  // Non serve con sessionKey
-          sessionKey: session.sessionId
+          password: savedCreds2?.password || '',  // PIN obbligatorio anche con sessionKey
+          sessionKey: session.sessionId,
+          idOtp: savedCreds2?.idOtp
         };
-        log.info(`[Namirial] Usando sessionKey: ${session.sessionId}`);
+        log.info(`[Namirial] Usando sessionKey + PIN per firma, idOtp: ${credentials.idOtp || 0}`);
       }
 
       // Prepara le preferenze PAdES
@@ -749,7 +790,16 @@ export class NamirialRemoteSignProvider implements IRemoteSignProvider {
           PAdESPreferences: preferences
         }, null, 2));
 
-        [result] = await client.signPAdESAsync(args);
+        try {
+          [result] = await client.signPAdESAsync(args);
+        } catch (signErr: any) {
+          // Log raw SOAP request per diagnostica
+          const lastReq = (client as any).lastRequest || 'non disponibile';
+          // Logga solo la parte credentials (non il buffer PDF intero)
+          const credsPart = lastReq.substring(0, Math.min(lastReq.indexOf('<buffer>') > 0 ? lastReq.indexOf('<buffer>') : 2000, 2000));
+          log.error('[Namirial] Raw SOAP request (credentials part):', credsPart);
+          throw signErr;
+        }
 
         // Debug: logga la struttura completa della risposta
         log.info('[Namirial] Struttura risposta signPAdES:', Object.keys(result || {}));

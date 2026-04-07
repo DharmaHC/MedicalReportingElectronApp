@@ -459,9 +459,14 @@ export function registerRemoteSignIpcHandlers(): void {
     }
 
     // Legge la concorrenza dalla config (default: 5)
+    // Per Namirial con sessionKey HSM, forza concorrenza 1 (firma sequenziale)
     const signSettings = loadConfigJson<any>('sign-settings.json', {});
-    const concurrency: number = signSettings?.remoteSign?.bulkSignConcurrency ?? 5;
-    log.info(`[RemoteSign] Concorrenza firma batch: ${concurrency} worker paralleli`);
+    let concurrency: number = signSettings?.remoteSign?.bulkSignConcurrency ?? 5;
+    if (params.providerId?.toUpperCase() === 'NAMIRIAL') {
+      concurrency = 1;
+      log.info(`[RemoteSign] Namirial: concorrenza forzata a 1 (firma sequenziale per sessione HSM)`);
+    }
+    log.info(`[RemoteSign] Concorrenza firma batch: ${concurrency} worker`);
 
     const results: Array<{
       examinationId: number;
