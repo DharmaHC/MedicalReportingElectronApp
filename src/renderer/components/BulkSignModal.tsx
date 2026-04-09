@@ -956,15 +956,18 @@ const BulkSignModal: React.FC = () => {
             disabled={
               selectedCount === 0 ||
               isSigningInProgress ||
-              !selectedProviderId
+              !selectedProviderId ||
+              signedCount === selectedCount
             }
             svgIcon={pencilIcon}
           >
-            {session.active
-              ? `Firma ${selectedCount} Referti`
-              : signatureType === 'automatic' && hasRemoteSignPassword && (selectedProviderId?.toUpperCase() !== 'NAMIRIAL' || hasRemoteSignPin)
-                ? `Firma Automatica ${selectedCount} Referti`
-                : 'Avvia Sessione e Firma'}
+            {signedCount > 0 && signedCount === selectedCount
+              ? `${signedCount} Referti già firmati`
+              : session.active
+                ? `Firma ${selectedCount} Referti`
+                : signatureType === 'automatic' && hasRemoteSignPassword && (selectedProviderId?.toUpperCase() !== 'NAMIRIAL' || hasRemoteSignPin)
+                  ? `Firma Automatica ${selectedCount} Referti`
+                  : 'Avvia Sessione e Firma'}
           </Button>
         </DialogActionsBar>
       </Dialog>

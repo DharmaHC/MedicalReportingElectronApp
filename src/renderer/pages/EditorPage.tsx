@@ -124,6 +124,7 @@ function EditorPage() {
   const [showLivePreview, setShowLivePreview] = useState(false);
 
   const [printSignedPdfIfAvailable, setPrintSignedPdfIfAvailable] = useState<boolean>(false);
+  const [printSignatureNoticeOnPaper, setPrintSignatureNoticeOnPaper] = useState<boolean>(true);
   const [useMRAS, setUseMRAS] = useState<boolean>(false);
   const [reportPageWidth, setreportPageWidth] = useState<number>(25);
   const [reportPageHeight, setreportPageHeight] = useState<number>(25);
@@ -250,6 +251,7 @@ const logToFile = (msg: string, details?: any) => {
       // Accedi ai settings globali esposti dal preload
       window.appSettings.get().then(settings => {
         setPrintSignedPdfIfAvailable(settings.printSignedPdfIfAvailable ?? false);
+        setPrintSignatureNoticeOnPaper(settings.printSignatureNoticeOnPaper ?? true);
         setUseMRAS(settings.useMRAS ?? false);
         setreportPageWidth(settings.reportPageWidth ?? 25);
         setreportPageHeight(settings.reportPageHeight ?? 1.5);
@@ -2248,6 +2250,33 @@ if (printSignedPdf && signedPdfBase64) {
       }
     } else {
       console.log('[FOOTER DEBUG] ❌ NON entrato nel blocco di copertura footer');
+    }
+
+    // Aggiungi dicitura firma digitale sulla stampa cartacea per medici con firma abilitata
+    if (!isPdfSigned && allowMedicalReportDigitalSignature && printSignatureNoticeOnPaper) {
+      try {
+        const doctorName = reduxStore.getState().auth.doctorFullName || 'Firma Digitale';
+        console.log('[PRINT] Aggiunta dicitura firma digitale per:', doctorName);
+
+        // Converti blob → base64
+        const pdfBase64ForNotice = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(finalPdfBlob);
+        });
+
+        const noticeResult = await (window as any).nativeSign?.addSignatureNotice({
+          pdfBase64: pdfBase64ForNotice,
+          signedByName: doctorName
+        });
+
+        if (noticeResult?.pdfWithNoticeBase64) {
+          finalPdfBlob = base64ToBlob(noticeResult.pdfWithNoticeBase64, 'application/pdf');
+          console.log('[PRINT] Dicitura firma aggiunta alla stampa cartacea');
+        }
+      } catch (noticeErr) {
+        console.warn('[PRINT] Errore aggiunta dicitura firma (proseguo senza):', noticeErr);
+      }
     }
 
     const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)

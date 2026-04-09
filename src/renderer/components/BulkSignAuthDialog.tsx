@@ -40,6 +40,7 @@ const BulkSignAuthDialog: React.FC = () => {
     token,
     userName,
     doctorCode,
+    doctorFullName,
     remoteSignUsername,
     hasRemoteSignPassword,
     hasRemoteSignPin,
@@ -229,7 +230,7 @@ const BulkSignAuthDialog: React.FC = () => {
           providerId: selectedProviderId,
           expiresAt: result.expiresAt,
           remainingMinutes: isNamirial ? 3 : sessionMinutes,
-          signedByCN: result.signedBy || username
+          signedByCN: result.signedBy || doctorFullName || username
         }));
 
         // Chiudi dialog
@@ -255,7 +256,7 @@ const BulkSignAuthDialog: React.FC = () => {
           providerId: selectedProviderId,
           token,
           apiBaseUrl: getOriginalApiBaseUrl(),
-          signedByName: result.signedBy || username
+          signedByName: result.signedBy || doctorFullName || username
         });
       } else {
         setLocalError(result?.error || 'Autenticazione fallita');
