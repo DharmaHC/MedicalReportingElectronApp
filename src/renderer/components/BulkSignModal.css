@@ -98,9 +98,10 @@
 .bulk-sign-grid {
   flex: 1;
   min-height: 300px;
+  max-height: calc(100vh - 420px);
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .bulk-sign-grid .k-grid {

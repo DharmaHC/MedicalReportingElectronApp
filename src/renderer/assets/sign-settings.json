@@ -18,6 +18,7 @@
   "signatureTextLine2": "",
   "signatureDateIncludeTime": false,
   "printSignedPdfIfAvailable": false,
+  "printSignatureNoticeOnPaper": true,
   "reportPageWidth": 210,
   "reportPageHeight": 297,
   "editorZoomDefault": 1.3,
