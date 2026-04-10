@@ -83,6 +83,78 @@ const PrestazioniRisultati = () => {
   const token = useSelector((state: RootState) => state.auth.token);
   const isTechnician = useSelector((state: RootState) => state.auth.isTechnician);
   const technicianCode = useSelector((state: RootState) => state.auth.technicianCode || state.auth.userName);
+  const userName = useSelector((state: RootState) => state.auth.userName);
+
+  // Ordine colonne griglia prestazioni (persistito per utente via localStorage)
+  const DEFAULT_COLUMN_ORDER = [
+    'examName',
+    'examinationExamWithdrawalDate',
+    'status',
+    'doctorPrescription',
+    'doctorCode',
+    'uniqueRef',
+    'clinicDepartmentId'
+  ];
+  const columnOrderStorageKey = `prestazioniColumnOrder_${userName || 'anon'}`;
+  const [columnOrder, setColumnOrder] = React.useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(columnOrderStorageKey);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        // Verifica che tutti i field siano noti (evita rotture dopo refactor)
+        const valid = parsed.filter(f => DEFAULT_COLUMN_ORDER.includes(f));
+        const missing = DEFAULT_COLUMN_ORDER.filter(f => !valid.includes(f));
+        return [...valid, ...missing];
+      }
+    } catch (e) {
+      console.warn('Errore lettura columnOrder:', e);
+    }
+    return DEFAULT_COLUMN_ORDER;
+  });
+
+  // Quando cambia l'utente, ricarica l'ordine
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(columnOrderStorageKey);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        const valid = parsed.filter(f => DEFAULT_COLUMN_ORDER.includes(f));
+        const missing = DEFAULT_COLUMN_ORDER.filter(f => !valid.includes(f));
+        setColumnOrder([...valid, ...missing]);
+      } else {
+        setColumnOrder(DEFAULT_COLUMN_ORDER);
+      }
+    } catch (e) {
+      setColumnOrder(DEFAULT_COLUMN_ORDER);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userName]);
+
+  const handleColumnReorder = (e: any) => {
+    // Kendo passa e.columns ordinate secondo il nuovo ordine
+    const newOrder = e.columns
+      .slice()
+      .sort((a: any, b: any) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+      .map((c: any) => c.field)
+      .filter((f: string) => f);
+    // Merge per mantenere eventuali colonne non visibili
+    const merged = [...newOrder, ...DEFAULT_COLUMN_ORDER.filter(f => !newOrder.includes(f))];
+    setColumnOrder(merged);
+    try {
+      localStorage.setItem(columnOrderStorageKey, JSON.stringify(merged));
+    } catch (err) {
+      console.warn('Errore salvataggio columnOrder:', err);
+    }
+  };
+
+  const handleResetColumnOrder = () => {
+    setColumnOrder(DEFAULT_COLUMN_ORDER);
+    try {
+      localStorage.removeItem(columnOrderStorageKey);
+    } catch (err) {
+      console.warn('Errore reset columnOrder:', err);
+    }
+  };
 
   // Parametri di fetch (null => non usati)
   const includeScheduled = null;
@@ -1105,75 +1177,118 @@ const handleIconClick = (subExamTypeId: number, exam: any) => {
       ) : resultsData.length === 0 ? (
         <div className="no-records">Nessun dato disponibile</div>
       ) : (
-        <Grid
-          data={sortedResultsData}
-          dataItemKey="examResultId"
-          style={{ height: "100%" }}
-          sortable={true}
-          sort={sort}
-          onSortChange={(e: GridSortChangeEvent) => {
-            setSort(e.sort);
-          }}
-        >
-          {/* <Column
-            field="examBriefName"
-            title={labels.prestazioniRisultati.codice}
-            width="100px"
-          /> */}
-          <Column
-            field="examName"
-            title={labels.prestazioniRisultati.nome}
-            width="350px"
-          />
-          <Column
-            field="examinationExamWithdrawalDate"
-            title={labels.prestazioniRisultati.dataRitiro}
-            width="120px"
-            cell={(props) => (
-              <td>{dateFormatter(props.dataItem.examinationExamWithdrawalDate)}</td>
-            )}
-          />
-          {!isTechnician && (
-            <Column
-              field="status"
-              title={labels.prestazioniRisultati.stato}
-              width="120px"
-              cell={statusCell}
-            />
-          )}
-          {isTechnician && (
-            <Column
-              field="prescription"
-              title="Prescrizione"
-              width="200px"
-              cell={statusCell}
-            />
-          )}
-          {!isTechnician && (
-            <Column
-              field="doctorPrescription"
-              title="Prescrizione"
-              width="150px"
-              cell={prescriptionCell}
-            />
-          )}
-          <Column
-            field="doctorCode"
-            title={labels.prestazioniRisultati.medicoEsecutore}
-            width="150px"
-          />
-          <Column
-            field="uniqueRef"
-            title={isTechnician ? "Prescr. Unica" : labels.prestazioniRisultati.refUnico}
-            width="100px"
-            cell={refUnicoCell}
-          />
-          <Column
-            field="clinicDepartmentId"
-            title={labels.prestazioniRisultati.unitaOperativa}
-            width="150px"
-          />
-        </Grid>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            <Button
+              size="small"
+              fillMode="flat"
+              onClick={handleResetColumnOrder}
+              title="Ripristina ordine originale delle colonne"
+            >
+              Ripristina ordine colonne
+            </Button>
+          </div>
+          <Grid
+            data={sortedResultsData}
+            dataItemKey="examResultId"
+            style={{ height: "100%" }}
+            sortable={true}
+            sort={sort}
+            onSortChange={(e: GridSortChangeEvent) => {
+              setSort(e.sort);
+            }}
+            reorderable={true}
+            onColumnReorder={handleColumnReorder}
+          >
+            {columnOrder.map((field) => {
+              switch (field) {
+                case 'examName':
+                  return (
+                    <Column
+                      key="examName"
+                      field="examName"
+                      title={labels.prestazioniRisultati.nome}
+                      width="350px"
+                    />
+                  );
+                case 'examinationExamWithdrawalDate':
+                  return (
+                    <Column
+                      key="examinationExamWithdrawalDate"
+                      field="examinationExamWithdrawalDate"
+                      title={labels.prestazioniRisultati.dataRitiro}
+                      width="120px"
+                      cell={(props) => (
+                        <td>{dateFormatter(props.dataItem.examinationExamWithdrawalDate)}</td>
+                      )}
+                    />
+                  );
+                case 'status':
+                  if (isTechnician) {
+                    return (
+                      <Column
+                        key="status"
+                        field="prescription"
+                        title="Prescrizione"
+                        width="200px"
+                        cell={statusCell}
+                      />
+                    );
+                  }
+                  return (
+                    <Column
+                      key="status"
+                      field="status"
+                      title={labels.prestazioniRisultati.stato}
+                      width="120px"
+                      cell={statusCell}
+                    />
+                  );
+                case 'doctorPrescription':
+                  if (isTechnician) return null;
+                  return (
+                    <Column
+                      key="doctorPrescription"
+                      field="doctorPrescription"
+                      title="Prescrizione"
+                      width="150px"
+                      cell={prescriptionCell}
+                    />
+                  );
+                case 'doctorCode':
+                  return (
+                    <Column
+                      key="doctorCode"
+                      field="doctorCode"
+                      title={labels.prestazioniRisultati.medicoEsecutore}
+                      width="150px"
+                    />
+                  );
+                case 'uniqueRef':
+                  return (
+                    <Column
+                      key="uniqueRef"
+                      field="uniqueRef"
+                      title={isTechnician ? "Prescr. Unica" : labels.prestazioniRisultati.refUnico}
+                      width="100px"
+                      cell={refUnicoCell}
+                    />
+                  );
+                case 'clinicDepartmentId':
+                  return (
+                    <Column
+                      key="clinicDepartmentId"
+                      field="clinicDepartmentId"
+                      title={labels.prestazioniRisultati.unitaOperativa}
+                      width="150px"
+                    />
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </Grid>
+        </>
       )}
 
       {pdfOptionsVisible && (
