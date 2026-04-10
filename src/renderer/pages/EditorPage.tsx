@@ -2642,7 +2642,10 @@ async function addCenteredMarginToPdf(pdfBlob: Blob): Promise<Blob> {
         // Se il report è firmato, recupera il PDF dal DB e mostralo nell'anteprima inline.
         // Questo garantisce che l'anteprima rifletta esattamente ciò che è stato salvato
         // (incluso il timbro PAdES di Namirial).
-        if (!isDraft && isPdfSigned && responseData?.digitalReportId) {
+        // NOTA: se è prevista la stampa automatica (printReportWhenFinished), saltiamo questo
+        // aggiornamento per evitare che compaia una seconda anteprima inline del PDF firmato
+        // in parallelo alla modale di anteprima stampa.
+        if (!isDraft && isPdfSigned && responseData?.digitalReportId && !printReportWhenFinished) {
           try {
             const signedPdfResponse = await fetch(
               `${getApiBaseUrl()}reports/${responseData.digitalReportId}/pdf`,
