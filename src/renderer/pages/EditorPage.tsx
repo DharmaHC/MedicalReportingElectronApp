@@ -2253,10 +2253,20 @@ if (printSignedPdf && signedPdfBase64) {
     }
 
     // Aggiungi dicitura firma digitale sulla stampa cartacea per medici con firma abilitata
+    // La dicitura viene sempre aggiunta al PDF cartaceo (nudo) per i medici con firma
+    // digitale abilitata, indipendentemente dal tipo di firma (PKCS11, RHI, AHI).
+    // Se isPdfSigned=true, il PDF contiene già la dicitura dal signPdfService, quindi skip.
+    console.log('[PRINT NOTICE] Check parametri:', {
+      isPdfSigned,
+      allowMedicalReportDigitalSignature,
+      printSignatureNoticeOnPaper,
+      condition: !isPdfSigned && allowMedicalReportDigitalSignature && printSignatureNoticeOnPaper
+    });
+
     if (!isPdfSigned && allowMedicalReportDigitalSignature && printSignatureNoticeOnPaper) {
       try {
         const doctorName = reduxStore.getState().auth.doctorFullName || 'Firma Digitale';
-        console.log('[PRINT] Aggiunta dicitura firma digitale per:', doctorName);
+        console.log('[PRINT NOTICE] Aggiunta dicitura firma digitale per:', doctorName);
 
         // Converti blob → base64
         const pdfBase64ForNotice = await new Promise<string>((resolve) => {
@@ -2265,18 +2275,26 @@ if (printSignedPdf && signedPdfBase64) {
           reader.readAsDataURL(finalPdfBlob);
         });
 
+        console.log('[PRINT NOTICE] Chiamo nativeSign.addSignatureNotice, PDF size:', pdfBase64ForNotice.length);
+
         const noticeResult = await (window as any).nativeSign?.addSignatureNotice({
           pdfBase64: pdfBase64ForNotice,
           signedByName: doctorName
         });
 
+        console.log('[PRINT NOTICE] Risposta addSignatureNotice:', noticeResult ? 'OK, len=' + (noticeResult.pdfWithNoticeBase64?.length || 0) : 'NULL');
+
         if (noticeResult?.pdfWithNoticeBase64) {
           finalPdfBlob = base64ToBlob(noticeResult.pdfWithNoticeBase64, 'application/pdf');
-          console.log('[PRINT] Dicitura firma aggiunta alla stampa cartacea');
+          console.log('[PRINT NOTICE] ✓ Dicitura firma aggiunta alla stampa cartacea');
+        } else {
+          console.warn('[PRINT NOTICE] ⚠ Risposta vuota da addSignatureNotice');
         }
       } catch (noticeErr) {
-        console.warn('[PRINT] Errore aggiunta dicitura firma (proseguo senza):', noticeErr);
+        console.warn('[PRINT NOTICE] ✗ Errore aggiunta dicitura firma (proseguo senza):', noticeErr);
       }
+    } else {
+      console.log('[PRINT NOTICE] Condizione non soddisfatta, dicitura non aggiunta');
     }
 
     const newPdfBlob = await addCenteredMarginToPdf(finalPdfBlob); // Sposta tutto in basso di 10mm (1cm)
