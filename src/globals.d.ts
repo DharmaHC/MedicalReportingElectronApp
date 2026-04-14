@@ -45,6 +45,7 @@ interface Settings {
   footerCompanyDataMultiline: number,
   blankFooterHeight: number;
   printSignedPdfIfAvailable: boolean;
+  printSignatureNoticeOnPaper?: boolean;
   pkcs11Lib: string;
   cspSlotIndex: number;
   remoteSignUrl: string;
