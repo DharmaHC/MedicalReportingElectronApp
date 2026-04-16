@@ -624,6 +624,8 @@ export async function signViaPkcs11WithCN(
     // Cicla su tutti gli slot con token inserito
     const slots = pkcs11.C_GetSlotList(true);
     console.log(`🔍 Trovati ${slots.length} slot con token inserito`);
+    log(`[PKCS11] Slot con token: ${slots.length}, userCN: "${userCN || '(vuoto)'}"`);
+
 
     for (const slot of slots) {
       console.log(`\n📋 Esaminando slot ${slot}...`);
@@ -647,6 +649,7 @@ export async function signViaPkcs11WithCN(
 
         pkcs11.C_FindObjectsFinal(sess);
         console.log(`📜 Trovati ${certHandles.length} certificati X.509 su questo slot`);
+        log(`[PKCS11] Slot ${slot}: ${certHandles.length} certificati X.509`);
 
         for (let i = 0; i < certHandles.length; i++) {
           const hCert = certHandles[i];
@@ -669,6 +672,7 @@ export async function signViaPkcs11WithCN(
 
           if (!privKey) {
             console.log(`     ❌ Chiave privata NON trovata per questo certificato`);
+            log(`[PKCS11] Cert ${i+1}: CKA_ID=${certIdHex} - NO chiave privata`);
             continue;
           }
           console.log(`     ✓ Chiave privata trovata`);
@@ -692,8 +696,10 @@ export async function signViaPkcs11WithCN(
             cert = new (pkijs as any).Certificate({ schema: asn1Cert.result });
             certCN = getCNfromPkijsCertificate(cert);
             console.log(`     CN: "${certCN}"`);
+            log(`[PKCS11] Cert ${i+1}: CN="${certCN}" (chiave privata OK)`);
           } catch (parseError: any) {
             console.error(`     ❌ Errore durante il parsing del certificato: ${parseError.message}`);
+            log(`[PKCS11] Cert ${i+1}: errore parsing: ${parseError.message}`);
             continue;
           }
 
@@ -808,9 +814,7 @@ export async function signViaPkcs11WithCN(
       } catch (e: any) {
         // Se errore, tenta clean-up su sessione
         console.error(`❌ ERRORE su slot ${slot}: ${e.message}`);
-        console.error(`   Stack trace: ${e.stack}`);
         log(`[PKCS11] ERRORE su slot ${slot}: ${e.message}`);
-        log(`[PKCS11] Stack: ${e.stack}`);
         if (sess) {
           try { pkcs11.C_Logout(sess); } catch {}
           try { pkcs11.C_CloseSession(sess); } catch {}

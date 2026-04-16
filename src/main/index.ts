@@ -393,6 +393,10 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
       throw e;
     }
   } catch (err: any) {
+    // Log dettagliato dell'errore reale per diagnostica
+    log.error(`[verify-pin] Errore: ${err.message} (code: ${err.code || 'N/A'})`);
+    log.error(`[verify-pin] Stack: ${err.stack || 'N/A'}`);
+
     // Errori gestiti (li rilancia per essere intercettati nel renderer)
     if (
       err.message === 'PIN errato' ||
@@ -403,10 +407,11 @@ ipcMain.handle('verify-pin', async (_ev, pin: string) => {
       throw err;
     }
 
-    // Qualsiasi altro errore sconosciuto/fallback
-    const genericError = new Error('Errore durante la verifica del PIN');
+    // Propaga l'errore originale con dettaglio (non mascherare)
+    const detailedMsg = `Errore durante la verifica del PIN: ${err.message || 'Errore sconosciuto'} (code: ${err.code || 'N/A'})`;
+    log.error(`[verify-pin] ${detailedMsg}`);
+    const genericError = new Error(detailedMsg);
     (genericError as any).code = err.code || 'UNKNOWN';
-    (genericError as any).originalError = err;
     throw genericError;
   } finally {
     // Cleanup PKCS11
