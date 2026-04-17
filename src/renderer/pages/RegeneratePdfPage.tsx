@@ -44,7 +44,7 @@ interface RegenerateResult {
   webReportUpdated?: boolean;
 }
 
-type PageMode = "regenerate" | "sign-unsigned";
+type PageMode = "regenerate" | "sign-unsigned" | "publish-web";
 
 const UNSIGNED_FILTER_OPTIONS = [
   { text: "Tutti", value: "all" },
@@ -195,6 +195,8 @@ const RegeneratePdfPage: React.FC = () => {
 
       const endpoint = mode === "sign-unsigned"
         ? `${getApiBaseUrl()}reports/unsigned/search?${params.toString()}&filterType=${filterType}`
+        : mode === "publish-web"
+        ? `${getApiBaseUrl()}reports/unpublished/search?${params.toString()}`
         : `${getApiBaseUrl()}reports/search?${params.toString()}`;
 
       const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
@@ -401,6 +403,51 @@ const RegeneratePdfPage: React.FC = () => {
   };
 
   // =====================================================================
+  // PUBLISH SINGLE (to web)
+  // =====================================================================
+  const publishSingle = async (report: any): Promise<RegenerateResult> => {
+    try {
+      addLog(`Pubblicazione ${report.patientName} (${report.id})...`);
+
+      const response = await fetch(`${getApiBaseUrl()}reports/${report.id}/publish-to-web`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Errore nella pubblicazione");
+      }
+
+      const data = await response.json();
+
+      if (data.status === "already_published") {
+        addLog(`  GIA' PUBBLICATO: ${report.patientName}`);
+        return {
+          reportId: report.id, status: "success", patientName: report.patientName,
+          accessionNumber: report.externalAccessionNumber,
+          message: "Già pubblicato", webReportUpdated: true,
+        };
+      }
+
+      addLog(`  PUBBLICATO: ${report.patientName} — ${data.pdfSize} bytes`);
+      return {
+        reportId: report.id, status: "success", patientName: report.patientName,
+        accessionNumber: report.externalAccessionNumber,
+        examinationId: report.examinationId, resultsIds: report.resultsIds,
+        newPdfSize: data.pdfSize, webReportUpdated: true,
+        message: "Pubblicato online",
+      };
+    } catch (error) {
+      addLog(`  ERRORE ${report.patientName}: ${error}`);
+      return {
+        reportId: report.id, status: "error", patientName: report.patientName,
+        accessionNumber: report.externalAccessionNumber, message: String(error),
+      };
+    }
+  };
+
+  // =====================================================================
   // PROCESS SELECTED
   // =====================================================================
   const handleProcessSelected = async () => {
@@ -408,14 +455,18 @@ const RegeneratePdfPage: React.FC = () => {
     if (selected.length === 0) {
       setSearchMessage(mode === "regenerate"
         ? "Seleziona almeno un referto da rigenerare"
-        : "Seleziona almeno un referto da firmare");
+        : mode === "sign-unsigned"
+        ? "Seleziona almeno un referto da firmare"
+        : "Seleziona almeno un referto da pubblicare");
       setSearchFound(false);
       return;
     }
 
     const confirmMsg = mode === "regenerate"
       ? `Stai per rigenerare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\nATTENZIONE: I PDF rigenerati NON avranno firma digitale valida (solo bypass estetico).\n\nContinuare?`
-      : `Stai per firmare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} non firmati.\n\nVerrà creato un record in DigitalSignedReports (ExaminationState=5) e aggiornato StateId a 8.\nLa firma sarà di tipo bypass (estetica, non digitale).\n\nContinuare?`;
+      : mode === "sign-unsigned"
+      ? `Stai per firmare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} non firmati.\n\nVerrà creato un record in DigitalSignedReports (ExaminationState=5) e aggiornato StateId a 8.\nLa firma sarà di tipo bypass (estetica, non digitale).\n\nContinuare?`
+      : `Stai per pubblicare online ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\nI PDF verranno copiati in WebReportsPdfFilesStream.\nLa notifica email verrà schedulata tra 1 ora.\n\nContinuare?`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -423,7 +474,7 @@ const RegeneratePdfPage: React.FC = () => {
     setTotalToProcess(selected.length);
     setCurrentProgress(0);
     setRegenerateResults([]);
-    const actionLabel = mode === "regenerate" ? "RIGENERAZIONE" : "FIRMA";
+    const actionLabel = mode === "regenerate" ? "RIGENERAZIONE" : mode === "sign-unsigned" ? "FIRMA" : "PUBBLICAZIONE";
     addLog(`=== INIZIO ${actionLabel} DI ${selected.length} REFERTI ===`);
 
     const results: RegenerateResult[] = [];
@@ -432,7 +483,9 @@ const RegeneratePdfPage: React.FC = () => {
       setCurrentProgress(i + 1);
       const result = mode === "regenerate"
         ? await regenerateSingle(report.id, report.patientName, report.externalAccessionNumber)
-        : await signSingle(report);
+        : mode === "sign-unsigned"
+        ? await signSingle(report)
+        : await publishSingle(report);
       results.push(result);
       setRegenerateResults([...results]);
     }
@@ -606,9 +659,9 @@ const RegeneratePdfPage: React.FC = () => {
   const selectedCount = searchResults.filter(r => r.selected).length;
   const isSearchEmpty = searchResults.length === 0;
 
-  const actionLabel = mode === "regenerate" ? "Rigenera" : "Firma";
+  const actionLabel = mode === "regenerate" ? "Rigenera" : mode === "sign-unsigned" ? "Firma" : "Pubblica";
   const actionBtnLabel = regenerating
-    ? `${mode === "regenerate" ? "Rigenerazione" : "Firma"} in corso... (${currentProgress}/${totalToProcess})`
+    ? `${mode === "regenerate" ? "Rigenerazione" : mode === "sign-unsigned" ? "Firma" : "Pubblicazione"} in corso... (${currentProgress}/${totalToProcess})`
     : selectedCount > 0
       ? `${actionLabel} ${selectedCount} refert${selectedCount !== 1 ? 'i' : 'o'} selezionat${selectedCount !== 1 ? 'i' : 'o'}`
       : `${actionLabel} selezionati`;
@@ -624,13 +677,16 @@ const RegeneratePdfPage: React.FC = () => {
         <Button fillMode="outline" onClick={() => navigate("/")} style={{ flexShrink: 0 }}>
           ← Indietro
         </Button>
-        <h2>{mode === "regenerate" ? "Rigenerazione PDF Referti" : "Firma Referti Non Firmati"}</h2>
+        <h2>{mode === "regenerate" ? "Rigenerazione PDF Referti" : mode === "sign-unsigned" ? "Firma Referti Non Firmati" : "Pubblicazione Online Referti"}</h2>
         <div className="rp-mode-tabs">
           <button className={`rp-mode-tab${mode === "regenerate" ? " active" : ""}`} onClick={() => switchMode("regenerate")}>
             Rigenera PDF
           </button>
           <button className={`rp-mode-tab${mode === "sign-unsigned" ? " active" : ""}`} onClick={() => switchMode("sign-unsigned")}>
             Firma Non Firmati
+          </button>
+          <button className={`rp-mode-tab${mode === "publish-web" ? " active" : ""}`} onClick={() => switchMode("publish-web")}>
+            Pubblica Online
           </button>
         </div>
       </div>
@@ -639,14 +695,17 @@ const RegeneratePdfPage: React.FC = () => {
       <div className={`rp-banner ${mode === "regenerate" ? "warning" : "info"}`}>
         {mode === "regenerate" ? (
           <><strong>Attenzione:</strong> i PDF rigenerati avranno solo firma estetica (bypass), non firma digitale valida.</>
-        ) : (
+        ) : mode === "sign-unsigned" ? (
           <><strong>Nota:</strong> verrà creato un nuovo record in DigitalSignedReports con ExaminationState=5 e StateId=8. Firma di tipo bypass (estetica).</>
+        ) : (
+          <><strong>Pubblicazione Online:</strong> copia i referti firmati (DigitalSignedReports) su WebReportsPdfFilesStream per renderli disponibili ai pazienti online.</>
         )}
       </div>
 
       {/* ── PANNELLO RICERCA ─────────────────────────────────────────── */}
       <div className="rp-search-panel">
-        {/* Riga superiore: opzione template */}
+        {/* Riga superiore: opzione template (non per publish-web) */}
+        {mode !== "publish-web" && (
         <div className="rp-search-panel-top">
           <label className="rp-template-option">
             <input
@@ -658,6 +717,7 @@ const RegeneratePdfPage: React.FC = () => {
             <small>(mantiene il body RTF originale)</small>
           </label>
         </div>
+        )}
 
         {/* Filtri */}
         <div className="rp-filters">
@@ -778,7 +838,7 @@ const RegeneratePdfPage: React.FC = () => {
               )}
             />
             <GridColumn field="externalAccessionNumber" title="Accession" width="120px" />
-            {mode === "regenerate" ? (
+            {mode === "regenerate" || mode === "publish-web" ? (
               <GridColumn
                 field="signedDate" title="Data Firma" width="150px"
                 cell={(props) => <td>{new Date(props.dataItem.signedDate).toLocaleString('it-IT')}</td>}
@@ -792,7 +852,7 @@ const RegeneratePdfPage: React.FC = () => {
               />
             )}
             <GridColumn field="doctorName" title="Medico" />
-            {mode === "regenerate" ? (
+            {mode === "regenerate" || mode === "publish-web" ? (
               <GridColumn
                 field="pdfSize" title="Size" width="80px"
                 cell={(props) => <td>{Math.round(props.dataItem.pdfSize / 1024)} KB</td>}
@@ -820,11 +880,12 @@ const RegeneratePdfPage: React.FC = () => {
               cell={(props) => (
                 <td>
                   <div style={{ display: "flex", gap: 4 }}>
-                    {mode === "regenerate" && (
+                    {(mode === "regenerate" || mode === "publish-web") && (
                       <Button size="small" fillMode="flat" onClick={(e) => { e.stopPropagation(); handlePreviewPdf(props.dataItem.id, props.dataItem.patientName); }}>
                         PDF
                       </Button>
                     )}
+                    {mode !== "publish-web" && (
                     <Button size="small" fillMode="flat" themeColor="warning"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -835,6 +896,7 @@ const RegeneratePdfPage: React.FC = () => {
                     >
                       Test
                     </Button>
+                    )}
                   </div>
                 </td>
               )}
@@ -866,7 +928,7 @@ const RegeneratePdfPage: React.FC = () => {
             </div>
           )}
           <Button
-            themeColor="error"
+            themeColor={mode === "publish-web" ? "primary" : "error"}
             onClick={handleProcessSelected}
             disabled={regenerating || selectedCount === 0}
           >
@@ -901,7 +963,7 @@ const RegeneratePdfPage: React.FC = () => {
       {/* ── MODALE RISULTATI ─────────────────────────────────────────── */}
       {showResultsModal && (
         <Dialog
-          title={mode === "regenerate" ? "Riepilogo Rigenerazione PDF" : "Riepilogo Firma Referti"}
+          title={mode === "regenerate" ? "Riepilogo Rigenerazione PDF" : mode === "sign-unsigned" ? "Riepilogo Firma Referti" : "Riepilogo Pubblicazione Online"}
           onClose={() => setShowResultsModal(false)}
           width={900}
         >
