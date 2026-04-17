@@ -29,6 +29,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/proxy-test/, '/api'),
         secure: false
       },
+      // Proxy per API locale (dev)
+      '/proxy-local': {
+        target: 'http://localhost:5050',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/proxy-local/, '/api'),
+      },
       // Proxy per API Aster (produzione)
       '/proxy-prod': {
         target: 'https://medicalreportingapi.asterdiagnostica.it',

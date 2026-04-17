@@ -19,7 +19,8 @@ const toProxyUrl = (url: string): string => {
   // NOTA: proxy-test e proxy-prod evitano collisioni di prefisso
   const proxyMap: Record<string, string> = {
     'https://medicalreportingapi.asterdiagnostica.it/api/': '/proxy-prod/',
-    'https://medicalreportingapitest.asterdiagnostica.it/api/': '/proxy-test/'
+    'https://medicalreportingapitest.asterdiagnostica.it/api/': '/proxy-test/',
+    'http://localhost:5050/api/': '/proxy-local/'
   };
 
   for (const [remote, local] of Object.entries(proxyMap)) {
