@@ -24,6 +24,7 @@ interface Registration {
   medicalPrescriptionId: string | null;
   patientClinicNoteModDate: string | null;
   isDraft?: boolean;
+  isToBeSigned?: boolean;
   externalPatientId?: string | null;
   externalAccessionNumber?: string | null;
   birthDate?: string | null;

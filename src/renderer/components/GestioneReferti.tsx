@@ -72,6 +72,7 @@ const GestioneReferti: React.FC = () => {
   const [countTuttiPersistent, setCountTuttiPersistent] = useState(0);
   const [countAssegnati, setCountAssegnati] = useState(0);
   const [countBozze,     setCountBozze]     = useState(0);
+  const [countDaFirmare, setCountDaFirmare] = useState(0);
   const [isFirstTimeCruscotto, setIsFirstTimeCruscotto] = useState(true);
 
   // State per il filtro degli esami
@@ -468,12 +469,13 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Contatori cruscotto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   useEffect(() => {
-    let assegn = 0, bozze = 0;
+    let assegn = 0, bozze = 0, daFirmare = 0;
     registrations.forEach(r => {
       if (r.doctorCode?.trim() === doctorCodeCurrentUser?.trim()) assegn++;
       if (r.isDraft) bozze++;
+      if (r.isToBeSigned) daFirmare++;
     });
-    setCountAssegnati(assegn); setCountBozze(bozze);
+    setCountAssegnati(assegn); setCountBozze(bozze); setCountDaFirmare(daFirmare);
 
     const tutti = registrations.length;
     if (location.state?.reload || isFirstTimeCruscotto) {
@@ -657,6 +659,67 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       }
     } catch (error) {
       console.error("Error in cruscottoBozze:", error);
+    } finally {
+      dispatch(stopLoading());
+    }
+  };
+
+  const handleCruscottoDaFirmare = async () => {
+    // I referti "Da Firmare" sono un sottoinsieme dei completi (IsComplete=1):
+    // forzo completedExaminations=true per assicurare che la SP li restituisca,
+    // poi filtro lato client su isToBeSigned.
+    dispatch(startLoading());
+    try {
+      const params = getSearchParams();
+      const clinicDepartmentIds = Object.keys(params.unitsParam)
+        .filter((k) => params.unitsParam[k])
+        .map((k) => k.trim())
+        .join(",");
+      const workareaIds = Object.keys(params.sectorsParam)
+        .filter((k) => params.sectorsParam[k])
+        .map((k) => k.trim())
+        .join(",");
+
+      const actualSearchByEacStartDate = !params.searchByEacWithdrawalDateParam;
+      const examNames = (params.examNamesParam || []).join(",");
+
+      const queryParams = new URLSearchParams({
+        fromDate: params.fromDateParam,
+        toDate: params.toDateParam,
+        searchByEacStartDate: String(actualSearchByEacStartDate),
+        searchByEacWithdrawalDate: String(params.searchByEacWithdrawalDateParam),
+        searchModeStartsWith: String(params.searchModeParam === "startwith"),
+        searchModeContains: String(params.searchModeParam === "contain"),
+        lastName: params.lastNameParam,
+        firstName: params.firstNameParam,
+        clinicDepartmentIds,
+        workareaIds,
+        completedExaminations: "true",
+        examNames: examNames
+      });
+
+      dispatch(setRegistrations([]));
+
+      const response = await fetch(`${url_worklist()}?${queryParams.toString()}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const filteredData = filterPrescriptions(data);
+
+        const daFirmareOnly = filteredData.filter((d: any) => d.isToBeSigned === true);
+        dispatch(setRegistrations(daFirmareOnly));
+        if (daFirmareOnly.length > 0) {
+          dispatch(setSelectedExaminationId(daFirmareOnly[0].examinationId));
+        } else {
+          dispatch(setSelectedExaminationId(""));
+        }
+      } else {
+        console.error("Failed to fetch cruscotto da firmare");
+      }
+    } catch (error) {
+      console.error("Error in cruscottoDaFirmare:", error);
     } finally {
       dispatch(stopLoading());
     }
@@ -925,6 +988,9 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
               </Button>
               <Button onClick={handleCruscottoBozze}>
                 Le mie Bozze ({countBozze})
+              </Button>
+              <Button onClick={handleCruscottoDaFirmare}>
+                Da Firmare ({countDaFirmare})
               </Button>
             </div>
           </TabStripTab>
