@@ -531,6 +531,25 @@ const renderPinDialog = () =>
           onChange={(e: InputChangeEvent) => setOtpInput(e.value)}
           placeholder="Codice OTP (es. 123456)"
           maxLength={8}
+          autoFocus
+          onKeyDown={(e: any) => {
+            if (e.key === 'Enter') {
+              const code = otpInput.trim();
+              if (!code) return;
+              hideOtpDialog();
+              if (otpDialogResolver.current) {
+                otpDialogResolver.current(code);
+                otpDialogResolver.current = null;
+              }
+            } else if (e.key === 'Escape') {
+              setOtpInput('');
+              hideOtpDialog();
+              if (otpDialogResolver.current) {
+                otpDialogResolver.current(null);
+                otpDialogResolver.current = null;
+              }
+            }
+          }}
         />
         <DialogActionsBar>
           <Button onClick={() => {
