@@ -9,6 +9,7 @@ import { Dialog, DialogActionsBar } from "@progress/kendo-react-dialogs";
 import ProfileDropDown from "../components/ProfileDropDown";
 import BulkSignModal from "../components/BulkSignModal";
 import SignProvidersConfigModal from "../components/SignProvidersConfigModal";
+import ResetUserPasswordModal from "../components/ResetUserPasswordModal";
 
 import { useLocation, useNavigate } from "react-router-dom";
 import labels from "../utility/label";
@@ -59,6 +60,9 @@ const dispatch = useDispatch();
   // Stato per configurazione provider firma (admin o medico con showSignConfig)
   const [providersConfigVisible, setProvidersConfigVisible] = useState(false);
   const [showSignConfig, setShowSignConfig] = useState(false);
+
+  // Stato per reset password medico (solo admin)
+  const [resetUserPasswordVisible, setResetUserPasswordVisible] = useState(false);
 
   // Stato per il warning "referti in attesa di firma" al logout
   const [pendingSignWarning, setPendingSignWarning] = useState<{
@@ -417,6 +421,7 @@ const dispatch = useDispatch();
                   onRegisterUser={isAdmin ? handleRegisterUser : undefined}
                   onRegeneratePdf={isAdmin ? handleRegeneratePdf : undefined}
                   onConfigureProviders={(isAdmin || (showSignConfig && !!doctorCode)) ? handleOpenProvidersConfig : undefined}
+                  onResetUserPassword={isAdmin ? () => setResetUserPasswordVisible(true) : undefined}
                 />
               </div>
             </div>
@@ -535,6 +540,12 @@ const dispatch = useDispatch();
       <SignProvidersConfigModal
         isOpen={providersConfigVisible}
         onClose={() => setProvidersConfigVisible(false)}
+      />
+
+      {/* Modale Reset Password Medico (solo admin) */}
+      <ResetUserPasswordModal
+        visible={resetUserPasswordVisible}
+        onClose={() => setResetUserPasswordVisible(false)}
       />
     </>
   );

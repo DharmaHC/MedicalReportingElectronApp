@@ -114,6 +114,7 @@ export const url_getUnsignedPdf = (id: string): string => buildUrl(`ExamResults/
 export const url_updateSignedReport = (): string => buildUrl("ExamResults/UpdateSignedReport");
 
 export const url_changePassword = (): string => buildUrl("Account/changePassword");
+export const url_adminResetPassword = (): string => buildUrl("Account/adminResetPassword");
 export const url_passwordForgot = (): string => buildUrl("Account/forgotPasswordForm");
 export const url_registerUser = (): string => buildUrl("Account/register");
 
