@@ -73,7 +73,6 @@ const GestioneReferti: React.FC = () => {
   const [countAssegnati, setCountAssegnati] = useState(0);
   const [countBozze,     setCountBozze]     = useState(0);
   const [countDaFirmare, setCountDaFirmare] = useState(0);
-  const [isFirstTimeCruscotto, setIsFirstTimeCruscotto] = useState(true);
 
   // State per il filtro degli esami
   const [examFilter, setExamFilter] = useState("");
@@ -322,7 +321,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
       doctorCodes: p.doctorCodeParam,
       clinicDepartmentIds,
       workareaIds,
-      completedExaminations: String(p.completedExaminationsParam),
+      completedExaminations: p.completedExaminationsParam === true ? "true" : "false",
       examNames: examNames
     });
 
@@ -344,6 +343,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         const data = await rsp.json();
         const filteredData = filterPrescriptions(data);
         dispatch(setRegistrations(filteredData));
+        updateCruscottoCountersFromData(filteredData);
 
         if (data[0]) {
           const {
@@ -467,22 +467,6 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     fetchAvailableExamNames
   ]);
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Contatori cruscotto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  useEffect(() => {
-    let assegn = 0, bozze = 0, daFirmare = 0;
-    registrations.forEach(r => {
-      if (r.doctorCode?.trim() === doctorCodeCurrentUser?.trim()) assegn++;
-      if (r.isDraft) bozze++;
-      if (r.isToBeSigned) daFirmare++;
-    });
-    setCountAssegnati(assegn); setCountBozze(bozze); setCountDaFirmare(daFirmare);
-
-    const tutti = registrations.length;
-    if (location.state?.reload || isFirstTimeCruscotto) {
-      setCountTuttiPersistent(tutti); setIsFirstTimeCruscotto(false);
-    }
-  }, [registrations, location.state, doctorCodeCurrentUser, isFirstTimeCruscotto]);
-  
   // ---------------------------------------------------------
   // Toggle settori
   // ---------------------------------------------------------
@@ -594,14 +578,15 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
   // ---------------------------------------------------------
   const handleCruscottoTutti = async () => {
     const params = getSearchParams();
-    params.completedExaminationsParam = false; // forzo "incompleti"
-    await handleCruscottoSearch(params);
+    params.completedExaminationsParam = false; // full load incompleti, aggiorna contatori
+    await handleCruscottoSearch(params, true);
   };
 
   const handleCruscottoAssegnati = async () => {
     const params = getSearchParams();
     params.doctorCodeParam = doctorCodeCurrentUser?.trim() || "";
-    await handleCruscottoSearch(params);
+    params.completedExaminationsParam = false; // solo da refertare, come "Tutti"
+    await handleCruscottoSearch(params, false);
   };
 
   const handleCruscottoBozze = async () => {
@@ -632,7 +617,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         firstName: params.firstNameParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam),
+        completedExaminations: params.completedExaminationsParam === true ? "true" : "false",
         examNames: examNames
       });
 
@@ -725,8 +710,24 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
     }
   };
 
-  // Ricerca generica usata da "Tutti" / "Assegnati"
-  const handleCruscottoSearch = async (params: any) => {
+  // Calcola i contatori del cruscotto dal dataset fornito.
+  // Chiamato solo dopo un full load (handleSearch o handleCruscottoTutti);
+  // i cruscotti filtrati (Assegnati/Bozze/DaFirmare) non aggiornano i conteggi.
+  const updateCruscottoCountersFromData = (data: any[]) => {
+    let assegn = 0, bozze = 0, daFirmare = 0;
+    data.forEach((r: any) => {
+      if (r.doctorCode?.trim() === doctorCodeCurrentUser?.trim()) assegn++;
+      if (r.isDraft) bozze++;
+      if (r.isToBeSigned) daFirmare++;
+    });
+    setCountAssegnati(assegn);
+    setCountBozze(bozze);
+    setCountDaFirmare(daFirmare);
+    setCountTuttiPersistent(data.length);
+  };
+
+  // Ricerca generica usata da "Tutti" / "Assegnati"
+  const handleCruscottoSearch = async (params: any, updateCounters: boolean = false) => {
     dispatch(startLoading());
     try {
       const clinicDepartmentIds = Object.keys(params.unitsParam)
@@ -753,7 +754,7 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         doctorCodes: params.doctorCodeParam,
         clinicDepartmentIds,
         workareaIds,
-        completedExaminations: String(params.completedExaminationsParam),
+        completedExaminations: params.completedExaminationsParam === true ? "true" : "false",
         examNames: examNames
       });
 
@@ -768,6 +769,9 @@ const [initialSearchDone, setInitialSearchDone] = useState(false);
         const data = await response.json();
         const filteredData = filterPrescriptions(data);
         dispatch(setRegistrations(filteredData));
+        if (updateCounters) {
+          updateCruscottoCountersFromData(filteredData);
+        }
         if (data && data.length > 0) {
           dispatch(setSelectedExaminationId(data[0].examinationId));
         } else {
