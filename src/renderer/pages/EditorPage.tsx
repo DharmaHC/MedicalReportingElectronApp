@@ -771,6 +771,9 @@ const renderPinDialog = () =>
     (state: RootState) => state.exam.selectedMoreExams // Eventuali esami aggiuntivi selezionati.
   );
   const doctorCode = useSelector((state: RootState) => state.auth.doctorCode); // Codice del medico.
+  const doctorFullName = useSelector((state: RootState) => state.auth.doctorFullName); // Nome completo del medico collegato.
+  const doctorLinkMismatch = useSelector((state: RootState) => state.auth.doctorLinkMismatch); // Config errata: CF utente ≠ CF medico linkato.
+  const doctorLinkedFiscalCode = useSelector((state: RootState) => state.auth.doctorLinkedFiscalCode); // CF del medico collegato (per messaggio).
   const patientId =
     selectedMoreExams.length > 0 ? selectedMoreExams[0].patientId : ""; // ID del paziente.
   const companyId = useSelector((state: RootState) => state.exam.selectedMoreExams[0]?.companyId); // ID dell'azienda/struttura.
@@ -3116,13 +3119,38 @@ const handleResultClick = async (result: any) => {
     {renderPinDialog()}
     {renderOtpDialog()}
     
-      {/* Avviso se l'editor è in modalità sola lettura (per referto di altro medico o precedente ad oggi) */}
-      {readOnly && openedByOtherDoctor && (
+      {/* Avviso per configurazione utente errata (mismatch CF utente vs CF medico collegato).
+          Ha priorità sui messaggi readOnly generici perché il readOnly è solo un sintomo:
+          il problema reale è che l'utente è collegato al medico sbagliato in UsersDetails. */}
+      {doctorLinkMismatch && (
+        <div style={{
+          fontSize: "10pt",
+          color: "white",
+          background: "#b71c1c",
+          fontWeight: "bold",
+          margin: "0.5rem 1rem",
+          textAlign: "center",
+          padding: "0.75rem",
+          border: "2px solid #7f0000",
+          borderRadius: "4px",
+        }}>
+          CONFIGURAZIONE UTENTE ERRATA: l&apos;utente <u>{userName}</u> risulta collegato al medico
+          {" "}<u>{doctorFullName || "(senza nome)"}</u> (codice {(doctorCode || "").trim()}
+          {doctorLinkedFiscalCode ? `, CF ${doctorLinkedFiscalCode}` : ""}),
+          ma il codice fiscale del medico non corrisponde a quello dell&apos;utente loggato.
+          Contattare l&apos;amministratore di sistema per correggere l&apos;associazione
+          utente-medico (tabella UsersDetails).
+        </div>
+      )}
+
+      {/* Avviso se l'editor è in modalità sola lettura (per referto di altro medico o precedente ad oggi).
+          Soppresso quando è già attivo l'avviso di mismatch (di cui il readOnly è conseguenza). */}
+      {!doctorLinkMismatch && readOnly && openedByOtherDoctor && (
         <div style={{ fontSize: "10pt", color: "red", fontWeight: "bold", margin: "0.5rem 1rem", textAlign: "center", padding: "0.5rem", border: "1px solid red", backgroundColor: "#ffeeee" }}>
           ATTENZIONE: Questo referto è già refertato da un altro medico (anche in bozza) e non è più modificabile.
         </div>
       )}
-      {readOnly && !openedByOtherDoctor && (
+      {!doctorLinkMismatch && readOnly && !openedByOtherDoctor && (
         <div style={{
           fontSize: "10pt",
           color: "red",

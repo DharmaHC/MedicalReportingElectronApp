@@ -27,6 +27,7 @@ import {
   setHasRemoteSignPin,
   setCodCertRHI,
   setHasRhiPin,
+  setDoctorLinkInfo,
 } from "../store/authSlice";
 import "./Login.css";
 import { useNavigate } from "react-router-dom";
@@ -90,8 +91,12 @@ const Login = () => {
     : usernamesList;
 
 
-  // Funzione per fetchare informazioni su firma digitale se medico
-  const fetchDoctorSignatureInfo = async (doctorCode: string) => {
+  // Funzione per fetchare informazioni su firma digitale se medico.
+  // Allo stesso tempo verifica la coerenza del link utente-medico: il CF del
+  // medico collegato (Doctors.CodiceFiscale) deve coincidere con il login
+  // dell'utente Identity (AspNetUsers.UserName, che in MedReport è il CF).
+  // Un mismatch indica una configurazione errata in UsersDetails.DoctorCode.
+  const fetchDoctorSignatureInfo = async (doctorCode: string, userLogin: string) => {
     try {
       const response = await fetch(`${url_doctors()}${doctorCode}`, {
         method: "GET",
@@ -102,6 +107,14 @@ const Login = () => {
       if (response.ok) {
         const data = await response.json();
         dispatch(setAllowMedicalReportDigitalSignature(data.allowMedicalReportDigitalSignature));
+
+        const linkedCF = (data.doctorFiscalCode ?? "").trim().toUpperCase();
+        const userCF = (userLogin ?? "").trim().toUpperCase();
+        const mismatch = !!linkedCF && !!userCF && linkedCF !== userCF;
+        dispatch(setDoctorLinkInfo({
+          mismatch,
+          linkedFiscalCode: data.doctorFiscalCode ?? null,
+        }));
       } else {
         console.error("Failed to fetch doctor signature info");
       }
@@ -245,7 +258,10 @@ const Login = () => {
         dispatch(setHasRhiPin(hasRhiPin));
 
         if (doctorCode) {
-          fetchDoctorSignatureInfo(doctorCode.trim());
+          fetchDoctorSignatureInfo(doctorCode.trim(), userName);
+        } else {
+          // Nessun medico collegato: azzera eventuali flag di mismatch residui.
+          dispatch(setDoctorLinkInfo({ mismatch: false, linkedFiscalCode: null }));
         }
         // Verifica se l'utente è un tecnico radiologo
         await checkTechnicianRole(userId, userName);
