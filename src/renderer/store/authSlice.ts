@@ -32,6 +32,10 @@ interface AuthState {
   codCertRHI: string | null;
   /** ➜ Indica se il PIN RHI è configurato nel DB */
   hasRhiPin: boolean;
+  /** ➜ true se il CF dell'utente Identity non corrisponde al CF del medico collegato in UsersDetails (config errata) */
+  doctorLinkMismatch: boolean;
+  /** ➜ CF del medico a cui l'utente risulta collegato (per messaggistica diagnostica) */
+  doctorLinkedFiscalCode: string | null;
 }
 
 const initialState: AuthState = {
@@ -55,6 +59,8 @@ const initialState: AuthState = {
   hasRemoteSignPin: false,
   codCertRHI: null,
   hasRhiPin: false,
+  doctorLinkMismatch: false,
+  doctorLinkedFiscalCode: null,
 };
 
 const authSlice = createSlice({
@@ -83,6 +89,8 @@ const authSlice = createSlice({
       state.hasRemoteSignPin = false;
       state.codCertRHI = null;
       state.hasRhiPin = false;
+      state.doctorLinkMismatch = false;
+      state.doctorLinkedFiscalCode = null;
     },
     setToken(state, action: PayloadAction<string | null>) {
       state.token = action.payload;
@@ -135,6 +143,10 @@ const authSlice = createSlice({
     setHasRhiPin(state, action: PayloadAction<boolean>) {
       state.hasRhiPin = action.payload;
     },
+    setDoctorLinkInfo(state, action: PayloadAction<{ mismatch: boolean; linkedFiscalCode: string | null }>) {
+      state.doctorLinkMismatch = action.payload.mismatch;
+      state.doctorLinkedFiscalCode = action.payload.linkedFiscalCode;
+    },
   },
 });
 
@@ -158,6 +170,7 @@ export const {
   setHasRemoteSignPin,
   setCodCertRHI,
   setHasRhiPin,
+  setDoctorLinkInfo,
 } = authSlice.actions;
 
 export default authSlice.reducer;
