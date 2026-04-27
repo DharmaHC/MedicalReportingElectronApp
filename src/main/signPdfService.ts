@@ -909,10 +909,10 @@ export async function timestampCms(
       values: [ new asn1js.OctetString({ valueHex: tokenDer.buffer }) ]
     });
     signedData.signerInfos[0].unsignedAttrs = new (pkijs as any)
-        .SignedAndUnsignedAttributes({ attributes: [tstAttr] });
+        .SignedAndUnsignedAttributes({ type: 1, attributes: [tstAttr] });
 
     const newCi = new (pkijs as any).ContentInfo({
-      contentType: "1.2.840.1.7.2",
+      contentType: "1.2.840.113549.1.7.2",
       content    : signedData.toSchema(true)
     });
     const newDer = newCi.toSchema().toBER(false);

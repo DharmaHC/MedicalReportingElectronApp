@@ -1338,10 +1338,10 @@ const renderPinDialog = () =>
       let doctorCodeNotReportDoctor = false;
       let examResultId = deduplicatedMoreExams[0]?.examResultId ?? 0;
 
-      if (deduplicatedMoreExams[0].doctorCode && deduplicatedMoreExams[0].doctorCode.trim() !== doctorCode?.trim()) {
+      if (deduplicatedMoreExams[0]?.doctorCode && deduplicatedMoreExams[0].doctorCode.trim() !== doctorCode?.trim()) {
               // Il codice del medico dell'esame selezionato non corrisponde al codice del medico corrente.
               // Vuol dire che stamo visualizzando un esame di un altro medico. quindi passiamo come parametro il medico dell'esame,
-              // per evitare di aggiornare 
+              // per evitare di aggiornare
               doctorCodeParameter = deduplicatedMoreExams[0].doctorCode.trim() ?? "";
               doctorCodeNotReportDoctor = true; // Indica che il codice del medico non è quello del referto corrente.
       }
