@@ -78,6 +78,7 @@ const RegeneratePdfPage: React.FC = () => {
 
   // Options
   const [useCurrentTemplate, setUseCurrentTemplate] = useState(false);
+  const [useTodayAsSignDate, setUseTodayAsSignDate] = useState(false);
 
   // Processing state
   const [regenerating, setRegenerating] = useState(false);
@@ -340,11 +341,22 @@ const RegeneratePdfPage: React.FC = () => {
       const prepareData = await prepareResponse.json();
       addLog(`  PDF generato`);
 
+      // Determina la data di firma:
+      // - default (flag OFF): usa ReportDate del referto
+      // - flag ON: usa la data odierna
       let signatureDate: string | undefined;
-      if (prepareData.reportDate) {
+      let signDateForApi: string | undefined;
+      if (useTodayAsSignDate) {
+        const now = new Date();
+        signatureDate = now.toISOString();
+        signDateForApi = now.toISOString();
+        addLog(`  Data firma: OGGI (${now.toLocaleString()})`);
+      } else if (prepareData.reportDate) {
         const d = new Date(prepareData.reportDate);
         d.setHours(d.getHours() + 1);
         signatureDate = d.toISOString();
+        signDateForApi = d.toISOString();
+        addLog(`  Data firma: ReportDate (${d.toLocaleString()})`);
       }
 
       const signResult = await (window as any).nativeSign.signPdf({
@@ -374,6 +386,7 @@ const RegeneratePdfPage: React.FC = () => {
           applicantId: prepareData.applicantId,
           examinationMnemonicCodeFull: prepareData.examinationMnemonicCodeFull,
           patientId: prepareData.patientId,
+          signDate: signDateForApi,
         }),
       });
 
@@ -716,6 +729,17 @@ const RegeneratePdfPage: React.FC = () => {
             Usa header/footer dal modello attuale del medico
             <small>(mantiene il body RTF originale)</small>
           </label>
+          {mode === "sign-unsigned" && (
+            <label className="rp-template-option" style={{ marginLeft: 16 }}>
+              <input
+                type="checkbox"
+                checked={useTodayAsSignDate}
+                onChange={(e) => setUseTodayAsSignDate(e.target.checked)}
+              />
+              Usa data Odierna per Firma
+              <small>(default: data del referto)</small>
+            </label>
+          )}
         </div>
         )}
 
