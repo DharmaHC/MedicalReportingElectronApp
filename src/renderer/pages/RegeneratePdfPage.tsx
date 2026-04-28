@@ -50,6 +50,7 @@ const UNSIGNED_FILTER_OPTIONS = [
   { text: "Tutti", value: "all" },
   { text: "Salvati da Firmare", value: "saved-for-signing" },
   { text: "Non Firmati da Firmare", value: "not-in-db" },
+  { text: "Già Firmati (rifirma)", value: "already-signed" },
 ];
 
 const RegeneratePdfPage: React.FC = () => {
@@ -387,6 +388,7 @@ const RegeneratePdfPage: React.FC = () => {
           examinationMnemonicCodeFull: prepareData.examinationMnemonicCodeFull,
           patientId: prepareData.patientId,
           signDate: signDateForApi,
+          overwriteSigned: filterType === "already-signed",
         }),
       });
 
@@ -478,7 +480,9 @@ const RegeneratePdfPage: React.FC = () => {
     const confirmMsg = mode === "regenerate"
       ? `Stai per rigenerare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\nATTENZIONE: I PDF rigenerati NON avranno firma digitale valida (solo bypass estetico).\n\nContinuare?`
       : mode === "sign-unsigned"
-      ? `Stai per firmare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} non firmati.\n\nVerrà creato un record in DigitalSignedReports (ExaminationState=5) e aggiornato StateId a 8.\nLa firma sarà di tipo bypass (estetica, non digitale).\n\nContinuare?`
+      ? (filterType === "already-signed"
+        ? `Stai per RIFIRMARE ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} già firmat${selected.length > 1 ? 'i' : 'o'}.\n\nATTENZIONE: il PDF e la data di firma in DigitalSignedReports verranno SOVRASCRITTI.\nLa firma sarà di tipo bypass (estetica, non digitale).\n\nContinuare?`
+        : `Stai per firmare ${selected.length} refert${selected.length > 1 ? 'i' : 'o'} non firmati.\n\nVerrà creato un record in DigitalSignedReports (ExaminationState=5) e aggiornato StateId a 8.\nLa firma sarà di tipo bypass (estetica, non digitale).\n\nContinuare?`)
       : `Stai per pubblicare online ${selected.length} refert${selected.length > 1 ? 'i' : 'o'}.\n\nI PDF verranno copiati in WebReportsPdfFilesStream.\nLa notifica email verrà schedulata tra 1 ora.\n\nContinuare?`;
 
     if (!window.confirm(confirmMsg)) return;
